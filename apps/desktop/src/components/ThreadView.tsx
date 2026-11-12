@@ -2118,6 +2118,7 @@ export default function ThreadView(props: Props) {
         idColor: settings.idStyle === 'color'
           ? { dark: isDarkScheme(effectiveScheme(settings)), sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
           : undefined,
+        avatar: settings.idStyle === 'chara' ? { dark: isDarkScheme(effectiveScheme(settings)) } : undefined,
         heatStyle: settings.heatStyle,
         doubleTapReply: settings.doubleTapReply,
         doubleClick: settings.postDoubleClick,
@@ -2399,7 +2400,7 @@ export default function ThreadView(props: Props) {
       aiMarkOf,
       ngMode: settings.ngMode,
       showThumbnails: settings.thumbLoad !== 'never',
-      showIdenticon: settings.idStyle === 'icon',
+      showIdenticon: settings.idStyle === 'icon' || settings.idStyle === 'chara',
       showLinkPreview: settings.showLinkPreview,
       toolbar: settings.postToolbar,
       phrases: settings.quickPhrases,

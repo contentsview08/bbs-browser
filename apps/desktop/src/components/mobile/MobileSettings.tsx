@@ -339,7 +339,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           </Group>
           <Group title="印">
             <SwitchRow label="スレ主に「主」の印" desc=">>1 と同じ ID のレス" checked={s.highlightOp} onChange={(v) => update('highlightOp', v)} />
-            <ChoiceRow label="ID の見せ方" desc="色は 2 回以上書いた ID を ID ごとの色に。模様は ID から作るアイコンを番号の左に" value={s.idStyle} options={ID_STYLES.map((x) => ({ key: x.key, name: x.name }))} onChange={(v) => update('idStyle', v)} />
+            <ChoiceRow label="ID の見せ方" desc="色は 2 回以上書いた ID を ID ごとの色に。模様・キャラクターは ID から作るアイコンを番号の左に" value={s.idStyle} options={ID_STYLES.map((x) => ({ key: x.key, name: x.name }))} onChange={(v) => update('idStyle', v)} />
             <SwitchRow label="ミニマップを出す" desc="右端に、人気レス・自分のレス・画像の位置を示します" checked={s.showMinimap} onChange={(v) => update('showMinimap', v)} />
           </Group>
           <Group title="スレの最後">

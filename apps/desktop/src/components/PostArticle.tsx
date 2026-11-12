@@ -29,6 +29,7 @@ import { watchoiOf } from '../utils/watchoi'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
+import Avatar from './Avatar'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
 import { videoSrc } from '../utils/httpsFirst'
@@ -42,6 +43,8 @@ export interface PostHandlers extends BodyHandlers {
   thumbAuto?: boolean
   /** ID ごとに色を付ける(設定 idColor)。dark は暗い配色か、sky は空色の地(LINE ライトの LINE 風)か。付けないときは undefined */
   idColor?: { dark: boolean; sky: boolean }
+  /** ID のアイコンをキャラクターにする(設定 idStyle がキャラクター)。dark は暗い配色か。模様のときは undefined */
+  avatar?: { dark: boolean }
   /** 人気のレス(返信 3 件から)の示し方(設定 heatStyle)。既定は左の帯 */
   heatStyle?: HeatStyle
   /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
@@ -741,6 +744,9 @@ function PostArticle(props: Props) {
   // アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ(週ごとに変わる)。なければ ID(日ごと)
   const iconSeed = (handlers.iconFromWatchoi ? watchoiOf(post.name) : undefined) ?? post.id
   const iconCount = props.iconCount ?? idCount
+  /** ID のアイコンの絵(設定でキャラクターか模様か) */
+  const idIcon = (seed: string, size: number) =>
+    handlers.avatar ? <Avatar seed={seed} size={size} dark={handlers.avatar.dark} /> : <Identicon seed={seed} size={size} />
   /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
   const identiconBtn = (size: number, round = false) =>
     iconSeed && (
@@ -751,7 +757,7 @@ function PostArticle(props: Props) {
         title={iconSeed === post.id ? `ID:${post.id} (${iconCount})` : `ワッチョイ ${iconSeed} (${iconCount})`}
       >
         <span className={`block overflow-hidden ${round ? 'rounded-full' : ''}`}>
-          <Identicon seed={iconSeed} size={size} />
+          {idIcon(iconSeed, size)}
         </span>
         {iconCount >= 2 && (
           <span
@@ -880,7 +886,7 @@ function PostArticle(props: Props) {
       >
         {props.replyPreview.id ? (
           <span className="flex-shrink-0 block overflow-hidden rounded-full">
-            <Identicon seed={props.replyPreview.id} size={16} />
+            {idIcon(props.replyPreview.id, 16)}
           </span>
         ) : (
           <span className="flex-shrink-0 flex w-[16px] h-[16px] rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
@@ -1154,7 +1160,7 @@ function PostArticle(props: Props) {
     >
       {props.replyPreview.id && (
         <span className="flex-shrink-0 block overflow-hidden rounded-full">
-          <Identicon seed={props.replyPreview.id} size={16} />
+          {idIcon(props.replyPreview.id, 16)}
         </span>
       )}
       <QuoteText q={props.replyPreview} />

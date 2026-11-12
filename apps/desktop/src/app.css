@@ -330,6 +330,26 @@ html:root[data-scheme='line-light'][data-post-style='line'] {
   animation-fill-mode: backwards;
 }
 
+/* 飛んだ先のレス(ミニマップ・アンカー・履歴・通知・URL のレス番号)の光。レスの枠(.post-cv)の中に敷く。
+   スマホ版の JUMP_FLASH_*(28% を 120ms 留めてから 900ms で直線に消す)と同じ見た目・長さ。長さは useThreadScroll の JUMP_FLASH_MS とそろえる */
+@keyframes flash-jump {
+  0%,
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.flash-jump-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--c-flash-new) 28%, transparent);
+  animation: flash-jump 1020ms linear forwards;
+}
+
 /* 新着のレスが、若い番号から順に素早く出てくる。ずらす時間は ThreadView.tsx が --enter-delay に入れる */
 @keyframes post-enter {
   from {

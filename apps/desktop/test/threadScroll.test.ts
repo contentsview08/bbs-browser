@@ -4,6 +4,10 @@ import {
   HeightCache,
   PositionMemory,
   anchorCorrection,
+  anchorShift,
+  centerOffset,
+  displayText,
+  displayUnits,
   estimatePostHeight,
   heightKind,
   heightOffsets,
@@ -310,6 +314,98 @@ describe('anchorCorrection: 基準のレスの補正', () => {
   })
   it('小数の丸めの分は直さない', () => {
     expect(anchorCorrection(y(100, 1000), y(100.4, 1000))).toBe(0)
+  })
+})
+
+describe('anchorShift: 基準のレスを戻す scrollTop(ブラウザが先に詰めたときも二重に戻さない)', () => {
+  it('上のレスが伸びたら、いまの scrollTop に伸びた分を足す', () => {
+    expect(anchorShift({ y: 5000, scrollTop: 4800 }, { y: 5060, scrollTop: 4800, maxScrollTop: 9000 })).toBe(4860)
+  })
+  it('上のレスが縮んだら、縮んだ分だけ引く', () => {
+    expect(anchorShift({ y: 5000, scrollTop: 4800 }, { y: 4970, scrollTop: 4800, maxScrollTop: 9000 })).toBe(4770)
+  })
+  it('変わっていなければ直さない', () => {
+    expect(anchorShift({ y: 5000, scrollTop: 4800 }, { y: 5000.3, scrollTop: 4800, maxScrollTop: 9000 })).toBeUndefined()
+  })
+  it('利用者がスクロールしていても、高さの変化の分だけ直す', () => {
+    expect(anchorShift({ y: 5000, scrollTop: 4800 }, { y: 5050, scrollTop: 5100, maxScrollTop: 9000 })).toBe(5150)
+  })
+  it('一番下で中身が縮み、ブラウザが scrollTop を詰めていたら、覚えた scrollTop から縮んだ分を引く(二重に戻らない)', () => {
+    // 130053 の中身で一番下(129427)にいた。中身が 110239 に縮んでブラウザが 109613 に詰め、基準のレスは 19900 上へ動いた
+    const to = anchorShift({ y: 129500, scrollTop: 129427 }, { y: 109600, scrollTop: 109613, maxScrollTop: 109613 })
+    expect(to).toBe(109527)
+  })
+  it('一番下にいて中身が縮んだが、基準のレスが動いていなければ直さない(下だけが縮んだ)', () => {
+    expect(anchorShift({ y: 129500, scrollTop: 129427 }, { y: 129500, scrollTop: 129000, maxScrollTop: 129000 })).toBeUndefined()
+  })
+  it('答えは 0 と一番下の間に収める', () => {
+    expect(anchorShift({ y: 100, scrollTop: 50 }, { y: 20, scrollTop: 50, maxScrollTop: 9000 })).toBe(0)
+    expect(anchorShift({ y: 100, scrollTop: 8990 }, { y: 200, scrollTop: 8990, maxScrollTop: 9000 })).toBe(9000)
+  })
+})
+
+describe('centerOffset: 飛んだレスを見える範囲の真ん中に置く', () => {
+  it('レスの真ん中が見える範囲の真ん中に来る位置', () => {
+    // 高さ 600 の領域に 100 のレス → 頭は 250
+    expect(centerOffset(600, 100)).toBe(250)
+  })
+  it('ヘッダーがスクロール領域の中にあれば、その下の範囲で真ん中にする', () => {
+    expect(centerOffset(700, 100, 100)).toBe(350)
+  })
+  it('レスが見える範囲より高ければ、頭を上(ヘッダーの下)に置く', () => {
+    expect(centerOffset(600, 900)).toBe(0)
+    expect(centerOffset(700, 900, 100)).toBe(100)
+  })
+  it('ちょうど同じ高さなら頭を上に', () => {
+    expect(centerOffset(600, 600)).toBe(0)
+  })
+})
+
+describe('displayUnits: 描いたときの 1 行の字の数', () => {
+  const urls = { shorten: true, omitImages: true, collapseImageRuns: true }
+  it('全角は 1、半角は 0.5', () => {
+    expect(displayUnits('あいう')).toBe(3)
+    expect(displayUnits('abcd')).toBe(2)
+  })
+  it('URL は短く出す設定なら shortUrl の長さ(36 字 + …)で数える', () => {
+    const long = 'https://example.com/' + 'a'.repeat(80)
+    expect(displayUnits(long)).toBe(long.length / 2)
+    expect(displayUnits(long, urls)).toBe((35 + 1) / 2 + 0.5)
+  })
+  it('画像の URL は「画像」の札として数える', () => {
+    // 「見て 」(2.5)+「画像」の札(2 + 空き 1)
+    expect(displayUnits('見て https://i.imgur.com/abc.jpg', urls)).toBe(2.5 + 3)
+  })
+  it('続いた画像の札は 1 つにまとまる', () => {
+    const two = displayUnits('https://i.imgur.com/a.jpg https://i.imgur.com/b.jpg', urls)
+    const one = displayUnits('https://i.imgur.com/a.jpg', urls)
+    expect(two).toBe(one)
+  })
+  it('改行だけを挟んで続いた画像の URL も 1 つの札にまとまる(行が減る)', () => {
+    const body = '6 枚\nhttps://i.imgur.com/a.jpg\nhttps://i.imgur.com/b.jpg\nhttps://i.imgur.com/c.jpg'
+    expect(displayText(body, urls)).toBe('6 枚\n画像　')
+    expect(displayText(body, { ...urls, collapseImageRuns: false }).split('\n')).toHaveLength(4)
+  })
+  it('設定がなければそのまま数える', () => {
+    expect(displayUnits('https://i.imgur.com/abc.jpg')).toBe('https://i.imgur.com/abc.jpg'.length / 2)
+  })
+})
+
+describe('estimatePostHeight: AA と描くときの本文', () => {
+  const m = { charsPerLine: 20, lineHeight: 26, aaLineHeight: 18, chrome: 40, thumbRow: 88, linkPreview: 88, showThumbnails: true }
+  const post = (body: string): Post => ({ no: 1, name: '', mail: '', date: '', body })
+  it('AA は折り返さず、AA の行の高さで数える', () => {
+    const aa = '　　　∧＿∧　　　　　　　　　　　　　　　　　　　　　　　　　　　\n　　（　´∀｀）     ＜　長い行でも折り返さない'
+    expect(estimatePostHeight(post(aa), m)).toBe(40 + 2 * 18)
+  })
+  it('描くときの本文(空行を整えたもの)を渡せば、その行数で数える', () => {
+    const p = post('a\n\n\n\n\nb')
+    expect(estimatePostHeight(p, m, 'a\n\nb')).toBe(40 + 3 * 26)
+  })
+  it('URL を短く出す設定では、長い URL の行も 1 行と数える', () => {
+    const p = post('https://example.com/' + 'a'.repeat(60))
+    expect(estimatePostHeight(p, m)).toBe(40 + 2 * 26)
+    expect(estimatePostHeight(p, { ...m, urls: { shorten: true, omitImages: false, collapseImageRuns: false } })).toBe(40 + 1 * 26)
   })
 })
 

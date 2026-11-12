@@ -4,7 +4,7 @@
 
 import type { Post } from '@bbs-browser/connectors'
 import type { OpenPosition } from '../ui/settings'
-import { cardUrlsIn, looksLikeAA, mediaIn } from './postBody'
+import { cardUrlsIn, looksLikeAA, mediaIn, shortUrl, toImageUrl, type UrlDisplay } from './postBody'
 import { isAutoLoadable } from './safeUrl'
 
 /** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
@@ -167,27 +167,71 @@ export interface HeightMetrics {
   showLinkPreview?: boolean
   /** サムネイルが 1 段に何個並ぶか(決めなければ折り返さない) */
   thumbsPerRow?: number
+  /** AA の行の高さ(AA 用の字は行の間が詰まる。省くと lineHeight) */
+  aaLineHeight?: number
+  /** URL の見せ方(短く出す・画像の URL を札にする)。本文に出る字の数が変わるので、折り返しの数に効く */
+  urls?: UrlDisplay
+}
+
+/** 本文の URL。描くとき(postBody の TOKEN)より粗いが、長さを数えるにはこれで足りる */
+const URL_IN_BODY = /h?ttps?:\/\/[^\s<>"'）)」]+/gi
+
+/**
+ * 描いたときの本文(URL の見せ方を当てたもの)。字の数を数えるためのもので、描く部品(postBody の renderTokens)と同じ決まりで、
+ * URL は設定どおり短く(shortUrl)、画像の URL は札(「画像」+ アイコン)にし、空白・改行だけを挟んで続いた画像は 1 つの札にまとめる
+ * (改行をまたいでまとまるので、画像の URL を 1 行ずつ並べたレスは行数が減る)
+ */
+export function displayText(body: string, urls?: UrlDisplay): string {
+  if (!urls) return body
+  let out = ''
+  let last = 0
+  let prevImageEnd = -1
+  for (const m of body.matchAll(URL_IN_BODY)) {
+    const u = m[0]
+    const at = m.index
+    const image = (urls.omitImages || urls.collapseImageRuns) && toImageUrl(u) !== undefined
+    if (image && prevImageEnd >= 0 && urls.collapseImageRuns && body.slice(prevImageEnd, at).trim() === '') {
+      // 前の画像の札に「ほか n 件」としてまとまる(間の空白・改行ごと)
+      prevImageEnd = at + u.length
+      last = prevImageEnd
+      continue
+    }
+    out += body.slice(last, at)
+    if (image) {
+      out += urls.omitImages ? '画像　' : `${shortUrl(u)}　`
+      prevImageEnd = at + u.length
+    } else {
+      out += urls.shorten ? shortUrl(u) : u
+      prevImageEnd = -1
+    }
+    last = at + u.length
+  }
+  return out + body.slice(last)
+}
+
+/** 1 行の字の数(全角で数える。半角は半分)。URL の見せ方は displayText で当ててから渡す */
+export function displayUnits(line: string, urls?: UrlDisplay): number {
+  let w = 0
+  for (const ch of urls ? displayText(line, urls) : line) w += ch.charCodeAt(0) < 0x80 ? 0.5 : 1
+  return w
 }
 
 /**
  * まだ描いていないレスの高さを、本文から見積もる(content-visibility の仮の大きさに使う)。
  * 一律の値にすると、長いレスや画像の多いスレで飛び先や前の位置への戻しがずれるため
  */
-export function estimatePostHeight(post: Post, m: HeightMetrics): number {
-  // AA は折り返さずに出す
-  const wraps = !looksLikeAA(post.body)
+export function estimatePostHeight(post: Post, m: HeightMetrics, body = post.body): number {
+  // AA は折り返さず、AA 用の字(行の間が詰まる)で出す
+  const aa = looksLikeAA(body)
   let lines = 0
-  for (const line of post.body.split('\n')) {
-    if (!wraps) {
+  for (const line of displayText(body, m.urls).split('\n')) {
+    if (aa) {
       lines++
       continue
     }
-    // 半角は全角の半分の幅として数える
-    let w = 0
-    for (const ch of line) w += ch.charCodeAt(0) < 0x80 ? 0.5 : 1
-    lines += Math.max(1, Math.ceil(w / Math.max(1, m.charsPerLine)))
+    lines += Math.max(1, Math.ceil(displayUnits(line) / Math.max(1, m.charsPerLine)))
   }
-  let h = m.chrome + lines * m.lineHeight
+  let h = m.chrome + lines * (aa ? (m.aaLineHeight ?? m.lineHeight) : m.lineHeight)
   const { media, links } = postShape(post, m)
   if (media > 0) h += m.thumbRow * Math.ceil(media / Math.max(1, m.thumbsPerRow ?? media))
   h += links * m.linkPreview
@@ -229,6 +273,28 @@ export function anchorCorrection(savedY: number, nowY: number): number {
   const d = nowY - savedY
   // 小数の丸めで直し続けないよう、0.5px 未満は直さない
   return Math.abs(d) < 0.5 ? 0 : d
+}
+
+/**
+ * 基準のレスを元の位置に戻すための scrollTop。直さなくてよければ undefined。
+ * 上のレスが縮んで中身が短くなると、ブラウザが先に scrollTop を一番下まで詰める(clamp)。そのうえで縮んだ分を引くと二重に戻ってしまうので、
+ * 「詰められた」(基準を覚えたときの scrollTop より小さく、かつ一番下にいる)ときは、覚えたときの scrollTop を元に直す
+ */
+export function anchorShift(saved: { y: number; scrollTop: number }, now: { y: number; scrollTop: number; maxScrollTop: number }): number | undefined {
+  const d = anchorCorrection(saved.y, now.y)
+  if (d === 0) return undefined
+  const clamped = now.scrollTop < saved.scrollTop && now.scrollTop >= now.maxScrollTop - 1
+  const base = clamped ? saved.scrollTop : now.scrollTop
+  return Math.max(0, Math.min(now.maxScrollTop, base + d))
+}
+
+/**
+ * レスへ飛ぶときの、レスの頭を置く位置(スクロール領域の上端から)。
+ * 見える範囲(ヘッダーの下)の縦の真ん中にレスの真ん中が来るように。レスが見える範囲より高ければ、頭をヘッダーの下に置く
+ */
+export function centerOffset(viewHeight: number, postHeight: number, headerHeight = 0): number {
+  const visible = Math.max(0, viewHeight - headerHeight)
+  return headerHeight + Math.max(0, (visible - postHeight) / 2)
 }
 
 /**

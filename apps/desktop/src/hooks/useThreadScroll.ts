@@ -11,10 +11,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import type { Post } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import { firstAfter } from '../utils/cursor'
+import type { UrlDisplay } from '../utils/postBody'
 import {
   HeightCache,
   PositionMemory,
-  anchorCorrection,
+  anchorShift,
+  centerOffset,
   estimatePostHeight,
   heightKind,
   heightOffsets,
@@ -41,14 +43,21 @@ const JUMP_MS = 300
 const SETTLE_MS = 250
 /** 合わせ直すのは長くてもここまで。そのあとは見張りが基準のレスを留める */
 const FOLLOW_MAX_MS = 2000
-/** 実測がこれだけ集まるごとに、見積もりの補正を見直す。毎回見直すと、全部のレスの仮の高さを何度も描き直すことになる */
-const CALIB_AT = [4, 16, 64, 256]
+/**
+ * 実測がこれだけ集まるごとに、見積もりの補正を見直す。毎回見直すと、全部のレスの仮の高さを何度も描き直すことになる。
+ * 最初の 1 件で本文の幅・字・行の高さ(見積もりの寸法)を測った値に替える(開いた直後の 1 コマで、全部の仮の高さが実測に近づく)
+ */
+const CALIB_AT = [1, 4, 16, 64, 256]
 /** 補正のために覚えておく実測の数 */
 const CALIB_KEEP = 300
 /** これより多い新着は、なめらかに追いかけずにすぐ移る */
 const MANY_NEW = 30
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
+/** 飛んだ先のレスを光らせておく時間(app.css の .flash-jump-glow の長さと揃える。スマホ版の JUMP_FLASH_HOLD_MS + FADE_MS) */
+const JUMP_FLASH_MS = 1020
+/** AA 用の字の行の高さ(index.css の .aa-font の line-height) */
+const AA_LINE_HEIGHT = 1.15
 /** 新着を若い番号から順に出すときの 1 件ごとのずらしと、全体の長さの上限(app.css の .post-enter) */
 const STAGGER_MS = 35
 const STAGGER_TOTAL_MS = 450
@@ -95,10 +104,12 @@ function runMove(root: HTMLElement, target: () => number, o: { ms: number; press
   moving.get(root)?.()
   const clamped = () => Math.max(0, Math.min(target(), root.scrollHeight - root.clientHeight))
   const from = root.scrollTop
-  const start = performance.now()
+  // 時間は最初のコマから数える(開いた直後は 1000 件の枠を描くのに数百 ms かかり、作った時刻から数えると最初のコマで「着いた」ことになって、
+  // 直後の高さの変化を直せない)
+  let start = NaN
   let written = NaN
   let last = NaN
-  let lastChange = start
+  let lastChange = NaN
   let stopped = false
   const write = (v: number) => {
     root.scrollTop = v
@@ -113,7 +124,7 @@ function runMove(root: HTMLElement, target: () => number, o: { ms: number; press
       lastChange = performance.now()
     }
   }
-  const animating = () => o.ms > 0 && performance.now() - start < o.ms
+  const animating = () => o.ms > 0 && (Number.isNaN(start) || performance.now() - start < o.ms)
   const observer = o.watchSize
     ? new ResizeObserver(() => {
         if (!animating()) settle()
@@ -133,13 +144,11 @@ function runMove(root: HTMLElement, target: () => number, o: { ms: number; press
     root.removeEventListener('touchstart', stop)
     window.removeEventListener('keydown', stop)
     window.removeEventListener('pointerdown', onPointer, true)
-    // 基準を測って引き継ぐのは次のコマで(キーを続けて押すと、すぐ次の動きが始まって測った分がむだになる)。
-    // 次の動きが始まっていたら引き継がない
-    requestAnimationFrame(() => {
-      if (moving.get(root) !== stop) return
-      moving.delete(root)
-      handOff.get(root)?.(o.el)
-    })
+    // 基準のレスは、やめたその場で見張りへ引き継ぐ(次のコマまで待つと、その間に上のレスの高さが変わっても誰も直さない)。
+    // 次の動きがもう始まっていれば(moving が自分でない)、そちらに任せる
+    if (moving.get(root) !== stop) return
+    moving.delete(root)
+    handOff.get(root)?.(o.el)
   }
   moving.set(root, stop)
   root.addEventListener('wheel', stop, { passive: true })
@@ -149,6 +158,7 @@ function runMove(root: HTMLElement, target: () => number, o: { ms: number; press
   if (o.ms <= 0) settle()
   const step = (now: number) => {
     if (stopped) return
+    if (Number.isNaN(start)) start = lastChange = now
     if (movedByOthers(root.scrollTop, written, root.scrollHeight - root.clientHeight)) return stop()
     const t = o.ms <= 0 ? 1 : (now - start) / o.ms
     if (t < 1) {
@@ -210,6 +220,10 @@ interface Options {
   isCollapsed?: (p: Post) => boolean
   /** 頭(名前の行)を省いて出すレスか */
   isContinued?: (p: Post) => boolean
+  /** 描くときの本文(BE のアイコンを除く・空行を整える。PostArticle と同じ)。高さの見積もりはこの本文で数える */
+  bodyOf?: (p: Post) => string
+  /** URL の見せ方(短く出す・画像の札)。本文の折り返しの数に効く */
+  urlDisplay?: UrlDisplay
   /** レスの高さを変える設定をまとめた文字列(見た目・字の大きさ・ID の位置など)。変わったら覚えた高さと補正を使わない */
   layoutKey: string
   unreadFrom: number
@@ -337,21 +351,28 @@ export function useThreadScroll(o: Options) {
     const w = widthRef.current
     const f = c.body?.font ?? metrics.current.fontSize
     const shape = { showThumbnails: latest.current.showThumbnails, showLinkPreview: latest.current.showLinkPreview }
-    const bodyWidth = c.body?.width ?? w - 96
+    // 測る前の寸法は、既定の見た目(カード)の値。左右の余白 28px、頭(名前の行)と上下の余白で字の 2.5 倍
+    const bodyWidth = c.body?.width ?? w - 28
     const thumb = c.body?.thumbs ?? 80
     const { media, links } = postShape(p, shape)
     const entry: { version: number; h: number; kind: string; final?: number } = {
       version: c.version,
-      h: estimatePostHeight(p, {
-        // 本文の幅に、全角が何文字入るか。測る前は、左右の余白とアイコンの分を除いた幅で見積もる
-        charsPerLine: Math.max(10, Math.floor(bodyWidth / f)),
-        lineHeight: c.body?.line ?? f * 1.625,
-        chrome: f * 2.5 + 16,
-        thumbRow: thumb + 8,
-        linkPreview: 88,
-        ...shape,
-        thumbsPerRow: Math.floor((bodyWidth + 8) / (thumb + 8)),
-      }),
+      h: estimatePostHeight(
+        p,
+        {
+          // 本文の幅に、全角が何文字入るか。測る前は、左右の余白とアイコンの分を除いた幅で見積もる
+          charsPerLine: Math.max(10, Math.floor(bodyWidth / f)),
+          lineHeight: c.body?.line ?? f * 1.625,
+          aaLineHeight: f * AA_LINE_HEIGHT,
+          chrome: f * 2.5,
+          thumbRow: thumb + 8,
+          linkPreview: 88,
+          ...shape,
+          thumbsPerRow: Math.floor((bodyWidth + 8) / (thumb + 8)),
+          urls: latest.current.urlDisplay,
+        },
+        latest.current.bodyOf?.(p),
+      ),
       kind: heightKind({ continued: latest.current.isContinued?.(p), media: media > 0, links: links > 0 }),
     }
     estimates.current.set(p, entry)
@@ -363,14 +384,15 @@ export function useThreadScroll(o: Options) {
   /** 本文の幅を測り、一番広いものを覚える。字の大きさと行の高さは recalibrate で読む */
   const probeBody = (frame: HTMLElement) => {
     const c = calibNow()
-    const body = frame.querySelector<HTMLElement>('[data-post-body]')
+    const body = frame.querySelector<HTMLElement>('p[data-post-body]')
     if (!body) return
     c.bodyWidth = Math.max(c.bodyWidth, body.clientWidth)
   }
   /** 集まった実測で、寸法と種類ごとの補正を見直す */
   const recalibrate = (frame: HTMLElement) => {
     const c = calibNow()
-    const body = frame.querySelector<HTMLElement>('[data-post-body]')
+    // 本文の p を測る(外側の div は字下げの余白を含み、行の高さも本文とは違う)。AA の p は行の高さが違うので測らない
+    const body = frame.querySelector<HTMLElement>('p[data-post-body]:not(.aa-font)')
     if (body && c.bodyWidth > 0) {
       const cs = getComputedStyle(body)
       const font = parseFloat(cs.fontSize) || metrics.current.fontSize
@@ -453,16 +475,34 @@ export function useThreadScroll(o: Options) {
 
   // ── 動かす ──
 
-  /** レスの頭がヘッダーの下に来るようにスクロールする(ミニマップの印から飛ぶとき) */
+  // 飛んだ先として光らせるレス(番号と回数。同じレスへ続けて飛んでも光り直せるよう、回数で見分ける)
+  const [jumpFlash, setJumpFlash] = useState<{ no: number; seq: number }>()
+  const jumpFlashSeq = useRef(0)
+  const jumpFlashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(jumpFlashTimer.current), [])
+  /** 飛んだ先のレスを少しのあいだ光らせる(どこから飛んでも同じ見た目・同じ長さ。スマホ版の flashJump と同じ) */
+  const flashPost = useCallback((no: number) => {
+    setJumpFlash({ no, seq: ++jumpFlashSeq.current })
+    clearTimeout(jumpFlashTimer.current)
+    jumpFlashTimer.current = setTimeout(() => setJumpFlash(undefined), JUMP_FLASH_MS)
+  }, [])
+
+  /**
+   * 特定のレスへ飛ぶ(ミニマップの印・アンカー・履歴・通知・URL のレス番号)。
+   * そのレスを見える範囲の縦の真ん中に置き(レスが画面より高ければ頭を上に)、光らせる。
+   * 行き先のレスの高さは着いてから分かることがあるので、jumpScroll が着くまで測り直して真ん中に合わせ続ける
+   */
   const scrollToPost = useCallback(
-    (no: number) => {
+    (no: number, opts: { flash?: boolean; animate?: boolean } = {}) => {
       const root = rootRef.current
       const el = root?.querySelector<HTMLElement>(`[data-post="${no}"]`)
-      if (!root || !el) return
+      if (!root || !el || el.hidden) return false
       userMoves.set(root, (userMoves.get(root) ?? 0) + 1)
-      jumpScroll(root, el, () => headerOffset() + 8)
+      jumpScroll(root, el, () => centerOffset(root.clientHeight, el.getBoundingClientRect().height, headerOffset()), opts.animate ? JUMP_MS : 0)
+      if (opts.flash !== false) flashPost(no)
+      return true
     },
-    [rootRef, headerOffset],
+    [rootRef, headerOffset, flashPost],
   )
 
   /**
@@ -613,6 +653,10 @@ export function useThreadScroll(o: Options) {
     const viewTop = box.top + headerOffset()
     const rects: PostRect[] = []
     const frames = framesIn(listRef.current)
+    // レスの枠がまだない(読み込み中の画面)なら、何も読んでいない。
+    // startTransition で描く途中は latest.current.log にレスがあっても画面はまだ前のまま(枠 0 件・高さ 0)で、
+    // 「一番下にいる」と見なして全部を既読にしてしまうことがあった
+    if (frames.length === 0) return
     const measured: HTMLElement[] = []
     // 枠を測る(中身を測ると、画面の外で省いた計算をやり直させてしまう)。
     // 高さを覚える範囲(画面の上半分ほど)の頭から、画面より 1 画面ぶん下までだけ測る(その外は既読にも高さを覚えるのにも要らない)
@@ -633,7 +677,8 @@ export function useThreadScroll(o: Options) {
       viewBottom: box.bottom,
       // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
       atBottom: atBottom.current && !latest.current.filtering,
-      lastNo: latest.current.log.posts.at(-1)?.no ?? 0,
+      // 一番下にいるとき全部読んだことにする最後の番号は、画面にある枠から数える(ログだけ先に増えていることがある)
+      lastNo: frames.reduce((m, f) => Math.max(m, Number(f.dataset.post)), 0),
     })
     const pos = progress.position
     let last = progress.last
@@ -688,6 +733,10 @@ export function useThreadScroll(o: Options) {
     prevCount.current = log.posts.length
     lastMax.current = log.posts.at(-1)?.no ?? 0
     reportRead()
+    // 描いたレスの高さは、1 度描いてからでないと測れない(content-visibility で省いた枠は、最初の描画で見える範囲が決まる)。
+    // 次のコマで測って見積もりの寸法を合わせ、全部の仮の高さを早いうちに実測に近づける(待つと、しばらくしてスクロールバーが縮む)
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => latest.current.active && reportRead()))
+    return () => cancelAnimationFrame(raf)
   }, [log, unreadFrom, byNo, rootRef, headerOffset, reportRead, scrollToUnread])
 
   // 開き直したスレは、閉じるときの位置をまた覚える
@@ -710,13 +759,12 @@ export function useThreadScroll(o: Options) {
     const j = o.jumpTo
     if (!j || jumpedSeq.current === j.seq || !byNo.has(j.no)) return
     jumpedSeq.current = j.seq
-    if (!j.flash) return scrollToUnread(j.no, 'animate')
-    heldJump.current = true
-    pendingUnread.current = false
-    scrollToUnread(j.no)
-    setFlashNos(new Map([[j.no, 0]]))
-    clearTimeout(flashTimer.current)
-    flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS)
+    // URL のレス番号(flash)は、利用者が触るまで新着が届いても動かさない。どこから来ても、そのレスを真ん中に置いて光らせる
+    if (j.flash) {
+      heldJump.current = true
+      pendingUnread.current = false
+    }
+    scrollToPost(j.no, { animate: !j.flash })
     // seq が変わったときと、レスが届いたときだけ見る
   }, [o.jumpTo?.seq, byNo.size])
 
@@ -729,13 +777,36 @@ export function useThreadScroll(o: Options) {
    * (二重に効かないよう、app.css で overflow-anchor: none にしてある)。
    * written は自分で動かした後の scrollTop。スクロールのイベントが自分の分なら、基準を選び直さない(飛んだ先のレスを基準のまま留めるため)
    */
-  const anchor = useRef<{ el: HTMLElement; y: number; written: number }>(undefined)
+  const anchor = useRef<{ el: HTMLElement; y: number; scrollTop: number; written: number }>(undefined)
   const setAnchor = useCallback(
     (el: HTMLElement) => {
       const root = rootRef.current
-      if (root) anchor.current = { el, y: el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop, written: NaN }
+      if (root) anchor.current = { el, y: el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop, scrollTop: root.scrollTop, written: NaN }
     },
     [rootRef],
+  )
+  /**
+   * 見える範囲の真ん中にあるレスを基準にし(あとで上のレスの高さが変わっても、そのレスを同じ所に留める)、必要なら光らせる。
+   * ミニマップのつまみを離したときに使う(つまみで流したあとの「飛んだ先」はそのレス)
+   */
+  const pinCenter = useCallback(
+    (flash: boolean): number | undefined => {
+      const root = rootRef.current
+      if (!root) return undefined
+      const headerH = headerOffset()
+      const center = root.getBoundingClientRect().top + headerH + (root.clientHeight - headerH) / 2
+      const frames = framesIn(listRef.current)
+      const i = firstAfter(frames.length, (k) => (frames[k].hidden ? undefined : frames[k].getBoundingClientRect().bottom), center)
+      let el: HTMLElement | undefined = frames[i]
+      // 真ん中より下にレスがなければ(末尾の空き)、見えている最後のレス
+      for (let k = frames.length - 1; el === undefined && k >= 0; k--) if (!frames[k].hidden) el = frames[k]
+      if (!el) return undefined
+      setAnchor(el)
+      const no = Number(el.dataset.post)
+      if (flash) flashPost(no)
+      return no
+    },
+    [rootRef, listRef, headerOffset, setAnchor, flashPost],
   )
   /** 見えている先頭のレスを基準にする。動かしている間は、動かす方が行き先を測っているので何もしない */
   const recordAnchor = useCallback(() => {
@@ -759,10 +830,11 @@ export function useThreadScroll(o: Options) {
       return
     }
     const y = a.el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop
-    const d = anchorCorrection(a.y, y)
+    const to = anchorShift(a, { y, scrollTop: root.scrollTop, maxScrollTop: root.scrollHeight - root.clientHeight })
     a.y = y
-    if (d === 0) return
-    root.scrollTop += d
+    if (to === undefined) return
+    root.scrollTop = to
+    a.scrollTop = root.scrollTop
     a.written = root.scrollTop
   }, [rootRef])
   // 描き直しのたび(依存なし)に確かめる。新着で動かす効果(下)より先に並べてあるので、動かす方が勝つ
@@ -883,6 +955,7 @@ export function useThreadScroll(o: Options) {
       const ours = Math.abs(root.scrollTop - (anchor.current?.written ?? NaN)) < 1
       fixAnchor()
       if (!ours) recordAnchor()
+      else if (anchor.current) anchor.current.scrollTop = root.scrollTop
       markSeen()
     }
     const onScroll = () => {
@@ -967,6 +1040,10 @@ export function useThreadScroll(o: Options) {
     page,
     showJump,
     flashNos,
+    /** 飛んだ先として光らせるレス(番号と回数) */
+    jumpFlash,
+    /** 真ん中のレスを基準にして(留めて)、光らせる */
+    pinCenter,
     intrinsicHeight,
     getPosition,
     restorePosition,

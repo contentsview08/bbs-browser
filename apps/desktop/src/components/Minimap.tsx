@@ -1,6 +1,8 @@
 // ミニマップ。スレ全体を縦に縮めて、人気レス・画像・動画・リンク・自分のレス・自分への返信と「ここから未読」の位置を示す。
 // つまみをドラッグしてスクロールでき、印を押すとそのレスへ、何もないところを押すとその割合の位置へ飛ぶ。
 // 幅を 2 つの列に分ける(左: 中身=人気の横棒と画像・動画・リンク、右: 自分=自分のレスと返信)。寸法と色は bbs-suite の docs/minimap.md
+// 縦の座標は「レスの番目 ÷ レス数」(PC・スマホ・スマホ版で同じ)。印はスクロールの位置や高さの見積もりに依らず、飛んでも描き直しても動かない。
+// つまみ(見えている範囲)も同じ番目の座標で出す。決まりは bbs-suite の docs/thread-scroll.md
 
 import { isMobile } from '../utils/platform'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
@@ -8,18 +10,7 @@ import type { Post } from '@bbs-browser/connectors'
 import { hasLink, hasVideo, imageUrlsIn, looksLikeAA, shortUrl } from '../utils/postBody'
 import { currentMinimapThumbColor } from '../utils/minimapThumb'
 import { framesIn } from '../hooks/useThreadScroll'
-
-/** 位置がこれ(%)より動いていなければ、印を描き直さない(細い帯の上では 1px に満たない) */
-const PCT_EPSILON = 0.1
-/** 測った位置が前と同じとみなせるか */
-function samePcts(a: Map<number, number>, b: Map<number, number>): boolean {
-  if (a.size !== b.size) return false
-  for (const [no, at] of a) {
-    const other = b.get(no)
-    if (other === undefined || Math.abs(other - at) >= PCT_EPSILON) return false
-  }
-  return true
-}
+import { firstAfter } from '../utils/cursor'
 
 interface Props {
   posts: Post[]
@@ -37,7 +28,10 @@ interface Props {
   isNg?: (p: Post) => boolean
   /** ヘッダーの高さ。ミニマップはその下から始める */
   topOffset: number
-  onJump: (no: number) => void
+  /** レスへ飛ぶ(呼ぶ側がそのレスを見える範囲の真ん中に置く)。印を押したときは光らせ(flash)、印のない所を押したときは光らせない */
+  onJump: (no: number, flash: boolean) => void
+  /** つまみを離した(呼ぶ側が、見えている真ん中のレスを「飛んだ先」として光らせ、留める) */
+  onDragEnd?: () => void
 }
 
 // utils/postBody の heatClass と同じ暖色の段階
@@ -116,98 +110,75 @@ export default function Minimap(props: Props) {
   const { posts, scrollRef, listRef } = props
   const thumbRef = useRef<HTMLDivElement>(null)
   const thumbColor = useThumbColor()
-  // レス番号 → スクロール全体に対する位置(%)。つまみと同じ scrollTop / scrollHeight の座標で揃える
-  const [pcts, setPcts] = useState(new Map<number, number>())
 
-  useEffect(() => {
-    const root = scrollRef.current
-    // スマホは、印の位置をレスの番目で決める(測らない)。下の「つまみ」も番目で出す。
-    // 測る作りだと、画像やレスが描かれて高さが変わるたびに印が動き、全部のレスを測り直すのも重い
-    if (!root || isMobile) return
-    const measure = () => {
-      if (root.scrollHeight === 0) return
-      const rootTop = root.getBoundingClientRect().top
-      const next = new Map<number, number>()
-      // レスの中身ではなく枠(.post-cv)を測る(画面の外で省いた計算をやり直させないように)
-      for (const el of framesIn(listRef.current)) {
-        if (el.hidden) continue // 絞り込みで隠しているレス
-        // 番号は枠に持たせてある(NG で中身を描かないレスも数えるため)
-        const no = Number(el.dataset.post)
-        if (!no) continue
-        const top = el.getBoundingClientRect().top - rootTop + root.scrollTop
-        next.set(no, (top / root.scrollHeight) * 100)
-      }
-      setPcts((prev) => (samePcts(prev, next) ? prev : next))
-    }
-    // 描画が落ち着いてから測る
-    let raf = requestAnimationFrame(() => {
-      raf = requestAnimationFrame(measure)
-    })
-    // 大きさが変わり続けているあいだ(サイドバーの開閉・ウィンドウの大きさを変えている途中)は測らず、
-    // 落ち着いてから 1 回だけ測る(全部のレスの位置を測るので、毎コマやると重い)
-    let timer: ReturnType<typeof setTimeout>
-    const observer = new ResizeObserver(() => {
-      clearTimeout(timer)
-      timer = setTimeout(measure, 150)
-    })
-    observer.observe(root)
-    if (listRef.current) observer.observe(listRef.current)
-    return () => {
-      clearTimeout(timer)
-      cancelAnimationFrame(raf)
-      observer.disconnect()
-    }
-  }, [posts, scrollRef, listRef])
+  const total = Math.max(1, posts.length - 1)
+  // つまみを番目で出すための控え
+  const postsRef = useRef(posts)
+  postsRef.current = posts
+  const indexOf = useRef(new Map<number, number>())
+  indexOf.current = useMemo(() => new Map(posts.map((p, i) => [p.no, i])), [posts])
+  /** 印の縦の位置(%)。番目 ÷ (レス数 − 1)。測らないので、飛んでも・描き直しても・高さの見積もりが変わっても動かない */
+  const pct = (_no: number, index: number) => (index / total) * 100
 
-  // つまみをスクロールに合わせる
+  /**
+   * 見えている範囲(ヘッダーの下からフッターの上まで)の上端と下端にあるレスの番目(小数つき。レスの中のどこまで見えているか)。
+   * 枠(.post-cv)を上から半分ずつ探す(全部は測らない)。絞り込みで隠れた枠・ツリーで重ねた分(data-post なし)は数えない
+   */
+  const visibleRange = (root: HTMLElement): { a: number; b: number } | undefined => {
+    const frames = framesIn(listRef.current)
+    const n = frames.length
+    if (n === 0) return undefined
+    const box = root.getBoundingClientRect()
+    const footer = isMobile ? parseFloat(getComputedStyle(root).getPropertyValue('--footer-offset')) || 0 : 0
+    const top = box.top + props.topOffset
+    const bottom = box.bottom - footer
+    const rect = (k: number) => (frames[k].hidden ? undefined : frames[k].getBoundingClientRect())
+    const i = firstAfter(n, (k) => rect(k)?.bottom, top)
+    if (i >= n) return undefined
+    const idx = (k: number) => indexOf.current.get(Number(frames[k].dataset.post)) ?? k
+    const ri = rect(i)!
+    const a = idx(i) + Math.min(1, Math.max(0, (top - ri.top) / Math.max(1, ri.height)))
+    let j = i
+    for (let k = i; k < n; k++) {
+      const r = rect(k)
+      if (!r) continue
+      if (r.top >= bottom) break
+      j = k
+    }
+    const rj = rect(j)!
+    const b = idx(j) + Math.min(1, Math.max(0, (bottom - rj.top) / Math.max(1, rj.height)))
+    return { a, b }
+  }
+
+  // つまみを、見えている範囲の番目に合わせる(印と同じ座標)
   useEffect(() => {
     const root = scrollRef.current
     const thumb = thumbRef.current
     if (!root || !thumb) return
-    const byScroll = () => {
-      const { scrollHeight, clientHeight, scrollTop } = root
-      // 長いスレでもつかめるよう、つまみは 14px より小さくしない
-      thumb.style.height = `max(14px, ${(clientHeight / scrollHeight) * 100}%)`
-      thumb.style.top = `${(scrollTop / scrollHeight) * 100}%`
-    }
-    /** スマホ: 画面の上端と下端にあるレスの番目で、つまみを出す(印と同じ、番目の座標) */
+    // つまみの大きさ(画面に入っているレスの数)は、スクロールで 1 つずつ変わってカクカクするので、なめらかにつなぐ
+    const SMOOTH = 'height 220ms ease-out, top 120ms ease-out'
+    thumb.style.transition = SMOOTH
+    /** 前に出したつまみの上端(何番目か)。大きく飛んだ(一番下へ・先頭へ・ミニマップから)ときは、なめらかにせずすぐ移す */
+    let lastTop = -1
     const byIndex = () => {
-      const box = root.getBoundingClientRect()
-      const x = box.left + Math.min(40, box.width / 2)
-      // 上下の端にはヘッダー・フッターが重なっているので、レスに当たるまで少しずつ内側へずらして探す
-      const at = (from: number, dir: 1 | -1) => {
-        for (let k = 0; k < 24; k++) {
-          // ツリーで重ねて出した分(data-post がない)は飛ばす
-          const el = document.elementFromPoint(x, from + dir * k * 20)?.closest<HTMLElement>('.post-cv[data-post]')
-          if (el && root.contains(el)) return indexOf.current.get(Number(el.dataset.post))
-        }
-        return undefined
-      }
       const n = Math.max(1, postsRef.current.length)
-      const top = at(box.top + props.topOffset + 4, 1)
-      const bottom = at(box.bottom - 4, -1)
-      if (top === undefined && bottom === undefined) return byScroll()
-      const a = top ?? 0
-      const b = bottom ?? n - 1
-      const jumped = lastTop >= 0 && Math.abs(a - lastTop) > Math.max(5, (b - a + 1) * 2)
+      const range = visibleRange(root)
+      if (!range) return
+      const { a, b } = range
+      const jumped = lastTop >= 0 && Math.abs(a - lastTop) > Math.max(5, (b - a) * 2)
       lastTop = a
       if (jumped) thumb.style.transition = 'none'
       thumb.style.top = `${(a / n) * 100}%`
-      thumb.style.height = `max(14px, ${((b - a + 1) / n) * 100}%)`
+      // 長いスレでもつかめるよう、つまみは 14px より小さくしない
+      thumb.style.height = `max(14px, ${((b - a) / n) * 100}%)`
       if (jumped) {
         // 動かさずに置いたことを先に確定させてから(位置を読むと、その場で描き直す)、なめらかさを戻す
         void thumb.offsetHeight
         thumb.style.transition = SMOOTH
       }
     }
-    // スマホ: つまみの大きさ(画面に入っているレスの数)は、スクロールで 1 つずつ変わってカクカクするので、なめらかにつなぐ
-    const SMOOTH = 'height 220ms ease-out, top 120ms ease-out'
-    if (isMobile) thumb.style.transition = SMOOTH
-    /** 前に出したつまみの上端(何番目か)。大きく飛んだ(一番下へ・先頭へ)ときは、なめらかにせずすぐ移す */
-    let lastTop = -1
     let raf = 0
     const update = () => {
-      if (!isMobile) return byScroll()
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(byIndex)
     }
@@ -221,16 +192,8 @@ export default function Minimap(props: Props) {
       root.removeEventListener('scroll', update)
       observer.disconnect()
     }
+    // visibleRange は listRef と topOffset から決まる
   }, [scrollRef, listRef, props.topOffset])
-
-  const total = Math.max(1, posts.length - 1)
-  // つまみ(スマホ)を番目で出すための控え
-  const postsRef = useRef(posts)
-  postsRef.current = posts
-  const indexOf = useRef(new Map<number, number>())
-  indexOf.current = useMemo(() => new Map(posts.map((p, i) => [p.no, i])), [posts])
-  // 測れていないレスは、並び順からおおよその位置を出す
-  const pct = (no: number, index: number) => pcts.get(no) ?? (index / total) * 100
 
   const markers = useMemo(() => {
     const heat: { no: number; at: number; count: number }[] = []
@@ -252,47 +215,56 @@ export default function Minimap(props: Props) {
       else if (hasLink(p.body)) media.push({ no: p.no, at, type: 'link' })
     })
     return { heat, own, reply, media, fresh }
-    // pct は pcts と posts から決まるので、依存はこれで足りる
-  }, [posts, pcts, props.anchorCounts, props.ownNos, props.replyToOwn, props.newFrom])
+    // pct は posts(の数)から決まるので、依存はこれで足りる
+  }, [posts, props.anchorCounts, props.ownNos, props.replyToOwn, props.newFrom])
 
   const unreadIndex = props.unreadFrom > 1 ? posts.findIndex((p) => p.no === props.unreadFrom) : -1
   const unreadAt = unreadIndex >= 0 ? pct(props.unreadFrom, unreadIndex) : undefined
 
+  /** 番目のレスの頭を、見える範囲の上端(ヘッダーの下)に置く(つまみをドラッグしている間。スマホ版の dragTo と同じ) */
+  const scrollToIndex = (root: HTMLElement, index: number) => {
+    const frames = framesIn(listRef.current)
+    const p = postsRef.current[Math.min(postsRef.current.length - 1, Math.max(0, Math.round(index)))]
+    const el = p && frames.find((f) => Number(f.dataset.post) === p.no && !f.hidden)
+    if (!el) return
+    root.scrollTop += el.getBoundingClientRect().top - root.getBoundingClientRect().top - props.topOffset
+  }
+
+  // つまみのドラッグ。つまみは番目の座標なので、動かした分を番目に直してそのレスへ(見積もりの高さに依らない)
   const onThumbMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     const root = scrollRef.current
     if (!root) return
     const startY = e.clientY
-    const startTop = root.scrollTop
-    const ratio = root.scrollHeight / (e.currentTarget.parentElement?.clientHeight ?? root.clientHeight)
+    const startIndex = visibleRange(root)?.a ?? 0
+    const trackH = e.currentTarget.parentElement?.clientHeight ?? root.clientHeight
+    const n = Math.max(1, postsRef.current.length)
+    let lastIndex = -1
     const onMove = (ev: MouseEvent) => {
-      root.scrollTop = startTop + (ev.clientY - startY) * ratio
+      const index = Math.min(n - 1, Math.max(0, Math.round(startIndex + ((ev.clientY - startY) / trackH) * n)))
+      if (index === lastIndex) return
+      lastIndex = index
+      scrollToIndex(root, index)
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       document.body.style.userSelect = ''
+      props.onDragEnd?.()
     }
     document.body.style.userSelect = 'none'
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
 
-  // 何もないところを押したら、その割合の位置が画面の真ん中に来るように飛ぶ
+  // 何もないところを押したら、その割合の番目のレスへ(真ん中に置く。光らせない。スマホ版と同じ)
   const onTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
-    const root = scrollRef.current
-    if (!root) return
     const rect = e.currentTarget.getBoundingClientRect()
     const ratio = (e.clientY - rect.top) / rect.height
-    // スマホは番目の座標なので、その割合の番目のレスへ飛ぶ
-    if (isMobile) {
-      const p = posts[Math.min(posts.length - 1, Math.max(0, Math.round(ratio * total)))]
-      if (p) props.onJump(p.no)
-      return
-    }
-    root.scrollTop = ratio * root.scrollHeight - root.clientHeight / 2
+    const p = posts[Math.min(posts.length - 1, Math.max(0, Math.round(ratio * total)))]
+    if (p) props.onJump(p.no, false)
   }
 
   // 印は数が多いことがあるので、マウスを動かしただけ(hover)では作り直さない
@@ -300,7 +272,7 @@ export default function Minimap(props: Props) {
   const markerButtons = useMemo(() => {
     const jump = (no: number) => (e: React.MouseEvent) => {
       e.stopPropagation()
-      onJump(no)
+      onJump(no, true)
     }
     /** 印を押せる箱。印そのものは小さいので、箱は広めにして真ん中に印を置く */
     const hit = (x: number, at: number, z: number) => ({

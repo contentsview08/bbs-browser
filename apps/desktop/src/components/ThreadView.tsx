@@ -67,7 +67,9 @@ import {
   imageUrlsIn,
   normalizeForSearch,
   videoFileUrlsIn,
-  youtubeLinksIn, mostCommonName, looksLikeAA } from '../utils/postBody'
+  youtubeLinksIn, mostCommonName, looksLikeAA,
+  displayBody,
+} from '../utils/postBody'
 import { anchorTreeOf, type AnchorTreeRow } from '../utils/postTree'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
@@ -491,6 +493,8 @@ const PostFrame = memo(function PostFrame(props: {
   dup?: boolean
   /** ツリーの新着の印(前回の既読より後のレス) */
   newMark?: boolean
+  /** 飛んだ先として光らせる(飛んだ回数。変わるたびに光り直す) */
+  jumpFlash?: number
 }) {
   const { post: p, index: i, shared: s, rendered, height, firstUnread, enterDelay, runHead, depth, dup } = props
   const indent = depth === undefined ? 0 : depth * TREE_INDENT
@@ -548,6 +552,8 @@ const PostFrame = memo(function PostFrame(props: {
         />
       )}
       {props.unreadLine && <Divider label="ここから未読" self />}
+      {/* 飛んだ先のレスの光(app.css の .flash-jump-glow)。回数ごとに作り直して、同じレスへ続けて飛んでも光り直す */}
+      {props.jumpFlash !== undefined && <span key={props.jumpFlash} aria-hidden className="flash-jump-glow rounded-[var(--card-radius)]" />}
       {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
       {props.sameIdTint && (
         <span
@@ -1248,6 +1254,10 @@ export default function ThreadView(props: Props) {
     },
     [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom, styleOpts.groupRuns],
   )
+  /** 高さの見積もりに使う本文(PostArticle が描く本文と同じ: BE のアイコンを除き、空行を整える) */
+  const estimateBodyOf = useCallback((p: Post) => displayBody(display.splitIcon?.(p.body).body ?? p.body, display), [display])
+  /** URL の見せ方(本文に出る字の数が変わる。PostArticle に渡す handlers.urls と同じ決め方) */
+  const urlDisplay = useMemo(() => ({ shorten: settings.urlShorten, omitImages: settings.urlShorten, collapseImageRuns: settings.urlShorten }), [settings.urlShorten])
   /** レスの高さを変える設定。変わったら、覚えた高さと見積もりの補正を使わない */
   const layoutKey = useMemo(
     () =>
@@ -1283,6 +1293,8 @@ export default function ThreadView(props: Props) {
     page,
     showJump,
     flashNos,
+    jumpFlash,
+    pinCenter,
     intrinsicHeight,
     getPosition,
     restorePosition,
@@ -1302,6 +1314,8 @@ export default function ThreadView(props: Props) {
     byNo,
     isCollapsed: isNg,
     isContinued: isContinuedPost,
+    bodyOf: estimateBodyOf,
+    urlDisplay: urlDisplay,
     layoutKey,
     unreadFrom,
     active: props.active,
@@ -2423,6 +2437,7 @@ export default function ThreadView(props: Props) {
           firstUnread={firstUnread}
           unreadLine={firstUnread && !visibleNos}
           enterDelay={flashNos.get(p.no)}
+          jumpFlash={jumpFlash?.no === p.no ? jumpFlash.seq : undefined}
           // スマホには「選んでいるレス」がない(押したレスに印を付けない)
           cursorMark={!isMobile && keysOn && !cursorHidden && p.no === cursorNo}
           sameIdTint={!isMobile && cursorId !== undefined && p.id === cursorId && p.no !== cursorNo}
@@ -2462,7 +2477,7 @@ export default function ThreadView(props: Props) {
         />
       )
     })
-  }, [log.posts, tree, byNo, indexOfNo, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared])
+  }, [log.posts, tree, byNo, indexOfNo, unreadFrom, flashNos, jumpFlash, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared])
 
   /** 書き込み欄の中身(スマホのフッターと PC の欄で共通)。書けない掲示板は undefined */
   const replyFormProps = props.onSubmitPost && {
@@ -2640,7 +2655,9 @@ export default function ThreadView(props: Props) {
           isNg={isNg}
           unreadFrom={tree ? 0 : unreadFrom}
           topOffset={headerInScroll && !isMobile ? headerHeight : 0}
-          onJump={scrollToPost}
+          onJump={(no, flash) => scrollToPost(no, { flash })}
+          // つまみを離したら、真ん中のレスを「飛んだ先」として光らせ、留める
+          onDragEnd={() => pinCenter(true)}
         />
         </div>
       )}

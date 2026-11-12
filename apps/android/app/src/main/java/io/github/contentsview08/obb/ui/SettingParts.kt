@@ -129,6 +129,7 @@ fun EditableWordList(
     if (words.size > FILTER_FROM) OutlinedTextField(
         query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), singleLine = true,
         placeholder = { Text("${words.size} 件から絞り込む") },
+        trailingIcon = if (query.isNotEmpty()) ({ ClearTextButton { query = "" } }) else null,
     )
     if (words.isEmpty()) Text(empty, Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
     @Composable fun WordRow(w: String, handle: Modifier?) =

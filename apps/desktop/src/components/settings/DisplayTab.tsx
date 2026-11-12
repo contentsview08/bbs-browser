@@ -26,6 +26,7 @@ import { pickOpenPath } from '../../host/dialog'
 import { FONT_NOTE } from '../../host/fonts'
 import { FontRows } from './FontRows'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
+import { SearchInput } from '../ClearButton'
 
 /**
  * 選んでいる見た目だけの設定(表示スタイルの窓の「スタイル」のタブと、同じ言葉・同じ並び)。値は見た目ごとに別々に覚える
@@ -83,13 +84,7 @@ function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: s
   return (
     <div className="mt-3">
       <div className="flex items-center gap-3 mb-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="フォント名で絞り込む"
-          className={`${INPUT} flex-1`}
-        />
+        <SearchInput value={query} onValue={setQuery} placeholder="フォント名で絞り込む" wrapClassName="flex-1" className={`${INPUT} w-full`} />
         <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none whitespace-nowrap">
           <input type="checkbox" checked={japaneseOnly} onChange={(e) => setJapaneseOnly(e.target.checked)} className="rounded" />
           日本語フォントだけ

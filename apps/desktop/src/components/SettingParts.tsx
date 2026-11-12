@@ -15,6 +15,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, DialogHeader, ICON_BTN, INPUT } from './Dia
 import { effectivePostStyle, effectiveScheme, isDarkScheme, type AppSettings } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
+import { SearchInput } from './ClearButton'
 
 
 /** 見本のレス(どの掲示板にもありそうな形。画像は読みに行かない) */
@@ -216,7 +217,7 @@ export function ListEditor(props: {
       </form>
       {message && <p className="text-xs text-c-heat-very-hot mb-2">{message}</p>}
       {items.length > FILTER_FROM && (
-        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${items.length} 件から絞り込む`} className={`${INPUT} w-full mb-2`} />
+        <SearchInput type="search" value={query} onValue={setQuery} placeholder={`${items.length} 件から絞り込む`} wrapClassName="w-full mb-2" className={`${INPUT} w-full`} />
       )}
       {items.length === 0 ? (
         <p className="text-sm text-c-text-muted">まだありません</p>

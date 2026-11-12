@@ -178,7 +178,8 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
 @Composable
 private fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        // 高さを決めておく(× が出ても行の高さを変えない)
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).heightIn(min = 40.dp).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
@@ -191,7 +192,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, placeholder: 
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
             )
         }
-        if (value.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { onChange("") })
+        if (value.isNotEmpty()) ClearTextButton { onChange("") }
     }
 }
 
@@ -684,7 +685,8 @@ private fun NgPage(vm: AppViewModel) {
             }
         }
         Row(
-            Modifier.padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2).padding(horizontal = 12.dp, vertical = 9.dp),
+            // 高さを決めておく(× が出ても行の高さを変えない)
+            Modifier.padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2).heightIn(min = 38.dp).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
@@ -696,6 +698,7 @@ private fun NgPage(vm: AppViewModel) {
                     textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 14.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
                 )
             }
+            if (query.isNotEmpty()) ClearTextButton { query = "" }
         }
         val q = query.trim()
         val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true)) }

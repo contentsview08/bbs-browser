@@ -24,6 +24,7 @@ import { ToolbarsTab } from './settings/ToolbarsTab'
 import { UploadTab } from './settings/UploadTab'
 import { WriteTab } from './settings/WriteTab'
 import { type SettingsProps, type SettingsTab, AdvancedContext, SearchContext } from './settings/common'
+import { ClearButton } from './ClearButton'
 
 export type { SettingsProps, SettingsTab } from './settings/common'
 
@@ -181,11 +182,7 @@ export default function SettingsDialog(props: SettingsProps) {
         placeholder="設定を探す(例: 文字の大きさ・NG・スワイプ)"
         className="flex-1 min-w-0 bg-transparent border-0 p-0 text-sm text-c-text-body placeholder-c-text-muted focus:ring-0"
       />
-      {searching && (
-        <button type="button" onClick={() => setQuery('')} className="p-0.5 text-c-text-muted" title="検索をやめる">
-          <span className="material-symbols-outlined text-base">close</span>
-        </button>
-      )}
+      <ClearButton inline value={query} onClear={() => setQuery('')} />
     </div>
   )
 

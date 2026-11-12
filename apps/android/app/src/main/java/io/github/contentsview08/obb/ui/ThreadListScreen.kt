@@ -645,14 +645,21 @@ fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, on
                         if (value.isEmpty()) Text(placeholder, color = Palette.textMuted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         field()
                     }
-                    // 消しても入力は続ける
-                    if (value.isNotEmpty()) Box(
-                        Modifier.size(32.dp).clip(CircleShape).clickable { onChange("") },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Cancel, "消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }
+                    if (value.isNotEmpty()) ClearTextButton { onChange("") }
                 }
             },
         )
+    }
+}
+
+/**
+ * 検索・絞り込みの欄の中の右に出す、文字を消す ×。文字が入っているときだけ置く。
+ * PC・Web の components/ClearButton.tsx と同じ形・色(塗りの cancel・18dp・薄い文字の色、押せる所 32dp)。消しても欄は打ち続けられるまま
+ */
+@Composable
+fun ClearTextButton(onClear: () -> Unit) {
+    Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClear), contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.Cancel, "消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp))
     }
 }
 

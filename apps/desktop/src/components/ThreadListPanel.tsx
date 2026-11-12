@@ -31,6 +31,7 @@ import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import PeekPopup from './PeekPopup'
 import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, followDelta, isDoublePress, isNear, isSeen, pickAfterPage, spanOf, stepCursor } from '../utils/cursor'
+import { ClearButton, CLEAR_PAD } from './ClearButton'
 
 export type SortMode = 'momentum' | 'newest' | 'count'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -1046,10 +1047,12 @@ export default function ThreadListPanel(props: Props) {
                     }
                   }}
                   placeholder="スレタイを探す"
+                  style={query ? { paddingRight: CLEAR_PAD } : undefined}
                   className={`absolute inset-y-0 right-0 h-9 my-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none transition-[width,opacity] duration-300 ease-out ${
                     searchActive ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'
                   }`}
                 />
+                <ClearButton value={searchActive && query ? query : ''} onClear={() => setQuery('')} inputRef={searchRef} />
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />

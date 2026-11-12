@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo, useState } from 'react'
 import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import { ICON_BTN, INPUT } from '../DialogParts'
 import { type SettingsProps, Choice } from './common'
+import { SearchInput } from '../ClearButton'
 
 export function BoardListTab(props: {
   sites: SiteConfig[]
@@ -79,13 +80,7 @@ export function BoardListTab(props: {
           <span className={`material-symbols-outlined text-lg ${busy ? 'animate-spin' : ''}`}>refresh</span>
         </button>
       </div>
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="板の名前やカテゴリで絞り込む"
-        className={`${INPUT} w-full mb-1`}
-      />
+      <SearchInput value={query} onValue={setQuery} placeholder="板の名前やカテゴリで絞り込む" wrapClassName="w-full mb-1" className={`${INPUT} w-full`} />
       <p className="text-xs text-c-text-muted mb-2">☆ でお気に入りに登録・解除、ダブルクリックでその板を開きます</p>
       {message && <p className="text-sm text-c-heat-very-hot mb-2">{message}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)]">

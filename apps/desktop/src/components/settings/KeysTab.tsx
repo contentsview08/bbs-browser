@@ -10,6 +10,7 @@ import { PIE_DIRS, PIE_DIR_NAMES, type PieDir } from '../../hooks/useMouseGestur
 import MouseGesturePie from '../MouseGesturePie'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, setActionKeys, type KeyAction, type Keymap } from '../../utils/keymap'
 import { type SettingsProps, Section, Choice } from './common'
+import { SearchInput } from '../ClearButton'
 
 /**
  * PC: マウスジェスチャー(円盤)。8 方向それぞれに操作を割り当てる。左の円盤の区画を押すと、その方向の行が選ばれる。
@@ -153,7 +154,7 @@ export function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 
     <>
       <Section
         title="キーの割り当て"
-        note="キーを受け取っている方(2 画面なら上に線が出ている方。既定では Ctrl+E で入れ替え)で効きます。入力欄の中では Ctrl 付きのキーだけ効きます。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)"
+        note="キーを受け取っている方(2 画面なら上に線が出ている方。既定では Ctrl+E で入れ替え)で効きます。入力欄の中では Ctrl・Alt 付きのキーと F キーだけ効きます(文字の編集と日本語入力のキー(Ctrl+A・Ctrl+Z・Ctrl+T・F6〜F10 など)と、変換中のキーは除く)。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)"
       >
         {notice && (
           <p className="mb-3 px-3 py-2 text-xs rounded-lg border border-c-border bg-c-surface2 text-c-text-body flex items-center gap-2">
@@ -177,15 +178,16 @@ export function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <input
+          <SearchInput
             type="search"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
+            onValue={(v) => {
+              setQuery(v)
               setFound(undefined)
             }}
             placeholder="操作の名前・キーで探す"
-            className={`${INPUT} flex-1 min-w-48`}
+            wrapClassName="flex-1 min-w-48"
+            className={`${INPUT} w-full`}
           />
           <button
             type="button"

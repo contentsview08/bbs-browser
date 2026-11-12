@@ -14,6 +14,7 @@ import { useLongPress } from '../hooks/useLongPress'
 import MobilePage from './MobilePage'
 import { dayLabel, relativeTime } from '../utils/thread'
 import ActionSheet from './ActionSheet'
+import { SearchInput } from './ClearButton'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
@@ -57,12 +58,12 @@ export function PostHistoryList(props: Omit<Props, 'onClose'>) {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-b border-c-border">
-        <input
-          type="text"
+        <SearchInput
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onValue={setQuery}
           placeholder="本文・スレタイ・名前で絞り込む"
-          className="flex-1 min-w-0 bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1 focus:ring-c-accent focus:border-c-accent"
+          wrapClassName="flex-1 min-w-0"
+          className="w-full bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1 focus:ring-c-accent focus:border-c-accent"
         />
         <span className="text-xs text-c-text-muted tabular-nums whitespace-nowrap">{shown.length} 件</span>
       </div>

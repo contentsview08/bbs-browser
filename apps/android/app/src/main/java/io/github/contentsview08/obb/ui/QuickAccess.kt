@@ -130,8 +130,9 @@ fun QuickAccess(vm: AppViewModel) {
                 }
                 // 絞り込み(スレタイ・板の名前)
                 Row(
+                    // 高さを決めておく(× が出ても行の高さを変えない)
                     Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2)
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                        .heightIn(min = 38.dp).padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
@@ -143,7 +144,7 @@ fun QuickAccess(vm: AppViewModel) {
                             textStyle = TextStyle(color = Palette.textStrong, fontSize = 14.sp), cursorBrush = SolidColor(Palette.accent),
                         )
                     }
-                    if (query.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp).clickable { query = "" })
+                    if (query.isNotEmpty()) ClearTextButton { query = "" }
                 }
                 // 続きを読む: 未読のある最近のスレ(6 つまで)を横に並べた札
                 val resume = vm.history.filter { it.thread.id != current && unreadOf(it.thread, it.readNo) > 0 }.take(6)

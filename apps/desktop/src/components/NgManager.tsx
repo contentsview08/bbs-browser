@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { NG_TARGETS, isActive, matchRanges, pruneExpired, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 import NgRuleDialog, { type NgDraft } from './NgRuleDialog'
 import { BTN_SECONDARY } from './DialogParts'
+import { SearchInput } from './ClearButton'
 
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted focus:ring-c-accent focus:border-c-accent'
@@ -75,7 +76,7 @@ export default function NgManager(props: { rules: NgRule[]; onChange: (rules: Ng
         })}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="文字・メモ・板の名前で探す" className={`${INPUT} flex-1 min-w-48`} />
+        <SearchInput type="search" value={query} onValue={setQuery} placeholder="文字・メモ・板の名前で探す" wrapClassName="flex-1 min-w-48" className={`${INPUT} w-full`} />
         <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={INPUT} title="並べ替え">
           <option value="new">新しい順</option>
           <option value="pattern">文字の順</option>

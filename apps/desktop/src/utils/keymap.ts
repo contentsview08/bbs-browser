@@ -261,3 +261,57 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
   return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
 }
+
+type GuardKeyEvent = { key: string; keyCode?: number; isComposing?: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }
+
+/**
+ * IME で変換している途中のキーか。変換中のキーは IME のもの(Microsoft IME の Ctrl+T・F10 で半角英数字に、など)なので、アプリの割り当てには使わない。
+ * Windows の Chromium・Safari は、変換中のキーや変換を確定する Enter を isComposing を立てずに keyCode 229(key は 'Process')で送ることがある
+ */
+export function isImeKey(e: GuardKeyEvent): boolean {
+  return !!e.isComposing || e.keyCode === 229 || e.key === 'Process'
+}
+
+/** 文字を打つ欄の中では IME・OS に任せる、Ctrl 付きのキー(英字は大文字) */
+const TEXT_EDIT_CTRL_KEYS = new Set([
+  // 編集: すべて選ぶ・コピー・切り取り・貼り付け・元に戻す・やり直し
+  'A', 'C', 'X', 'V', 'Z', 'Y',
+  // Microsoft IME の変換(未確定の文字を、U ひらがな・I カタカナ・O 半角カタカナ・P 全角英数・T 半角英数に。F6〜F10 と同じ)
+  'U', 'I', 'O', 'P', 'T',
+  // 単語ごとに消す・動く・選ぶ、欄の頭・終わりへ
+  'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End',
+  // IME の入り切り(Ctrl+Space の設定にしている人がいる)
+  ' ',
+])
+
+/**
+ * 文字を打つ欄の中で、IME・OS の標準の編集に使うキーか。欄の中ではアプリの割り当てに回さない(欄の外では今までどおり割り当てが効く)。
+ * F6〜F10 は IME の変換(ひらがな・カタカナ・半角カタカナ・全角英数・半角英数)、Shift+F10 は右クリックのメニュー
+ */
+export function isTextEditKey(e: GuardKeyEvent): boolean {
+  if (/^F([6-9]|10)$/.test(e.key)) return true
+  // US 配列の Alt+` は IME の入り切り
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '`') return true
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false
+  return TEXT_EDIT_CTRL_KEYS.has(e.key.length === 1 ? e.key.toUpperCase() : e.key)
+}
+
+/** アプリのキー操作に回さず、IME・入力欄にそのまま任せるキーか(変換中のキーと、欄の中の編集のキー) */
+export function leaveToTextInput(e: GuardKeyEvent & { target: EventTarget | null }): boolean {
+  return isImeKey(e) || (isTypingTarget(e.target) && isTextEditKey(e))
+}
+
+/**
+ * IME・入力欄に任せるキーを、アプリのどのキー操作(window・React の onKeyDown)にも届けない。画面を作る前に 1 回呼ぶ。
+ * いちばん先に受け取る(window の捕捉で最初に付ける)ので、ここで止めればあとのキー操作はすべて見ない。
+ * 止めるのは伝わるのだけで、既定の動き(IME の変換・文字の編集)はそのまま
+ */
+export function installTextInputGuard(target: Window = window): void {
+  target.addEventListener(
+    'keydown',
+    (e) => {
+      if (leaveToTextInput(e)) e.stopImmediatePropagation()
+    },
+    true,
+  )
+}

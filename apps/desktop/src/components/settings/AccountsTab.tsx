@@ -9,6 +9,7 @@ import { ManagerDialog, OpenRow, Toggle } from '../SettingParts'
 import { BTN_PRIMARY, INPUT } from '../DialogParts'
 import BoardIcon from '../BoardIcon'
 import { type SettingsProps, Section, withBoardMeta, BoardMetaEditor } from './common'
+import { SearchInput } from '../ClearButton'
 
 /** アカウント 1 つぶんの欄(メールアドレス・パスワード・自動ログイン・ログイン) */
 function AccountForm(props: {
@@ -256,7 +257,7 @@ export function AccountsTab(
       )}
       <Section title="板ごとの設定" note="別名・名前欄とメール欄の既定値・名無しの扱いを、板ごとに決めます。お気に入りの板と、設定のある板が並びます">
         {boards.length > 8 && (
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${boards.length} 板から絞り込む`} className={`${INPUT} w-full mb-2`} />
+          <SearchInput type="search" value={query} onValue={setQuery} placeholder={`${boards.length} 板から絞り込む`} wrapClassName="w-full mb-2" className={`${INPUT} w-full`} />
         )}
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {shown.map(boardRow)}

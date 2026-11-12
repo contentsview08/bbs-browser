@@ -72,6 +72,7 @@ import { anchorTreeOf, type AnchorTreeRow } from '../utils/postTree'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
 import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { ClearButton, CLEAR_PAD } from './ClearButton'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -2244,10 +2245,12 @@ export default function ThreadView(props: Props) {
                 }
               }}
               placeholder="レスを探す(本文・名前・ID)"
+              style={query ? { paddingRight: CLEAR_PAD } : undefined}
               className={`absolute inset-y-0 right-0 z-10 bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0 transition-[left,opacity] duration-300 ease-out ${
                 searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
               }`}
             />
+            <ClearButton value={searchActive && query ? query : ''} onClear={() => setQuery('')} inputRef={searchRef} />
             {props.onBackToList && !isMobile && (
               <button
                 type="button"

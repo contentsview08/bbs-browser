@@ -5,6 +5,7 @@ import { filterLicenses, licenseKindLabel, loadLicenses, spdxLinks, type License
 import LoadFailed from './LoadFailed'
 import LoadingCenter from './LoadingCenter'
 import { ManagerDialog } from './SettingParts'
+import { SearchInput } from './ClearButton'
 
 const INPUT = 'w-full bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
 const LINK = 'text-c-link hover:underline break-all text-left'
@@ -60,7 +61,7 @@ export default function LicensesDialog(props: { onClose: () => void }) {
         <LoadingCenter />
       ) : (
         <>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="名前・版・ライセンスで探す" className={INPUT} />
+          <SearchInput type="search" value={query} onValue={setQuery} placeholder="名前・版・ライセンスで探す" className={`${INPUT} w-full`} />
           <p className="mt-2 mb-2 text-xs text-c-text-muted">
             {shown.length} 件。押すとライセンスの全文を開きます
           </p>

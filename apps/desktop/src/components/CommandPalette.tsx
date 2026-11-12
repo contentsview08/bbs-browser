@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
 import { normalizeForSearch } from '../utils/postBody'
+import { ClearButton } from './ClearButton'
 
 export interface PaletteItem {
   /** 見出し(何の仲間か): 操作・板・タブ など */
@@ -78,6 +79,14 @@ export default function CommandPalette(props: { items: PaletteItem[]; onClose: (
             }}
             placeholder="板・スレ・操作を探す(空白で区切って絞り込み)"
             className="flex-1 min-w-0 bg-transparent text-base text-c-text-strong placeholder-c-text-muted focus:outline-none"
+          />
+          <ClearButton
+            inline
+            value={query}
+            onClear={() => {
+              setQuery('')
+              setIndex(0)
+            }}
           />
           <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-c-border text-c-text-muted">Esc</kbd>
         </div>

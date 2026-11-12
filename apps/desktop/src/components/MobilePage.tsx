@@ -4,6 +4,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
+import { SearchInput } from './ClearButton'
 
 export default function MobilePage(props: {
   title: string
@@ -40,14 +41,14 @@ export default function MobilePage(props: {
           <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>arrow_back</span>
         </button>
         {searching ? (
-          <input
+          <SearchInput
             data-search
-            type="text"
             value={query}
-            onChange={(e) => setQ(e.target.value)}
+            onValue={setQ}
             placeholder={props.placeholder ?? '絞り込む'}
             autoFocus
-            className="flex-1 min-w-0 h-10 bg-c-surface border border-c-border rounded-xl px-3 text-[15px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0"
+            wrapClassName="flex-1 min-w-0"
+            className="w-full h-10 bg-c-surface border border-c-border rounded-xl px-3 text-[15px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0"
           />
         ) : (
           <h2 className="flex-1 min-w-0 truncate text-[20px] font-bold text-c-text-strong">

@@ -5,6 +5,7 @@ import 'material-symbols/outlined.css'
 import App from './App'
 import { toolKindOfThisWindow } from './host/crossWindow'
 import { isMobile } from './utils/platform'
+import { installTextInputGuard } from './utils/keymap'
 // Web フォントは同梱しない。選んだときだけ host/fonts.ts が CDN から読む
 import './index.css'
 import './app.css'
@@ -26,6 +27,9 @@ if (isMobile && window.visualViewport) {
   vv.addEventListener('scroll', update)
   update()
 }
+
+// IME の変換中のキーと、入力欄の中の編集のキー(Ctrl+T・F10 など)は、アプリのキー操作に回さない(utils/keymap.ts)
+installTextInputGuard()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1720,7 +1720,8 @@ export default function App() {
       if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       if (e.defaultPrevented) return
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
-      // 入力欄の中では、Ctrl・Alt 付きのもの(Ctrl+L・Ctrl+W・Alt+← など)と F キーだけ受ける
+      // 入力欄の中では、Ctrl・Alt 付きのもの(Ctrl+L・Ctrl+W・Alt+← など)と F キーだけ受ける。
+      // IME・編集のキー(Ctrl+T・Ctrl+Z・F6〜F10 など)は、ここに来る前に止めてある(installTextInputGuard)
       if (typing && !e.ctrlKey && !e.altKey && !/^F\d+$/.test(e.key)) return
       const { keymap, appKey, selectTab, activeId } = keyRef.current
       const action = actionFor(keymap, keyString(e))

@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.serviceLoaderEnabled
 import io.github.contentsview08.obb.ui.BbsTheme
 import io.github.contentsview08.obb.ui.BoardsScreen
 import io.github.contentsview08.obb.ui.DrawerContent
@@ -106,9 +107,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // 本文の画像は ImageStore が取る(待ち行列・進み具合・タイムアウト)。Coil はファイルを絵にするのと、リンクのカードの絵だけに使う
-        // AsyncImage の画像も https を先に試す
+        // AsyncImage の画像も https を先に試す。
+        // coil-gif(ビューアーのアニメーション用)は ServiceLoader で全部の ImageLoader に自動で入るので、ここでは切る
+        // (サムネイルまで GIF が動くと電池と描画が重い。使う部品はこの下で明示的に足す)
         coil3.SingletonImageLoader.setSafe { context ->
-            coil3.ImageLoader.Builder(context).components {
+            coil3.ImageLoader.Builder(context).serviceLoaderEnabled(false).components {
                 add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = {
                     okhttp3.OkHttpClient.Builder().addInterceptor(io.github.contentsview08.obb.data.HttpsFirst).build()
                 }))

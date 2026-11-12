@@ -202,6 +202,8 @@ dependencies {
     // ファイルを絵にするのと、リンクのカードの絵。本文の画像の取得は ImageStore
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
+    // GIF・WebP・APNG のアニメーションを動かすデコーダー(ビューアーだけ。入れないと 1 コマ目で止まる)。coil-compose と同じ版
+    implementation("io.coil-kt.coil3:coil-gif:3.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     // リンクをアプリの中で開く(Custom Tabs)
     implementation("androidx.browser:browser:1.8.0")

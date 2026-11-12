@@ -77,6 +77,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import androidx.compose.material.icons.filled.BrokenImage
+import coil3.serviceLoaderEnabled
 
 // 動き方は PC 版の MobileImageViewer と同じ
 private val EASE = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
@@ -239,6 +240,22 @@ private fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * ビューアーだけの ImageLoader。GIF・WebP・APNG のアニメーションを動かすデコーダーを足してある
+ * (共通の ImageLoader には入れない。スレ表示のサムネイルまで動くと電池と描画が重くなるので、そちらは 1 コマ目で止めたまま)。
+ * 絵の大きさは描く枠に合わせて縮めて読む(Coil の既定)ので、大きな GIF でも画面より大きなコマは持たない
+ */
+private object ViewerImages {
+    @Volatile private var loader: coil3.ImageLoader? = null
+    fun loader(context: android.content.Context): coil3.ImageLoader = loader ?: synchronized(this) {
+        // 自動登録(ServiceLoader)に頼らず、使うデコーダーをここで足す(共通の ImageLoader と同じ決まり)
+        loader ?: coil3.ImageLoader.Builder(context.applicationContext).serviceLoaderEnabled(false).components {
+            // Android 9(API 28)以降は ImageDecoder(GIF・WebP・APNG)。それより前は Movie で GIF だけ
+            if (android.os.Build.VERSION.SDK_INT >= 28) add(coil3.gif.AnimatedImageDecoder.Factory()) else add(coil3.gif.GifDecoder.Factory())
+        }.build().also { loader = it }
+    }
+}
+
 /** 拡大していないときの左右のなぞりは受けずに、ページ送り(HorizontalPager)に任せる */
 @Composable
 private fun ZoomPage(
@@ -383,7 +400,8 @@ private fun ZoomPage(
         LaunchedEffect(url, active) { if (active || ds !is io.github.contentsview08.obb.data.ImageStore.State.Done) store.request(url, viewer = active) }
         val file = (ds as? io.github.contentsview08.obb.data.ImageStore.State.Done)?.file
         if (file != null) {
-            val painter = coil3.compose.rememberAsyncImagePainter(file)
+            // GIF などのアニメーションを動かすのはビューアーだけ(サムネイルは共通の ImageLoader で 1 コマ目のまま)
+            val painter = coil3.compose.rememberAsyncImagePainter(file, imageLoader = ViewerImages.loader(LocalContext.current))
             val st by painter.state.collectAsState()
             LaunchedEffect(st) {
                 when (val s = st) {

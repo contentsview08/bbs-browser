@@ -628,6 +628,15 @@ pub fn run() {
             apply_pending_restore(app.handle());
             #[cfg(desktop)]
             window_state::setup(app.handle());
+            // 主の窓を閉じたら、設定・NG の一覧などの道具の窓も一緒に閉じてアプリを終える(道具の窓だけ残らないように)
+            if let Some(main) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                main.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Destroyed = event {
+                        handle.exit(0);
+                    }
+                });
+            }
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());

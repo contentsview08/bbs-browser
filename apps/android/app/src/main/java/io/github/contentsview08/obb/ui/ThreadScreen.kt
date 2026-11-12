@@ -311,10 +311,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
         // レスへ飛ぶときは、ふだんの開く位置を読んだことにしない
-        val jumping = page.jumpNo != null
-        ctl.keepJump = jumping
-        if (jumping) scroller.open(null, "top") else scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
-        if (!jumping) reportRead(ctl, scroller, vm, page)
+        val jumpNo = page.jumpNo
+        ctl.keepJump = jumpNo != null
+        if (jumpNo != null) {
+            // 飛ぶ先が手元にあれば、最初の描画からそのレスを真ん中に(先頭を一瞬映さない)。まだなければ、届いてから下の処理で飛ぶ
+            val here = index.posts.any { it.no == jumpNo }
+            scroller.open(null, "top", jumpTo = jumpNo.takeIf { here })
+            if (here && page.jumpNo == jumpNo) { page.jumpNo = null; reportRead(ctl, scroller, vm, page) }
+        } else {
+            scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
+            reportRead(ctl, scroller, vm, page)
+        }
     }
     // 飛ぶ先のレスは新着の取得で届くことがあるので、取り終えるまで待つ
     val fetched = page.loaded && !page.loading
@@ -322,8 +329,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val no = page.jumpNo ?: return@LaunchedEffect
         if (!ctl.positioned) return@LaunchedEffect
         if (index.posts.any { it.no == no }) {
-            scroller.toUnreadNow(no)
-            ctl.jumpFlash = no to System.nanoTime()
+            scroller.jumpToNow(no)
             page.jumpNo = null
             reportRead(ctl, scroller, vm, page)
         } else if (fetched) {
@@ -331,13 +337,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             vm.toast = "$no 番のレスはありません"
         }
     }
-    // 一覧へ戻って「進む」で開き直したとき: 一番下まで読んでいたなら一番下へ(戻る前と同じ所から続けて読めるように)
-    LaunchedEffect(page) {
+    // 一覧へ戻って「進む」で開き直したとき: 一番下まで読んでいたなら一番下へ(戻る前と同じ所から続けて読めるように)。
+    // 次の並べ直しで効く頼み方にして、最初の描画から一番下に(前の位置を一瞬映さない)
+    remember(page) {
         if (ctl.positioned && vm.position(page.summary.id)?.bottom == true) {
-            snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
-            scroller.toBottomNow()
+            listState.requestScrollToItem(rowCount + 2)
             bars.show()
         }
+        Unit
     }
     LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew, vm.prefs.liveRefreshSec * 1000L) }
     // 一覧へ戻る直前に、待っている既読と位置を書く(位置が決まる前は、まだ読んでいないので書かない)
@@ -446,8 +453,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val jf = ctl.jumpFlash?.takeIf { it.first == p.no }
         val jumpGlow = remember(jf) { if (jf != null) Animatable(1f) else null }
         if (jumpGlow != null) LaunchedEffect(jumpGlow) {
-            delay(120)
-            jumpGlow.animateTo(0f, tween(900, easing = androidx.compose.animation.core.LinearEasing))
+            delay(JUMP_FLASH_HOLD_MS)
+            jumpGlow.animateTo(0f, tween(JUMP_FLASH_FADE_MS, easing = androidx.compose.animation.core.LinearEasing))
             if (ctl.jumpFlash == jf) ctl.jumpFlash = null
         }
         val flash = remember(p.no, delayMs) { if (anim != null) Animatable(1f) else null }
@@ -473,7 +480,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     translationY = (1f - v) * 16.dp.toPx()
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
                 } else Modifier)
-                .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = 0.28f * jumpGlow.value)) } else Modifier)
+                .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = JUMP_FLASH_ALPHA * jumpGlow.value)) } else Modifier)
                 .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(if (Palette.onSky(style)) Palette.selectionWash(style) else Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
                     val f = flash.value
@@ -684,8 +691,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // ツリー表示で開いたときは、組み上がるまで待つ(番号の順で開く位置を決めてから並びが変わらないように)
                     !page.loaded || (treeWanted && treeLines == null && !ctl.positioned && index.posts.isNotEmpty()) -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
                     page.error != null && index.posts.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = { if (!localBack()) vm.back() }, externalUrl = TwoCh.webUrl(page.summary)) { refresh() }
+                    // 位置が決まるまでは描かない(最初の並べ方は先頭なので、覚えた位置へ動かす前の 1 コマが先頭に見える)。その間は骨組みを重ねる
                     else -> LazyColumn(
-                        Modifier.fillMaxSize(), state = listState,
+                        Modifier.fillMaxSize().graphicsLayer { alpha = if (ctl.positioned || index.posts.isEmpty()) 1f else 0f }, state = listState,
                         contentPadding = PaddingValues(
                             top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && rowCount > 1) MINIMAP_WIDTH + 2.dp else 0.dp,
                             bottom = with(density) { footerH.toDp() },
@@ -763,6 +771,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         }
                     }
                 }
+                if (page.loaded && !ctl.positioned && index.posts.isNotEmpty() && !(treeWanted && treeLines == null)) Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
             }
 
             if (vm.prefs.showMinimap && rowCount > 1) {
@@ -771,8 +780,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 Minimap(
                     mapPosts, index, own, toOwn, if (filter == null && query.isBlank() && treeLines == null) page.unreadFrom else null, listState,
                     // フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい
-                    Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 4.dp.toPx() }, bottom = { footerH + 4.dp.toPx() }).padding(end = 2.dp),
-                    onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show(); if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) ctl.leaveLive() },
+                    Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 4.dp.toPx() }, bottom = { footerH + 4.dp.toPx() }).padding(end = 2.dp)
+                        .graphicsLayer { alpha = if (ctl.positioned) 1f else 0f },
+                    onJump = { no, flash -> scroller.jumpTo(no, flash); bars.show(); if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) ctl.leaveLive() },
+                    onDragEnd = { scroller.flashCenter() },
                     readNo = if (treeLines == null) page.readNo else 0,
                     skip = mapSkip, freshFrom = if (treeLines != null && page.unreadFrom > 1) page.unreadFrom else null,
                 )
@@ -831,7 +842,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     Modifier.align(Alignment.BottomCenter).barPadding(bottom = { footerH * footerShown() + 20.dp.toPx() })
                         .graphicsLayer { alpha = slide.value; translationX = (1f - slide.value) * size.width * 1.1f }
                         .shadow(8.dp, RoundedCornerShape(50)).background(Palette.accent, RoundedCornerShape(50))
-                        .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true); ctl.jumpFlash = first to System.nanoTime() }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true); ctl.flashJump(first) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.ArrowDownward, null, tint = Palette.accentText, modifier = Modifier.size(18.dp))

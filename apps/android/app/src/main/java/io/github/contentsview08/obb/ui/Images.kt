@@ -193,39 +193,50 @@ internal fun VideoThumbnail(url: String, autoLoad: Boolean, onOpen: () -> Unit, 
 }
 
 /**
- * リンクのカード(PC 版の LinkPreview と同じ)。画面に出たときに初めてページを取りに行き、題・説明・サイト名・絵を出す。
- * 何も取れなければ出さない(リンクの文字は本文にある)。3 つまで。
+ * リンクのカード(PC 版の LinkPreview と同じ)。画面に出たときに初めてページを取りに行き、題・説明・サイト名・絵を出す。3 つまで。
+ * 枠の高さは読み込みの前から決めておき、取れても取れなくても変えない(上のレスの高さが後から変わると、飛んだ先の位置がずれる)。
+ * 何も取れなければアドレスだけの札にする。家の中のアドレスには出さない(リンクの文字は本文にある)。
  * autoLoad でなければ(モバイル通信など)ページも取りに行かず、カードを出さない
  */
 @Composable
 fun LinkCards(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit) {
+    if (!autoLoad) return
     Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp)) {
-        for (url in urls.take(3)) LinkCard(url, autoLoad, onOpen)
+        for (url in urls.take(3)) if (io.github.contentsview08.obb.data.isAutoLoadable(url)) LinkCard(url, onOpen)
     }
 }
 
+/** カードの高さ(dp)。本文の下の枠の分で、読み込みの前後で変えない */
+const val LINK_CARD_HEIGHT_DP = 80
+
 @Composable
-private fun LinkCard(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) {
+private fun LinkCard(url: String, onOpen: (String) -> Unit) {
     var state by remember(url) { mutableStateOf<Ogp?>(null) }
     var done by remember(url) { mutableStateOf(false) }
-    LaunchedEffect(url, autoLoad) { if (autoLoad && !done) { state = OgpFetcher.fetch(url); done = true } }
+    LaunchedEffect(url) { if (!done) { state = OgpFetcher.fetch(url); done = true } }
     val ogp = state
-    if (!autoLoad && ogp == null) return
-    if (done && ogp == null) return
+    val host = remember(url) { runCatching { java.net.URI(url).host }.getOrNull() ?: url }
     val shape = RoundedCornerShape(5.dp)
     Row(
-        Modifier.padding(top = 6.dp).fillMaxWidth().height(80.dp).clip(shape).background(Palette.surface2).border(1.dp, Palette.border, shape).clickable { onOpen(url) },
+        Modifier.padding(top = 6.dp).fillMaxWidth().height(LINK_CARD_HEIGHT_DP.dp).clip(shape).background(Palette.surface2).border(1.dp, Palette.border, shape).clickable { onOpen(url) },
     ) {
         Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
-            if (ogp == null) Text("読み込み中…", color = Palette.textMuted, fontSize = 11.sp)
-            else {
-                Text(ogp.title ?: url, color = Palette.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
-                ogp.description?.let { Text(it, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                Text(ogp.siteName ?: runCatching { java.net.URI(url).host }.getOrNull() ?: url, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            when {
+                ogp != null -> {
+                    Text(ogp.title ?: url, color = Palette.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
+                    ogp.description?.let { Text(it, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Text(ogp.siteName ?: host, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // 取れなかった: アドレスだけの札(枠は残す)
+                done -> {
+                    Text(url, color = Palette.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
+                    Text(host, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                else -> Text("読み込み中…", color = Palette.textMuted, fontSize = 11.sp)
             }
         }
-        // 絵はサムネイルと同じく、自動で読む設定のときだけ
-        if (ogp?.image != null && autoLoad) {
+        // 絵は枠の高さに切り取る(幅も決めてあるので、絵の大きさで枠は変わらない)
+        if (ogp?.image != null) {
             AsyncImage(ogp.image, null, Modifier.width(112.dp).fillMaxHeight().background(Palette.surface3), contentScale = ContentScale.Crop)
         }
     }

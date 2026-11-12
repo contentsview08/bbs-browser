@@ -93,4 +93,17 @@ class ThreadScrollTest {
         // 最後のレスより先へは進めない。後ろへは戻さない
         assertEquals(10, readHead(10, 10, emptySet(), all))
     }
+
+    // 飛んだレスを見える範囲の縦の真ん中に置く(bbs-suite の docs/thread-scroll.md)
+    @Test fun 飛んだレスは見える範囲の真ん中に() {
+        // 見える範囲 1000px にレス 200px: 上の端から 400px の所に頭が来ると、真ん中(500)にレスの真ん中(400 + 100)が重なる
+        assertEquals(400, centerOffset(1000, 200))
+        assertEquals(0, centerOffset(1000, 1000))
+    }
+
+    @Test fun 画面より高いレスは頭を上に() {
+        assertEquals(0, centerOffset(1000, 1500))
+        // 高さがまだ分からない(0)なら、頭を真ん中に
+        assertEquals(500, centerOffset(1000, 0))
+    }
 }

@@ -47,6 +47,10 @@ private const val STAGGER_MS = 35f
 private const val STAGGER_TOTAL_MS = 450f
 private const val FLASH_MS = 1000L
 private const val NEW_TOAST_MS = 2500L
+/** 飛んだ先のレスの光り方(ミニマップ・履歴・URL の番号・新着の札、どこから飛んでも同じ): 置いてから少し待ち、1 色の面を薄めていく */
+const val JUMP_FLASH_HOLD_MS = 120L
+const val JUMP_FLASH_FADE_MS = 900
+const val JUMP_FLASH_ALPHA = 0.28f
 
 /** スレ表示 1 つぶんの、スクロールの覚え(開き直すと作り直す) */
 @Stable
@@ -75,6 +79,9 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var flashAt = 0L
     /** 押して飛んだレス(番号と、押した時刻)。一瞬光らせる */
     var jumpFlash by mutableStateOf<Pair<Int, Long>?>(null)
+
+    /** 飛んだ先のレスを光らせる(どこから飛んでも同じ見た目・同じ長さ) */
+    fun flashJump(no: Int) { jumpFlash = no to System.nanoTime() }
 
     // ── 実況モード(ui/LiveMode.kt) ──
     /** 実況モードに入っている(スレを閉じたらやめる) */
@@ -179,6 +186,12 @@ fun rowIndexOf(nos: List<Int>, no: Int): Int {
     return best
 }
 
+/**
+ * 飛んだレスを見える範囲の縦の真ん中に置くための、上の端からの位置(px)。
+ * レスが見える範囲より高いときは頭を上に(0)。スレの頭・末尾に近くて真ん中にできないときは、並べる側が端で止める
+ */
+fun centerOffset(viewportPx: Int, itemPx: Int): Int = maxOf(0, (viewportPx - itemPx) / 2)
+
 /** 開いたときの行き先(PC 版の OpenTarget の写し) */
 sealed class OpenTarget {
     data class Saved(val pos: ScrollPos) : OpenTarget()
@@ -253,8 +266,34 @@ class ThreadScroller(
     fun toUnread(no: Int, animate: Boolean = false) { scope.launch { toUnreadNow(no, animate) } }
     fun toBottom(animate: Boolean = false) { scope.launch { toBottomNow(animate) } }
 
-    /** 開いたときの位置(どこへ置くかは openTarget が決める) */
-    suspend fun open(saved: ScrollPos?, openPosition: String) {
+    /**
+     * レスへ飛ぶ(ミニマップの印・履歴・URL の番号など、特定のレスへ飛ぶ操作はすべてここを通す)。
+     * そのレスを見える範囲の縦の真ん中に置き、光らせる(flash)。そのレスの行がなければ、後ろでいちばん近い行へ。
+     * 高さは並べてから分かるので、いちど上に置いて測り、真ん中になる分だけ上へ戻す(どちらも描く前に済むので、途中は見えない)
+     */
+    suspend fun jumpToNow(no: Int, flash: Boolean = true) {
+        val rows = shown()
+        val i = rowIndexOf(rows, no)
+        if (i < 0) return
+        state.scrollToItem(i)
+        val h = state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == i }?.size ?: 0
+        val off = centerOffset(visibleHeight().toInt(), h)
+        if (off > 0) state.scrollToItem(i, -off)
+        if (flash) ctl.flashJump(rows[i].takeIf { it > 0 } ?: no)
+    }
+
+    fun jumpTo(no: Int, flash: Boolean = true) { scope.launch { jumpToNow(no, flash) } }
+
+    /** 見えている範囲の真ん中にあるレスを光らせる(ミニマップのつまみを離したとき。流したあとの「飛んだ先」はそのレス。PC 版の pinCenter と同じ) */
+    fun flashCenter() {
+        val items = state.layoutInfo.visibleItemsInfo.filter { it.key is Int }
+        val mid = visibleHeight() / 2
+        val item = items.firstOrNull { it.offset + it.size > mid } ?: items.lastOrNull() ?: return
+        ctl.flashJump(item.key as Int)
+    }
+
+    /** 開いたときの位置(どこへ置くかは openTarget が決める)。jumpTo: 開いてすぐ飛ぶレス(手元にあるもの)。最初の描画からそのレスを真ん中に */
+    suspend fun open(saved: ScrollPos?, openPosition: String, jumpTo: Int? = null) {
         val page = ctl.page
         val posts = page.index.posts
         ctl.sent = maxOf(ctl.sent, page.readNo)
@@ -267,7 +306,7 @@ class ThreadScroller(
             is OpenTarget.Saved -> state.scrollToItem(savedIdx, -t.pos.offset)
             // ツリー表示では、未読の頭は離れた枝にあることがあるので、既読の番号のレスの位置へ
             is OpenTarget.Unread -> toUnreadNow(if (tree()) maxOf(1, t.no - 1) else t.no)
-            OpenTarget.Top -> state.scrollToItem(0)
+            OpenTarget.Top -> if (jumpTo != null) jumpToNow(jumpTo) else state.scrollToItem(0)
         }
         // この時点で手元にあるレスは「新着」として扱わない
         ctl.prevCount = posts.size

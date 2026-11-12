@@ -48,8 +48,13 @@ import kotlinx.coroutines.launch
 fun Minimap(
     posts: List<Post>, index: PostIndex, own: Set<Int>, toOwn: Set<Int>, unreadFrom: Int?,
     listState: LazyListState, modifier: Modifier = Modifier,
-    /** 印を押して飛んだ(そのレスを一瞬光らせる) */
-    onJumped: (Int) -> Unit = {},
+    /**
+     * たたいて飛ぶ(レス番号と、光らせるか)。呼ぶ側がそのレスを見える範囲の真ん中に置く(ThreadScroller.jumpTo)。
+     * 印を押したときは光らせ、印のない所をたたいたときはその割合の位置のレスへ光らせずに
+     */
+    onJump: (no: Int, flash: Boolean) -> Unit = { _, _ -> },
+    /** なぞって離した(呼ぶ側が、見えている真ん中のレスを「飛んだ先」として光らせる) */
+    onDragEnd: () -> Unit = {},
     /** 読んだところ(既読の番号)。今は塗らない(つまみと見分けにくい)が、呼ぶ側との取り決めとして残す */
     @Suppress("UNUSED_PARAMETER") readNo: Int = 0,
     /** 印を付けない行の番目(ツリー表示の 2 回目以降の出現) */
@@ -88,23 +93,21 @@ fun Minimap(
             if (visible.isEmpty() || n == 0) null else visible.first().index to visible.last().index
         }
     }
-    fun jump(y: Float, h: Float) {
+    fun indexAt(y: Float, h: Float) = ((y / h).coerceIn(0f, 1f) * (n - 1)).toInt()
+    /** なぞっている: その割合の位置のレスを上に置いて送る(スクロールバーと同じ) */
+    fun dragTo(y: Float, h: Float) {
         if (n == 0) return
-        val i = ((y / h).coerceIn(0f, 1f) * (n - 1)).toInt()
-        scope.launch { listState.scrollToItem(i) }
+        scope.launch { listState.scrollToItem(indexAt(y, h)) }
     }
     /**
      * たたいた: 近くに印(人気・自分・自分への返信・画像・動画・リンク)があれば、そのレスへ優先して飛び、一瞬光らせる。
-     * 印がなければ、その割合の位置へ
+     * 印がなければ、その割合の位置のレスへ(光らせない)。どちらも真ん中に置く(PC 版の帯を押したときと同じ)
      */
     fun tap(y: Float, h: Float, slop: Float) {
         if (n == 0) return
         fun yOf(i: Int) = if (n <= 1) 0f else i.toFloat() / (n - 1) * h
         val near = marks.minByOrNull { kotlin.math.abs(yOf(it.i) - y) }?.takeIf { kotlin.math.abs(yOf(it.i) - y) <= slop }
-        if (near != null) {
-            scope.launch { listState.scrollToItem(near.i) }
-            onJumped(posts[near.i].no)
-        } else jump(y, h)
+        if (near != null) onJump(posts[near.i].no, true) else onJump(posts[indexAt(y, h)].no, false)
     }
     val shape = RoundedCornerShape(4.dp)
     // なぞっている間の位置(指の高さと、そこにあるレス)。指の左に「#523 名無し: 本文の頭」の札を出す(どこへ飛ぶか分かるように)
@@ -115,11 +118,11 @@ fun Minimap(
             .pointerInput(n, marks) { detectTapGestures { tap(it.y, size.height.toFloat(), 14.dp.toPx()) } }
             .pointerInput(n) {
                 detectVerticalDragGestures(
-                    onDragEnd = { drag = null }, onDragCancel = { drag = null },
+                    onDragEnd = { drag = null; onDragEnd() }, onDragCancel = { drag = null },
                 ) { change, _ ->
                     val h = size.height.toFloat()
-                    jump(change.position.y, h)
-                    if (n > 0) drag = change.position.y.coerceIn(0f, h) to ((change.position.y / h).coerceIn(0f, 1f) * (n - 1)).toInt()
+                    dragTo(change.position.y, h)
+                    if (n > 0) drag = change.position.y.coerceIn(0f, h) to indexAt(change.position.y, h)
                 }
             },
     ) {

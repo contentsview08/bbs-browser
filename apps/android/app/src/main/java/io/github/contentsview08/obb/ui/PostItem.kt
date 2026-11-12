@@ -405,16 +405,20 @@ private fun OwnChip(label: String, onSky: Boolean = false) {
     Badge(label, if (onSky) Color.White else wash, color, border = color)
 }
 
-/** BE のアイコン(カード・専ブラ風・まとめ風): 本文の上に、高さ 28dp にそろえて(元の絵は小さいので広げる)。取れなければ出さない */
+/**
+ * BE のアイコン(カード・専ブラ風・まとめ風): 本文の上に、高さ 28dp にそろえて(元の絵は小さいので広げる)。
+ * 取れなくても枠の高さは残す(レスの高さが後から変わると、飛んだ先の位置がずれる)
+ */
 @Composable
 private fun BeIcon(url: String?) {
     if (url == null) return
     var failed by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
-    if (failed) return
-    coil3.compose.AsyncImage(
-        url, "BE のアイコン", Modifier.padding(top = 4.dp).height(28.dp).widthIn(max = 96.dp),
-        contentScale = androidx.compose.ui.layout.ContentScale.Fit, onError = { failed = true },
-    )
+    Box(Modifier.padding(top = 4.dp).height(28.dp)) {
+        if (!failed) coil3.compose.AsyncImage(
+            url, "BE のアイコン", Modifier.height(28.dp).widthIn(max = 96.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit, onError = { failed = true },
+        )
+    }
 }
 
 @Composable

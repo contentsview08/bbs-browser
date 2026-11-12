@@ -17,6 +17,7 @@ import {
   postShape,
   readProgress,
   contiguousRead,
+  treeRead,
   settleDone,
   staggerDelays,
   type PostRect,
@@ -219,6 +220,25 @@ describe('contiguousRead: ツリー表示の既読(1 番から途切れずに出
     expect(contiguousRead(nos, 2, s2)).toBe(3)
     for (const n of [4, 8]) s2.add(n)
     expect(contiguousRead(nos, 3, s2)).toBe(8)
+  })
+})
+
+describe('treeRead: ツリー表示の既読(途中は途切れずに出した所まで・一番下なら全部)', () => {
+  const nos = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  it('途中で止まっているときは、途切れずに出し終えた所まで(1 画面目を見ただけで最後まで既読にしない)', () => {
+    expect(treeRead({ nos, readNo: 0, seen: new Set([1, 2, 9]), atBottom: false, lastNo: 9 })).toBe(2)
+  })
+  it('一番下に着いたら、ミニマップや End で飛ばして出していないレスがあっても最後まで(番号の順と同じ)', () => {
+    expect(treeRead({ nos, readNo: 2, seen: new Set([1, 2, 8, 9]), atBottom: true, lastNo: 9 })).toBe(9)
+  })
+  it('1 画面に収まる短いスレは、開いただけで一番下にいるので全部既読', () => {
+    expect(treeRead({ nos: [1, 2, 3], readNo: 0, seen: new Set([1, 2, 3]), atBottom: true, lastNo: 3 })).toBe(3)
+  })
+  it('一番下でも既読を後ろへ戻さない(画面の最後の番号が既読より小さいとき)', () => {
+    expect(treeRead({ nos, readNo: 9, seen: new Set(), atBottom: true, lastNo: 5 })).toBe(9)
+  })
+  it('絞り込みで縮んで一番下に見えるときは呼ぶ側が atBottom を落とすので、途切れずに出した所まで', () => {
+    expect(treeRead({ nos, readNo: 0, seen: new Set([1, 5]), atBottom: false, lastNo: 9 })).toBe(1)
   })
 })
 

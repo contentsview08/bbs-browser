@@ -109,6 +109,18 @@ class ThreadScrollTest {
         assertEquals(10, readHead(10, 10, emptySet(), all))
     }
 
+    @Test fun ツリーで一番下に着いたら飛ばしたレスがあっても全部既読() {
+        val all = (1..10).toSet()
+        // ミニマップで飛んで 4〜7 を出していなくても、-END- が見えたら最後まで(番号の順と同じ)
+        assertEquals(10, readHead(3, 10, setOf(1, 2, 3, 8, 9, 10), all, atBottom = true))
+        // 1 画面に収まる短いスレは、開いただけで一番下にいるので全部既読
+        assertEquals(3, readHead(0, 3, setOf(1, 2, 3), setOf(1, 2, 3), atBottom = true))
+        // 途中で止まっているときは、途切れずに出した所まで(1 画面目を見ただけで最後まで既読にしない)
+        assertEquals(3, readHead(0, 10, setOf(1, 2, 3, 8, 9, 10), all, atBottom = false))
+        // 一番下でも後ろへは戻さない
+        assertEquals(10, readHead(10, 5, emptySet(), all, atBottom = true))
+    }
+
     // 飛んだレスを見える範囲の縦の真ん中に置く(bbs-suite の docs/thread-scroll.md)
     @Test fun 飛んだレスは見える範囲の真ん中に() {
         // 見える範囲 1000px にレス 200px: 上の端から 400px の所に頭が来ると、真ん中(500)にレスの真ん中(400 + 100)が重なる

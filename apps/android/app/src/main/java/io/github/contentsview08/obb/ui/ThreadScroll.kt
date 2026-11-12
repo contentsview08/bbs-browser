@@ -166,9 +166,13 @@ fun staggerDelays(nos: List<Int>): Map<Int, Int> {
 
 /**
  * ツリー表示の既読: from(今の既読)の次から、画面に出たレス(seen)か手元にない番号(exists にない。飛んだ番号)が続く限り進めた番号。
- * 1 番から途切れずに出し終えた所までを既読にする(top は手元の最後のレス)
+ * 途中では 1 番から途切れずに出し終えた所までを既読にする(top は手元の最後のレス)。
+ * 一番下まで来ていれば(atBottom。-END- が見えた)、番号の順と同じく、ミニマップや End で飛ばして出していないレスがあっても top まで
+ * (途中の既読が止まったまま一番下に着くと、タブ・スレ一覧の未読の数が消えなかった。1 画面に収まる短いスレは開いただけで全部既読)。
+ * PC 版の treeRead の写し
  */
-fun readHead(from: Int, top: Int, seen: Set<Int>, exists: Set<Int>): Int {
+fun readHead(from: Int, top: Int, seen: Set<Int>, exists: Set<Int>, atBottom: Boolean = false): Int {
+    if (atBottom) return maxOf(from, top)
     var n = maxOf(0, from)
     while (n < top && (n + 1 in seen || n + 1 !in exists)) n++
     return n
@@ -409,18 +413,19 @@ class ThreadScroller(
         ctl.atBottom = !state.canScrollForward || rest < bottomPx
         var last = items.last().key as Int
         val page = ctl.page
+        // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
+        val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
         if (tree()) {
-            // ツリー表示では並びが番号の順ではないので、出たレスを覚え、1 番から途切れずに出し終えた番号まで(一番下に着いても飛ばさない)
+            // ツリー表示では並びが番号の順ではないので、出たレスを覚え、途中では 1 番から途切れずに出し終えた番号まで。
+            // 一番下に着いたら番号の順と同じく全部(飛ばして出していないレスがあっても。そうしないと未読の数が残る)
             for (it in items) ctl.treeSeen += it.key as Int
             val posts = page.index.posts
             val top = posts.lastOrNull()?.no ?: 0
             val exists = posts.mapTo(HashSet()) { it.no }
-            last = readHead(maxOf(ctl.sent, page.readNo), top, ctl.treeSeen, exists)
+            last = readHead(maxOf(ctl.sent, page.readNo), top, ctl.treeSeen, exists, atBottom = ctl.atBottom && !filtering)
             val first = items.firstOrNull { it.offset + it.size > 0 }
             return last to first?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
         }
-        // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
-        val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
         // 実況モードでまだ出していないレスは読んでいない
         if (ctl.atBottom && !filtering) last = maxOf(last, minOf(ctl.page.index.posts.lastOrNull()?.no ?: 0, ctl.liveLimit))
         val top = items.firstOrNull { it.offset + it.size > 0 }

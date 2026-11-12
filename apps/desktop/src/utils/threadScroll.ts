@@ -105,7 +105,7 @@ export interface PostRect {
 
 /**
  * どこまで読んだかと、読んでいた位置を求める。
- * - 画面の下端より上に頭が出ているレスのうち、いちばん大きい番号を既読にする(番号の順の表示。ツリーは contiguousRead で決める)
+ * - 画面の下端より上に頭が出ているレスのうち、いちばん大きい番号を既読にする(番号の順の表示。ツリーは treeRead で決める)
  * - 一番下まで来ていれば、絞り込みや NG で隠れているレスも含めて全部読んだことにする
  * - ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
  */
@@ -140,6 +140,18 @@ export function contiguousRead(nos: readonly number[], readNo: number, seen: Rea
     last = no
   }
   return last
+}
+
+/**
+ * ツリー表示でどこまで読んだか。
+ * - 途中で止まっているときは、1 番から途切れずに出し終えた所まで(contiguousRead。後ろの返信が先に見えても飛ばさない)
+ * - 一番下まで来ていれば(-END- が見えた)、番号の順の表示と同じく、ミニマップや End で飛ばして出していないレスがあっても lastNo まで。
+ *   途中の既読が止まったまま一番下に着くと、タブ・スレ一覧の未読の数が消えなかった。
+ *   1 画面に収まる短いスレは、開いただけで一番下にいるので全部既読になる
+ */
+export function treeRead(input: { nos: readonly number[]; readNo: number; seen: ReadonlySet<number>; atBottom: boolean; lastNo: number }): number {
+  const head = contiguousRead(input.nos, input.readNo, input.seen)
+  return input.atBottom ? Math.max(head, input.lastNo) : head
 }
 
 /**

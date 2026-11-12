@@ -20,7 +20,6 @@ import {
   estimatePostHeight,
   heightKind,
   heightOffsets,
-  contiguousRead,
   movedByOthers,
   newPostsTarget,
   openTarget,
@@ -28,6 +27,7 @@ import {
   readProgress,
   settleDone,
   staggerDelays,
+  treeRead,
   type PostRect,
   type ScrollPosition,
 } from '../utils/threadScroll'
@@ -627,7 +627,7 @@ export function useThreadScroll(o: Options) {
   // ── 読んだところ ──
 
   /**
-   * ツリー表示で画面に出したレスの番号(スレを開いている間だけ持つ)。既読は 1 番から途切れずに出し終えた所まで進める(contiguousRead)。
+   * ツリー表示で画面に出したレスの番号(スレを開いている間だけ持つ)。途中の既読は 1 番から途切れずに出し終えた所まで進める(treeRead)。
    * 既読の判断は止まってから(READ_DELAY_MS)なので、流れていく途中のレスもここで拾う(スクロールのコマごと。見えている枠だけ測る)
    */
   const seenNos = useRef(new Set<number>())
@@ -671,21 +671,24 @@ export function useThreadScroll(o: Options) {
       if (r.top >= box.bottom + box.height) break
     }
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
-    const progress = readProgress({
-      rects,
-      viewTop,
-      viewBottom: box.bottom,
-      // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
-      atBottom: atBottom.current && !latest.current.filtering,
-      // 一番下にいるとき全部読んだことにする最後の番号は、画面にある枠から数える(ログだけ先に増えていることがある)
-      lastNo: frames.reduce((m, f) => Math.max(m, Number(f.dataset.post)), 0),
-    })
+    // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
+    const readAll = atBottom.current && !latest.current.filtering
+    // 一番下にいるとき全部読んだことにする最後の番号は、画面にある枠から数える(ログだけ先に増えていることがある)
+    const lastNo = frames.reduce((m, f) => Math.max(m, Number(f.dataset.post)), 0)
+    const progress = readProgress({ rects, viewTop, viewBottom: box.bottom, atBottom: readAll, lastNo })
     const pos = progress.position
     let last = progress.last
-    // ツリー: 画面の並びは番号の順ではないので、1 番から途切れずに出し終えた所まで(一番下に来ても、出していないレスは飛ばさない)
+    // ツリー: 画面の並びは番号の順ではないので、途中では 1 番から途切れずに出し終えた所まで。
+    // 一番下に着いたら番号の順と同じく全部(飛ばして出していないレスがあっても。そうしないと未読の数が残る)
     if (latest.current.tree) {
       markSeen()
-      last = contiguousRead(latest.current.log.posts.map((p) => p.no), sent.current, seenNos.current)
+      last = treeRead({
+        nos: latest.current.log.posts.map((p) => p.no),
+        readNo: sent.current,
+        seen: seenNos.current,
+        atBottom: readAll,
+        lastNo,
+      })
     }
     // 描かれているのは画面とその上下半画面ほど(content-visibility の範囲)なので、そこだけ覚える
     rememberHeights(measured, rects, box.top - box.height / 2, box.bottom + box.height / 2)

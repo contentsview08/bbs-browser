@@ -708,8 +708,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             treeLines, key = { _, l -> if (l.ghost) "g${l.parent}-${l.no}" else l.no }, contentType = { _, l -> if (l.ghost) 2 else if (l.no in page.ngNos) 1 else 0 },
                         ) { _, l ->
                             val p = byNo[l.no] ?: return@itemsIndexed
-                            // 新着(開いた時点の既読より後)には新着の印。「ここから未読」の線はツリーでは出さない
-                            val fresh = !l.ghost && page.unreadFrom > 1 && l.no >= page.unreadFrom
+                            // 新着(開いたときは既読より後、更新では届いた分)には新着の印。「ここから未読」の線はツリーでは出さない
+                            val fresh = !l.ghost && page.freshFrom > 1 && l.no >= page.freshFrom
                             TreeRowFrame(l, fresh, divider, onGhost = { openAnchor(l.no) }) { postRow(p, null, !l.ghost) }
                         }
                         else itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
@@ -785,7 +785,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onJump = { no, flash -> scroller.jumpTo(no, flash); bars.show(); if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) ctl.leaveLive() },
                     onDragEnd = { scroller.flashCenter() },
                     readNo = if (treeLines == null) page.readNo else 0,
-                    skip = mapSkip, freshFrom = if (treeLines != null && page.unreadFrom > 1) page.unreadFrom else null,
+                    skip = mapSkip, freshFrom = if (treeLines != null && page.freshFrom > 1) page.freshFrom else null,
                 )
             } else if (rowCount > 1) {
                 val progress by remember(rowCount) {

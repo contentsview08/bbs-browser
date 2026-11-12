@@ -80,6 +80,21 @@ class ThreadScrollTest {
         assertEquals(2, rowIndexOf(listOf(1, 3, 5, 7), 4))
     }
 
+    @Test fun ツリーの新着の印は更新で届いた分だけ() {
+        // 既読が 7 で止まっていても(ツリーは途切れずに見た所まで)、8 以降を全部赤くしない。届いた 41 から
+        assertEquals(41, treeFreshFrom(1, 7, 40, arrived = true, manual = true))
+        assertEquals(41, treeFreshFrom(1, 7, 40, arrived = true, manual = false))
+        // 既読 0 のスレ(開いたときは印なし)を更新しても、届いた分だけ
+        assertEquals(41, treeFreshFrom(1, 0, 40, arrived = true, manual = true))
+        // 手で更新して何も届かなければ前の印は消える(最後の次)。自動更新なら残す
+        assertEquals(45, treeFreshFrom(41, 7, 44, arrived = false, manual = true))
+        assertEquals(41, treeFreshFrom(41, 7, 44, arrived = false, manual = false))
+        // 別の端末の既読が届いた分より先なら、既読の次から
+        assertEquals(44, treeFreshFrom(1, 43, 40, arrived = true, manual = true))
+        // 手元に何もなく読んだこともないスレは印なし(1)
+        assertEquals(1, treeFreshFrom(1, 0, 0, arrived = true, manual = true))
+    }
+
     @Test fun ツリーの既読は1番から途切れずに出し終えた所まで() {
         val all = (1..10).toSet()
         // 1〜3 と 5〜8 が出た: 4 がまだなので 3 まで

@@ -15,6 +15,17 @@ export function favUnread(fav: { postCount: number; readNo: number }, known: num
   return fav.postCount === 0 ? 0 : unreadCount(fav.readNo, known ?? fav.postCount)
 }
 
+/**
+ * ツリー表示の新着の印をどこから付けるか(更新したあとの値。1 以下なら印なし)。
+ * 印は「前に見たときになかったレス」に付ける: 更新で届いた分(lastBefore より後)で、まだ読んでいない(readNo より後)もの。
+ * 手で更新したときは、届かなくても引き直す(読んだので消える)。自動更新で何も届かなければ、今の印を残す。
+ * ツリーの既読は 1 番から途切れずに出し終えた所までしか進まないので、「既読の次から全部」にすると、開いてから見たレスまで全部に印が付いてしまう
+ */
+export function treeFreshFrom(o: { current: number; readNo: number; lastBefore: number; arrived: boolean; manual: boolean }): number {
+  if (!o.arrived && !o.manual) return o.current
+  return Math.max(o.readNo, o.lastBefore) + 1
+}
+
 /** 「未読を上に」の並び。未読のかたまりと残りの、それぞれの中の順番は変えない */
 export function unreadFirstOrder<T>(list: T[], isUnread: (item: T) => boolean): T[] {
   const top = list.filter(isUnread)

@@ -174,6 +174,17 @@ fun readHead(from: Int, top: Int, seen: Set<Int>, exists: Set<Int>): Int {
     return n
 }
 
+/**
+ * ツリー表示の新着の印をどこから付けるか(更新したあとの値。1 以下なら印なし。PC 版の treeFreshFrom の写し)。
+ * 印は「前に見たときになかったレス」に付ける: 更新で届いた分(lastBefore より後)で、まだ読んでいない(readNo より後)もの。
+ * 手で更新したときは、届かなくても引き直す(読んだので消える)。自動更新で何も届かなければ、今の印を残す。
+ * ツリーの既読(readHead)は 1 番から途切れずに出し終えた所までしか進まないので、「既読の次から全部」にすると、開いてから見たレスまで全部に印が付いてしまう
+ */
+fun treeFreshFrom(current: Int, readNo: Int, lastBefore: Int, arrived: Boolean, manual: Boolean): Int {
+    if (!arrived && !manual) return current
+    return maxOf(readNo, lastBefore) + 1
+}
+
 /** 並んでいる行(レス番号。0 は数えない行)のうち、そのレスの行。なければ、それより後ろでいちばん小さい番号の行(番号の順なら最初の no 以上の行) */
 fun rowIndexOf(nos: List<Int>, no: Int): Int {
     var best = -1

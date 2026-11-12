@@ -92,6 +92,8 @@ interface Props {
   onSavePosition: (pos: ScrollPosition) => void
   /** 開いた時点の「最初の未読」のレス番号。ここに「ここから未読」の線を引く */
   unreadFrom: number
+  /** ツリー表示の新着の印を付ける最初の番号(1 以下なら印なし)。Tab.freshFrom */
+  freshFrom: number
   loading: boolean
   /** 読み込めなかった理由。レスがまだないときは、取り直しのボタンと一緒に出す */
   errorText?: string
@@ -594,7 +596,7 @@ const PostFrame = memo(function PostFrame(props: {
 })
 
 export default function ThreadView(props: Props) {
-  const { unreadFrom, settings, onRead } = props
+  const { unreadFrom, freshFrom, settings, onRead } = props
   /** 実況モード(︙ とキーで入れる・やめる)。開いているスレに対して効き、タブを切り替えたら・閉じたらやめる */
   const [liveMode, setLiveMode] = useState(false)
   useEffect(() => {
@@ -2446,7 +2448,7 @@ export default function ThreadView(props: Props) {
           runHead={runFirst === p.no ? run : undefined}
           runOpen={!runClosed}
           depth={depth}
-          newMark={tree !== undefined && unreadFrom > 1 && p.no >= unreadFrom}
+          newMark={tree !== undefined && freshFrom > 1 && p.no >= freshFrom}
         />
       )
     }
@@ -2477,7 +2479,7 @@ export default function ThreadView(props: Props) {
         />
       )
     })
-  }, [log.posts, tree, byNo, indexOfNo, unreadFrom, flashNos, jumpFlash, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared])
+  }, [log.posts, tree, byNo, indexOfNo, unreadFrom, freshFrom, flashNos, jumpFlash, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared])
 
   /** 書き込み欄の中身(スマホのフッターと PC の欄で共通)。書けない掲示板は undefined */
   const replyFormProps = props.onSubmitPost && {
@@ -2646,7 +2648,7 @@ export default function ThreadView(props: Props) {
         <Minimap
           // ツリーは画面の並びの順に、「ここから未読」の代わりに新着の印を出す
           posts={tree ? orderedPosts : visiblePosts}
-          newFrom={tree ? unreadFrom : undefined}
+          newFrom={tree ? freshFrom : undefined}
           scrollRef={ref}
           listRef={listRef}
           anchorCounts={anchorCounts}

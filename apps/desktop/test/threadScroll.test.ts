@@ -204,6 +204,22 @@ describe('contiguousRead: ツリー表示の既読(1 番から途切れずに出
   it('何も出していなければ既読のまま', () => {
     expect(contiguousRead(nos, 3, new Set())).toBe(3)
   })
+  it('スクロールで出したレスが増えるにつれて進む(出した集合はスレを開いている間ためる)', () => {
+    const seen = new Set<number>()
+    let read = 0
+    for (const batch of [[1, 2, 5], [3, 6, 7], [4, 8], [9]]) {
+      for (const n of batch) seen.add(n)
+      read = contiguousRead(nos, read, seen)
+    }
+    expect(read).toBe(9)
+    // 途中の状態: 1,2,5 → 2。3,6,7 → 3。4,8 → 8
+    const s2 = new Set([1, 2, 5])
+    expect(contiguousRead(nos, 0, s2)).toBe(2)
+    for (const n of [3, 6, 7]) s2.add(n)
+    expect(contiguousRead(nos, 2, s2)).toBe(3)
+    for (const n of [4, 8]) s2.add(n)
+    expect(contiguousRead(nos, 3, s2)).toBe(8)
+  })
 })
 
 describe('staggerDelays: 新着を順に出す遅れ', () => {

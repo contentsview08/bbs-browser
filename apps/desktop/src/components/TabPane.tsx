@@ -21,6 +21,8 @@ export interface Tab {
   log?: ThreadLog
   /** 開いた時点の「最初の未読」。「ここから未読」の線を引く位置 */
   unreadFrom: number
+  /** ツリー表示の新着の印を付ける最初の番号(1 以下なら印なし)。開いたときは unreadFrom と同じ。更新では届いた分だけ(utils/unread.ts の treeFreshFrom) */
+  freshFrom: number
   readNo: number
   ownNos: Set<number>
   /** 別のタブへ移ったときに覚えておく、読んでいた位置 */
@@ -205,6 +207,7 @@ function TabPane({
       initialPosition={tab.scroll}
       onSavePosition={onSavePosition}
       unreadFrom={tab.unreadFrom}
+      freshFrom={tab.freshFrom}
       loading={tab.loading}
       errorText={tab.error}
       settings={settings}

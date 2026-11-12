@@ -93,7 +93,7 @@ import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
 import { reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
-import { favUnread, threadUnread, unreadCount } from './utils/unread'
+import { favUnread, threadUnread, treeFreshFrom, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
@@ -246,7 +246,7 @@ type Loading = 'threads' | 'posts'
 const KEEP_TABS = 5
 
 function newTab(thread: ThreadSummary): Tab {
-  return { id: threadId(thread), thread, unreadFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
+  return { id: threadId(thread), thread, unreadFrom: 1, freshFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
 }
 
 /** ログを読み終えるまでの、空のログ(スレごとに 1 つ作って使い回す。毎回作ると表示を作り直してしまう) */
@@ -1019,7 +1019,7 @@ export default function App() {
         const live = subject.get(f.thread.key)
         if (live) counts.set(threadId(f.thread), live.postCount)
         if (!fetchDats || f.status === 'archived') continue
-        if (!live || live.postCount > f.postCount) await fetchThread(s, f.thread).catch(() => undefined)
+        if (!live || live.postCount > f.postCount) await fetchThread(s, f.thread, { auto: true }).catch(() => undefined)
       }
       setFavCounts(new Map(counts))
     }
@@ -1131,7 +1131,8 @@ export default function App() {
     t: ThreadSummary,
     // keepUnread: 「ここから未読」を動かさない(開いたときの取得。線は更新したときだけ引き直す)
     // local: 呼ぶ側で読んだばかりの DB のログ(読み直さないため)
-    opts: { force?: boolean; keepUnread?: boolean; local?: ThreadLog | null } = {},
+    // auto: 自動更新・裏での取得(何も届かなければ、ツリーの新着の印を残す)
+    opts: { force?: boolean; keepUnread?: boolean; local?: ThreadLog | null; auto?: boolean } = {},
   ): Promise<ThreadLog | undefined> => {
     const id = threadId(t)
     const running = inflight.current.get(id)
@@ -1160,11 +1161,16 @@ export default function App() {
           mapKeep(ts, (x) => {
             if (x.id !== id) return x
             const unreadFrom = opts.keepUnread ? x.unreadFrom : x.readNo + 1
-            if (!changed && x.log && unreadFrom === x.unreadFrom && !reactions) return x
+            // ツリーの新着の印は、この更新で届いた分だけ(既読の次から全部ではない。ツリーの既読は途切れずに見た所までしか進まないため)
+            const freshFrom = opts.keepUnread
+              ? x.freshFrom
+              : treeFreshFrom({ current: x.freshFrom, readNo: x.readNo, lastBefore: before?.posts.at(-1)?.no ?? 0, arrived: changed, manual: !opts.auto })
+            if (!changed && x.log && unreadFrom === x.unreadFrom && freshFrom === x.freshFrom && !reactions) return x
             return {
               ...x,
               log: changed || !x.log ? saved : x.log,
               unreadFrom,
+              freshFrom,
               ...(reactions && { reactions: new Map([...(x.reactions ?? []), ...reactions]) }),
             }
           }),
@@ -1248,6 +1254,7 @@ export default function App() {
     startTransition(() => patchTab(id, {
       log: local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' },
       unreadFrom: (local?.readNo ?? 0) + 1,
+      freshFrom: (local?.readNo ?? 0) + 1,
       readNo: local?.readNo ?? 0,
       ownNos: new Set(own),
     }))
@@ -1394,7 +1401,10 @@ export default function App() {
         // クールダウン中は取りに行かず、「ここから未読」だけ、いま読んだところの次に引き直す
         // (一番下まで読んでいれば全部既読になり、線は消える)
         const id = activeTab.id
-        setTabs((ts) => ts.map((x) => (x.id === id && x.unreadFrom !== x.readNo + 1 ? { ...x, unreadFrom: x.readNo + 1 } : x)))
+        // ツリーの新着の印も、読んだところまでは消す
+        setTabs((ts) =>
+          ts.map((x) => (x.id === id && (x.unreadFrom !== x.readNo + 1 || x.freshFrom <= x.readNo) ? { ...x, unreadFrom: x.readNo + 1, freshFrom: Math.max(x.freshFrom, x.readNo + 1) } : x)),
+        )
         return
       }
       // 明ける時刻をタブに持たせ、更新ボタンに残りを出す
@@ -1463,7 +1473,7 @@ export default function App() {
     if (!store || !t?.log) return
     if (!shouldAutoRefresh({ visible: isAppVisible(), status: t.log.status, postCount: t.log.posts.length, maxPosts: findConnector(t.thread.connectorId)?.maxPosts })) return
     readFlush.current?.()
-    await fetchThread(store, t.thread).catch(() => undefined)
+    await fetchThread(store, t.thread, { auto: true }).catch(() => undefined)
   }
   const autoRefreshRef = useRef(autoRefresh)
   autoRefreshRef.current = autoRefresh

@@ -197,6 +197,8 @@ sealed interface Page {
         val links = PostLinks()
         /** 開いた時点の「最初の未読」(「ここから未読」の線を引く位置)。0 なら線を引かない */
         var unreadFrom by mutableStateOf(0)
+        /** ツリー表示の新着の印を付ける最初の番号(1 以下なら印なし)。開いたときは unreadFrom と同じ。更新では届いた分だけ(ui/ThreadScroll.kt の treeFreshFrom) */
+        var freshFrom by mutableStateOf(0)
         /** 画像の札を押して、URL を本文に広げたレス */
         val expandedImages = androidx.compose.runtime.mutableStateListOf<Int>()
         var loaded by mutableStateOf(false)
@@ -1042,6 +1044,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 「ここから未読」は、開いた時点の既読の次(まだ手元にないときは、届いた新着の頭に線が出る)。
                 // 開く位置は画面が決める(レスが出たときに、覚えた位置・設定・未読から)ので、レスより先に入れておく
                 page.unreadFrom = log.readNo + 1
+                page.freshFrom = log.readNo + 1
                 setPosts(page, log.posts)
                 db.userOps.threadView(t)
                 // メニューの閲覧履歴に、開いたスレをすぐ出す
@@ -1096,8 +1099,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 page.title = title
                 if (r.status == FetchStatus.ARCHIVED || r.archived) page.archived = true
-                // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)
-                if (!firstOpen) page.unreadFrom = page.readNo + 1
+                // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)。
+                // ツリーの新着の印は、この更新で届いた分だけ(既読の次から全部ではない。ツリーの既読は途切れずに見た所までしか進まないため)
+                if (!firstOpen) {
+                    page.unreadFrom = page.readNo + 1
+                    page.freshFrom = io.github.contentsview08.obb.ui.treeFreshFrom(page.freshFrom, page.readNo, log?.posts?.lastOrNull()?.no ?: 0, arrived = r.posts.isNotEmpty(), manual = !quiet)
+                }
                 val shown = renderSeq[page]?.second ?: page.index.posts
                 mergeRefreshed(shown, log?.posts.orEmpty(), r.posts, r.status == FetchStatus.RESET)?.let { setPosts(page, it) }
             } catch (e: Exception) {

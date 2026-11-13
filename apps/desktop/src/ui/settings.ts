@@ -140,9 +140,10 @@ export const FONT_FAMILY_KEYS = [
   'shippori-mincho',
   'zen-old-mincho',
 ] as const
+/** 板を開いたときの並び。subject は「スレ順(標準)」= 掲示板が返した順のまま(キーは前からの名前のまま) */
 export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
 /** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
-export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' | 'viewed' | 'posted' | 'fav'
+export type ListTabKey = 'unread' | 'visited' | 'order' | 'momentum' | 'newest' | 'count' | 'viewed' | 'posted' | 'fav'
 /** スレ一覧の絞り込み(タブのうち、並べ替えではないもの) */
 export type ListFilter = 'unread' | 'visited' | 'posted' | 'fav'
 export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited', 'posted', 'fav'])
@@ -150,12 +151,15 @@ export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited
 export function isListTabActive(key: ListTabKey, filter: ListFilter | null, sort: { mode: string } | null): boolean {
   if (LIST_FILTERS.has(key)) return filter === key
   if (filter !== null) return false
+  // スレ順は、並べ替えていない(掲示板の並びのまま)ときも選んでいる
+  if (key === 'order') return !sort || sort.mode === 'order'
   // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
   return key === 'viewed' ? !sort : sort?.mode === key
 }
 export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
   { key: 'unread', name: '未読', icon: 'mark_email_unread', note: 'ログがあり、新着レスのあるスレだけを出す' },
   { key: 'visited', name: '閲覧済み', icon: 'history', note: '一度でも開いた(ログのある)スレだけを出す' },
+  { key: 'order', name: 'スレ順', icon: 'sort', note: '掲示板が返した順のまま(フロート型の掲示板なら、最近書き込みのあった順)' },
   { key: 'momentum', name: '勢い順', icon: 'local_fire_department', note: '勢い(1 日あたりのレス数)の多い順に並べる' },
   { key: 'newest', name: '新しい順', icon: 'schedule', note: '立った時刻の新しい順に並べる' },
   { key: 'count', name: 'レス数順', icon: 'format_list_numbered', note: 'レス数の多い順に並べる' },
@@ -571,7 +575,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   unreadFirst: false,
-  listTabs: ['unread', 'momentum', 'newest'],
+  listTabs: ['order', 'unread', 'momentum', 'newest'],
   pastTabs: ['unread', 'history', 'fav', 'posts', 'uploads'],
   pastTabsPosition: 'footer',
   listPageSize: 100,

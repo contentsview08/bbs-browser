@@ -275,7 +275,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               label="板を開いたときの並び"
               value={s.threadSort}
               options={[
-                { key: 'subject', name: '更新順', desc: '掲示板の並び(書き込みのあった順)' },
+                { key: 'subject', name: 'スレ順(標準)', desc: '掲示板が返した順のまま(フロート型の掲示板なら、最近書き込みのあった順)' },
                 { key: 'momentum', name: '勢い順' },
                 { key: 'newest', name: '新しい順' },
                 { key: 'count', name: 'レス数順' },

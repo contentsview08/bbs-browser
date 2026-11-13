@@ -298,6 +298,8 @@ describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
     expect(b).toMatchObject({ title: '削除されるwww', authorId: 'Xiz3GTQy' })
     expect(c.authorId).toBeUndefined()
     expect(c.title).toBe('IDのないスレ')
+    // 書かれた順を、そのままスレ順(order)にする(dat 番号の順ではない)
+    expect([a, b, c].map((t) => t.order)).toEqual([0, 1, 2])
   })
 
   it('subject-metadent.txt がなければ subject.txt を読む。ほかの掲示板は subject.txt だけ', async () => {

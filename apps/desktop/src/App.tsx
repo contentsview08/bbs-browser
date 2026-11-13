@@ -130,7 +130,8 @@ if (import.meta.env.DEV) registerConnector(demoConnector)
 
 /** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
 const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
-  if (!sort) return undefined
+  // スレ順はサーバーのいつもの並び(頼まずに取る)
+  if (!sort || sort.mode === 'order') return undefined
   const want: ListSort =
     sort.mode === 'momentum' ? 'momentum' : sort.mode === 'newest' ? (sort.dir === 'desc' ? 'newest' : 'oldest') : sort.dir === 'desc' ? 'most' : 'fewest'
   return connectorOf(b.connectorId).serverSorts?.includes(want) ? want : undefined

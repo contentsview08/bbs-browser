@@ -16,7 +16,7 @@ import ActionSheet, { type SheetItem } from './ActionSheet'
 import { StyleDialog } from './StyleMenu'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
-import { momentum, rankMomentum } from '../utils/thread'
+import { momentum, rankMomentum, sortByOrder } from '../utils/thread'
 import { threadUnread, unreadFirstOrder } from '../utils/unread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
@@ -33,7 +33,8 @@ import PeekPopup from './PeekPopup'
 import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, followDelta, isDoublePress, isNear, isSeen, pickAfterPage, spanOf, stepCursor } from '../utils/cursor'
 import { ClearButton, CLEAR_PAD } from './ClearButton'
 
-export type SortMode = 'momentum' | 'newest' | 'count'
+/** order はスレ順(掲示板が返した順)。並べ替えていない(null)ときも同じ並びで、order で持つのは逆順のときだけ */
+export type SortMode = 'order' | 'momentum' | 'newest' | 'count'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
 
 /** 同じタブを押すたびに 降順 → 昇順 → 解除(subject.txt の並び) と巡る */
@@ -253,6 +254,10 @@ export default function ThreadListPanel(props: Props) {
       if (!sort && !filtering) props.onResort?.()
       setSort(null)
       setReversed(false)
+    } else if (key === 'order') {
+      // スレ順: いつもの並び ⇄ 逆順。ほかのタブ・絞り込みから来たときは、いつもの並びから
+      const active = isListTabActive('order', filter, sort)
+      setSort(active && !sort ? { mode: 'order', dir: 'desc' } : null)
     } else setSort((s) => cycleSort(s, key as SortMode))
   }
   const [searchActive, setSearchActive] = useState(false)
@@ -508,6 +513,8 @@ export default function ThreadListPanel(props: Props) {
     if (shownSort && so && so.mode === shownSort.mode) {
       // サーバーが並べ替えた順をそのまま使う(手元の勢いの計算はサーバーと違うので、並べ替え直さない)
       if (so.dir !== shownSort.dir) list = [...list].reverse()
+    } else if (shownSort?.mode === 'order') {
+      list = sortByOrder(list, shownSort.dir)
     } else if (shownSort) {
       const sign = shownSort.dir === 'desc' ? -1 : 1
       const value = (t: ThreadSummary) =>
@@ -901,7 +908,7 @@ export default function ThreadListPanel(props: Props) {
                     onClick={() => pressTab(key)}
                     // 選んでいるタブは、文字の色に加えて、強調色を薄く敷く(ひと目で分かるように)
                     className={`${TAB} ${isMobile ? 'px-2' : ''} ${active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
-                    title={`${def.note}${isFilter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
+                    title={`${def.note}${isFilter ? '' : key === 'order' ? '。もう一度押すと逆順' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
                     <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
                     <span className="truncate">{def.name}</span>
@@ -916,7 +923,8 @@ export default function ThreadListPanel(props: Props) {
                     )}
                     {!isFilter && key !== 'viewed' && (
                       <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                        {/* スレ順は、いつもの並び(掲示板の順)が下向き・逆順が上向き(ほかのタブの 多い順 → 逆順 と同じ見た目) */}
+                        {active && (key === 'order' ? sort?.mode !== 'order' : sort?.dir === 'desc') ? 'arrow_downward' : 'arrow_upward'}
                       </span>
                     )}
                     {/* 選んでいる印の線。フッターに置くスマホは、本文の側(上)に出す */}

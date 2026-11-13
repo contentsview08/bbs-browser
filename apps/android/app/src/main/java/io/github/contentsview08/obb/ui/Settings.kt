@@ -397,7 +397,7 @@ private fun ListPage(vm: AppViewModel) {
     Group("並び") {
         ChoiceRow(
             "板を開いたときの並び", p.threadSort,
-            listOf("subject" to "更新順(掲示板の並び)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
+            listOf("subject" to "スレ順(標準)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
         ) { p.threadSort = it }
         SwitchRow("未読を上に", p.unreadFirst, desc = "一度見たことがあり、新着レスのあるスレを今の並びのまま一覧の上にまとめます。見たことのないスレは入りません") { p.unreadFirst = it }
     }
@@ -405,7 +405,7 @@ private fun ListPage(vm: AppViewModel) {
         ChoiceRow("行の形", p.listShape, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listShape = it }
     }
     if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
-        val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
+        val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
         val on = p.listTabs.split(',').filter { it.isNotEmpty() }
         @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {

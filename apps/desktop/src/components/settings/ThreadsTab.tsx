@@ -46,7 +46,7 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
         <Choice
           value={s.threadSort}
           options={[
-            { key: 'subject', name: '更新順(掲示板の並び)' },
+            { key: 'subject', name: 'スレ順(標準)' },
             { key: 'momentum', name: '勢い順' },
             { key: 'newest', name: '新しい順' },
             { key: 'count', name: 'レス数順' },

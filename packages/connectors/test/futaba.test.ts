@@ -73,6 +73,8 @@ describe('ふたばのコネクタ', () => {
     expect(threads[0].thumb).toBe('https://may.2chan.net/b/cat/1792224836232s.jpg')
     expect(threads[0].createdAt?.getTime()).toBe(1792224836232)
     expect(threads[1].thumb).toBeUndefined()
+    // カタログに並んでいた順を、そのままスレ順(order)にする
+    expect(threads.map((t) => t.order)).toEqual([0, 1])
   })
 
   it('並び順を頼むと、カタログの sort の番号を付けて読む(勢順 6・新順 1・古順 2・多順 3・少順 4)', async () => {

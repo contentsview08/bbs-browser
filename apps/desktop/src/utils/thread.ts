@@ -11,6 +11,18 @@ export function momentum(t: ThreadSummary, now = Date.now()): number {
 }
 
 /**
+ * スレ順(掲示板が返した順 = order)で並べる。asc がいつもの並び、desc が逆順。
+ * order のないスレ(数でないもの)は、どちらの向きでも後ろに、来た順のまま置く
+ */
+export function sortByOrder<T extends { order?: number }>(list: readonly T[], dir: 'asc' | 'desc'): T[] {
+  const has = (t: T) => typeof t.order === 'number' && Number.isFinite(t.order)
+  const sign = dir === 'asc' ? 1 : -1
+  // sort は安定なので、同じ order のスレも来た順のまま
+  const ordered = list.filter(has).sort((a, b) => (a.order! - b.order!) * sign)
+  return [...ordered, ...list.filter((t) => !has(t))]
+}
+
+/**
  * 板の中での勢いの相対順位(0=最下位〜1=最上位)。過疎板でも一番勢いのあるスレが赤くなるよう、
  * 絶対値ではなく順位で色を付ける。values は momentum の結果(キーごと)
  */

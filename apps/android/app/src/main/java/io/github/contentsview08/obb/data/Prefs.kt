@@ -210,7 +210,7 @@ class Prefs(context: Context) {
         set(v) { footerPx = orUnset(v, 0, FOOTER_PX) }
 
     // ── スレ一覧 ──
-    /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */
+    /** 板を開いたときの並び: subject(スレ順(標準)= 掲示板が返した順)/ momentum / newest / count */
     var threadSort by pref("threadSort", "subject")
     /** 一度見たことがあり新着レスのあるスレを、今の並びのまま一覧の上にまとめる */
     var unreadFirst by pref("unreadFirst", false)
@@ -255,8 +255,8 @@ class Prefs(context: Context) {
     private var boardVisitsJson by pref("boardVisits", "{}")
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
-    /** 一覧の下に出すタブと並び(カンマ区切り。unread / visited / momentum / newest / count) */
-    var listTabs by wordsPref("listTabs", listOf("unread", "momentum", "newest"), ",")
+    /** 一覧の下に出すタブと並び(カンマ区切り。order / unread / visited / momentum / newest / count) */
+    var listTabs by wordsPref("listTabs", listOf("order", "unread", "momentum", "newest"), ",")
     /** 履歴の画面に出すタブと並び(カンマ区切り。PAST_TABS のキー) */
     var pastTabs by wordsPref("pastTabs", PAST_TABS.map { it.first }, ",")
     /** 履歴の画面のタブの置き場: footer / header */

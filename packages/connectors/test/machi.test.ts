@@ -71,6 +71,8 @@ describe('まちBBS のコネクタ', () => {
       ['1500000000', 'ふたつめ', 1000],
     ])
     expect(list[0].createdAt).toEqual(new Date(1600000000 * 1000))
+    // subject.txt に書かれた順を、そのままスレ順(order)にする(番号の順ではない)
+    expect(list.map((t) => t.order)).toEqual([0, 1])
   })
 
   it('スレの中身を全部読み(日付と ID を分け、1 番目からスレタイを取る)、次は続きの番号から取る', async () => {

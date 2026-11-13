@@ -76,6 +76,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -117,10 +118,15 @@ import kotlinx.coroutines.launch
 private enum class ListTab(val key: String, val label: String, val icon: ImageVector) {
     UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread),
     VISITED("visited", "閲覧済み", Icons.Filled.History),
+    /** 掲示板が返した順(order)。設定の並びがスレ順(subject)なら、どれも選んでいないときもこれを選んでいる */
+    ORDER("order", "スレ順", Icons.AutoMirrored.Filled.Sort),
     MOMENTUM("momentum", "勢い順", Icons.Filled.LocalFireDepartment),
     NEWEST("newest", "新しい順", Icons.Filled.Schedule),
     COUNT("count", "レス数順", Icons.Filled.FormatListNumbered),
 }
+
+/** 設定の「板を開いたときの並び」のうち、並べ替えるもの(ほかはスレ順 = 掲示板の並びのまま) */
+private val SORT_KEYS = setOf("momentum", "newest", "count")
 
 /** 勢い(1 日あたりのレス数) */
 fun momentum(t: ThreadSummary, now: Long): Double {
@@ -182,6 +188,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             }
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states[it.key]) > 0 }
             ListTab.VISITED -> list.filter { page.states[it.key] != null }
+            // スレ順は いつもの並び ⇄ 逆順(page.reversed)
+            ListTab.ORDER -> io.github.contentsview08.obb.data.sortByOrder(list, page.reversed) { it.order }
             // 並べ替えのタブは、押すたびに 逆順 → 元の並び(page.reversed)
             ListTab.COUNT -> list.sortedByDescending { it.postCount }.let { if (page.reversed) it.reversed() else it }
             ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }.let { if (page.reversed) it.reversed() else it }
@@ -396,12 +404,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
                 for (t in tabs) {
-                    val active = tab == t
+                    // 並べ替えていない(設定の並びがスレ順)ときは、スレ順のタブを選んでいる(PC 版と同じ)
+                    val active = tab == t || (t == ListTab.ORDER && tab == null && sort !in SORT_KEYS)
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED
                     Box(
                         Modifier.clickable {
                             when {
                                 filterTab -> page.tab = if (active) null else t.key
+                                // スレ順は いつもの並び ⇄ 逆順(元の並びがスレ順そのものなので、解除はない)
+                                t == ListTab.ORDER -> { page.reversed = active && !page.reversed; page.tab = t.key }
                                 !active -> { page.tab = t.key; page.reversed = false }
                                 !page.reversed -> page.reversed = true
                                 else -> { page.tab = null; page.reversed = false }

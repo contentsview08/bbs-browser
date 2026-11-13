@@ -36,6 +36,7 @@ export const MOUSE_LIST_ACTIONS: { key: string; name: string }[] = [
   { key: 'listTabPrev', name: 'スレ一覧のタブを左へ' },
   { key: 'listTab:unread', name: 'スレ一覧: 未読' },
   { key: 'listTab:visited', name: 'スレ一覧: 閲覧済み' },
+  { key: 'listTab:order', name: 'スレ一覧: スレ順' },
   { key: 'listTab:momentum', name: 'スレ一覧: 勢い順' },
   { key: 'listTab:newest', name: 'スレ一覧: 新しい順' },
   { key: 'listTab:count', name: 'スレ一覧: レス数順' },

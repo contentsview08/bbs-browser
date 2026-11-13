@@ -234,8 +234,6 @@ sealed interface Page {
     class PostHistory : Page
     /** 上げた画像(履歴の「画像」) */
     class Uploads : Page
-    /** start: 開いたときに出すページ("sites" など) */
-    class Settings(val start: String? = null) : Page
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -244,6 +242,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val stack = mutableStateListOf<Page>()
     var drawerOpen by mutableStateOf(false)
+    /** 設定のパネル。画面の積み重ねに入れず上に重ねるので、閉じると元の画面(読んでいた位置も)にそのまま戻る */
+    var settingsOpen by mutableStateOf(false)
+        private set
+    /** 開いたときに出すページ("menus" など) */
+    var settingsStart: String? = null
+        private set
+    /** 開くたびに増やす(中のページの状態を作り直して、いつも頼んだページから始める) */
+    var settingsKey by mutableStateOf(0)
+        private set
+
+    fun openSettings(start: String? = null) {
+        drawerOpen = false
+        settingsStart = start
+        settingsKey++
+        settingsOpen = true
+    }
+
+    fun closeSettings() {
+        settingsOpen = false
+    }
     /** 画面の下に一瞬出す知らせ */
     var toast by mutableStateOf<String?>(null)
 
@@ -730,7 +748,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         is Page.AllUnread -> "未読のスレ"
         is Page.PostHistory -> "書き込み履歴"
         is Page.Uploads -> "上げた画像"
-        is Page.Settings -> "設定"
     }
 
     /** 戻る先の一覧から選んだ画面まで、まとめて戻る */
@@ -747,6 +764,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun forward() {
         val p = forwardPage ?: run { toast = "進む先がありません"; return }
         forwardPage = null
+        settingsOpen = false
         navDir = 1
         stack.add(p)
     }
@@ -754,6 +772,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 左のメニューから開く(積み重ねを入れ替える) */
     fun openRoot(page: Page) {
         drawerOpen = false
+        settingsOpen = false
         for (p in stack) flushRead(p)
         navDir = 0
         stack.clear()
@@ -981,6 +1000,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 板のスレ一覧を開く。root なら積み重ねを入れ替える(左のメニューから) */
     fun openBoard(board: Board, root: Boolean = true) {
         drawerOpen = false
+        settingsOpen = false
         syncScheduler.activity()
         val page = Page.Threads(board)
         navDir = if (root) 0 else 1
@@ -1026,6 +1046,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** no: 開いたらそのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」・URL のレス番号から) */
     fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
+        settingsOpen = false
         syncScheduler.activity()
         val page = Page.Thread(t)
         page.jumpNo = no

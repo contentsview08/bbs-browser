@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
+import androidx.compose.foundation.lazy.itemsIndexed
 
 private const val BAD_URL_NOTICE = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)"
 
@@ -59,7 +60,8 @@ fun DrawerContent(vm: AppViewModel) {
     var favOpen by rememberSaveable { mutableStateOf(true) }
     var histOpen by rememberSaveable { mutableStateOf(false) }
     var urlDialog by rememberSaveable { mutableStateOf(false) }
-    val current = vm.stack.lastOrNull()
+    // 設定を重ねている間は、下の画面の行を「今いる所」にしない
+    val current = if (vm.settingsOpen) null else vm.stack.lastOrNull()
     Column(Modifier.fillMaxHeight().width(300.dp).background(Palette.surface).safeDrawingPadding()) {
         Text("OBB", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 12.dp), color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         // 履歴の一覧だけは決まった高さの枠の中でスクロールし、見出し・「すべて見る」・「URL を開く」はいつも見えるようにする。
@@ -82,10 +84,11 @@ fun DrawerContent(vm: AppViewModel) {
                 histOpen = !histOpen
             }
             if (histOpen) {
-                DrumColumn(Modifier.fitFlex()) {
-                    for (h in vm.history.take(10)) {
+                // 枠の中でスクロールするので 100 件まで出す(見えている行だけ組み立てる)
+                DrumColumn(Modifier.fitFlex()) { d ->
+                    itemsIndexed(vm.history.take(100)) { i, h ->
                         Text(
-                            h.thread.title, Modifier.fillMaxWidth().drumItem(this).clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                            h.thread.title, Modifier.fillMaxWidth().drumItem(d, i).clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                             color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -96,7 +99,7 @@ fun DrawerContent(vm: AppViewModel) {
         }
         }
         HorizontalDivider(color = Palette.border)
-        DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = current is Page.Settings) { vm.openRoot(Page.Settings()) }
+        DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = vm.settingsOpen) { vm.openSettings() }
     }
 
     if (urlDialog) OpenUrlDialog(vm) { urlDialog = false }

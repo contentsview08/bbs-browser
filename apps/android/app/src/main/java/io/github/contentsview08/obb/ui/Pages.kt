@@ -120,7 +120,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
                     FolderRow(siteLabel(url, name), url.removePrefix("https://").substringBefore('/'), Icons.Filled.Public) { page.site = url; page.category = null }
                 }
                 item { SectionLabel("ほかの掲示板") }
-                item { FolderRow("サイトを足す", "bbsmenu・hono-bbs のサイトの URL から", Icons.Filled.Add, chevron = false) { vm.openRoot(io.github.contentsview08.obb.Page.Settings("menus")) } }
+                item { FolderRow("サイトを足す", "bbsmenu・hono-bbs のサイトの URL から", Icons.Filled.Add, chevron = false) { vm.openSettings("menus") } }
                 item { FolderRow("URL で板・スレを開く", "板の一覧がない掲示板は、板・スレの URL から", Icons.Filled.Link, chevron = false) { urlDialog = true } }
                 item { Spacer(Modifier.navigationBarsPadding()) }
             }

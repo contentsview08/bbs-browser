@@ -52,7 +52,7 @@ import io.github.contentsview08.obb.ui.DrawerContent
 import io.github.contentsview08.obb.ui.Palette
 import io.github.contentsview08.obb.ui.PostHistoryScreen
 import io.github.contentsview08.obb.ui.UploadsScreen
-import io.github.contentsview08.obb.ui.SettingsScreen
+import io.github.contentsview08.obb.ui.SettingsPanel
 import io.github.contentsview08.obb.ui.ThreadEntryList
 import io.github.contentsview08.obb.ui.swipeGestures
 import io.github.contentsview08.obb.ui.ThreadListScreen
@@ -172,7 +172,9 @@ class MainActivity : ComponentActivity() {
                             if (!running) vm.drawerOpen = value == DrawerValue.Open
                         }
                     }
-                    BackHandler(enabled = vm.drawerOpen) { vm.drawerOpen = false }
+                    // 戻るは、いちばん上に重なっているものから閉じる。戻るの受け手は後から足したものが先に受けるので、
+                    // 引き出しは開いたときに足す(いつも置いておくと、下の画面の検索・ポップアップなどの戻るが先に受けてしまう)
+                    if (vm.drawerOpen) BackHandler { vm.drawerOpen = false }
                     // 戻る(なぞって戻る途中も): なぞっている間は今の画面が指についてきて、後ろに前の画面が見える。離せば戻り、引き返せばやめる
                     androidx.activity.compose.PredictiveBackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { progress ->
                         try {
@@ -200,9 +202,9 @@ class MainActivity : ComponentActivity() {
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
                             val pageContent: @androidx.compose.runtime.Composable (Page?) -> Unit = { page ->
-                            // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴など)も、右へなぞるとメニューを開く。設定は SettingsScreen が大項目の画面でだけ受ける
+                            // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴など)も、右へなぞるとメニューを開く
                             val swipe = io.github.contentsview08.obb.ui.rememberSwipeState()
-                            val others = page !is Page.Threads && page !is Page.Thread && page !is Page.Settings
+                            val others = page !is Page.Threads && page !is Page.Thread
                             val drawerGesture = mapOf("right" to io.github.contentsview08.obb.ui.SwipeAction("メニュー") { vm.drawerOpen = true })
                             Box(
                                 Modifier.fillMaxSize().background(Palette.base).then(
@@ -218,7 +220,6 @@ class MainActivity : ComponentActivity() {
                                 is Page.FavThreads -> ThreadEntryList(vm, "fav", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
                                 is Page.PostHistory -> PostHistoryScreen(vm)
                                 is Page.Uploads -> UploadsScreen(vm)
-                                is Page.Settings -> SettingsScreen(vm, page.start)
                                 null -> {}
                             }
                             }
@@ -252,6 +253,8 @@ class MainActivity : ComponentActivity() {
                                 contentKey = { it?.hashCode() },
                                 label = "page",
                             ) { page -> pageContent(page) }
+                            // 設定は今の画面の上に重ねる(閉じると元の画面にそのまま戻る)
+                            SettingsPanel(vm)
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->

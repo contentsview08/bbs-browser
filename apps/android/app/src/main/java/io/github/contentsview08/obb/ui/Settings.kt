@@ -3,6 +3,7 @@ package io.github.contentsview08.obb.ui
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Delete
 import io.github.contentsview08.obb.data.active
 import androidx.activity.compose.BackHandler
@@ -107,6 +108,54 @@ private val TITLES = mapOf(
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
 private val LocalAdvanced = androidx.compose.runtime.compositionLocalOf { false }
 
+/**
+ * 設定のパネル: 今の画面の上に下からせり上がって重なる。画面の積み重ねには入れないので、
+ * × か戻る 1 回で閉じると、下の画面(スレの読んでいた位置も)がそのまま出てくる
+ */
+@Composable
+fun SettingsPanel(vm: AppViewModel) {
+    val ease = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+    androidx.compose.animation.AnimatedVisibility(
+        visible = vm.settingsOpen,
+        enter = if (Motion.reduced) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(90))
+        else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(320, easing = ease)) { it },
+        exit = if (Motion.reduced) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90))
+        else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(240, easing = ease)) { it },
+    ) {
+        // 戻るのジェスチャーの途中の量(0〜1)。指に合わせてパネルが少し下がって縮み、離すと閉じる
+        var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+        // 開いたときに組み込むので、下の画面(スレの検索・ポップアップなど)の戻るより先に受ける。
+        // 中のページにいるときは SettingsScreen の戻るが後から足されて先に受け、1 つ上のページへ戻る
+        androidx.activity.compose.PredictiveBackHandler(enabled = vm.settingsOpen) { progress ->
+            try {
+                progress.collect { drag = it.progress }
+                vm.closeSettings()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                androidx.compose.animation.core.Animatable(drag).animateTo(0f, androidx.compose.animation.core.tween(160)) { drag = value }
+                throw e
+            }
+        }
+        Box(
+            Modifier.fillMaxSize()
+                .graphicsLayer {
+                    val sc = 1f - 0.06f * drag
+                    scaleX = sc; scaleY = sc
+                    translationY = drag * size.height * 0.08f
+                    shape = RoundedCornerShape((24 * drag).dp)
+                    clip = drag > 0f
+                }
+                .background(Palette.base)
+                // 下の画面に指が抜けないようにする
+                .pointerInput(Unit) {},
+        ) {
+            // 帯の左の長押し(たどってきた画面の一覧)は、下の画面のものなので出さない
+            androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null) {
+                androidx.compose.runtime.key(vm.settingsKey) { SettingsScreen(vm, vm.settingsStart) }
+            }
+        }
+    }
+}
+
 /** 設定の画面: 入口の一覧から、項目ごとの画面へ進む */
 @Composable
 fun SettingsScreen(vm: AppViewModel, start: String? = null) {
@@ -123,16 +172,11 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         viaSearch = viaSearch && sub != null
     }
     BackHandler(enabled = sub != null) { goBack() }
-    // 大項目の画面でだけ、右へなぞるとメニュー。中の画面ではスライダーの操作とぶつかるので受けない
-    val swipe = rememberSwipeState()
-    val drawerGesture = mapOf("right" to SwipeAction("メニュー") { vm.drawerOpen = true })
-    Column(
-        Modifier.fillMaxSize().background(Palette.base).then(
-            if (sub == null && vm.prefs.gesturesEnabled) Modifier.swipeGestures(swipe, drawerGesture, sensitivity = vm.prefs.gestureSensitivity) else Modifier,
-        ),
-    ) {
-        if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
-        else HeaderBar(TITLES[sub] ?: sub.orEmpty().removePrefix(SITE_PAGE), onNav = { goBack() }, navIsBack = true)
+    // 横になぞる操作は受けない(スライダーなどとぶつかる)。閉じるのは ×・OS の戻る
+    Column(Modifier.fillMaxSize().background(Palette.base)) {
+        val close: @Composable () -> Unit = { BarIcon(Icons.Filled.Close, "設定を閉じる") { vm.closeSettings() } }
+        if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true }, actions = close)
+        else HeaderBar(TITLES[sub] ?: sub.orEmpty().removePrefix(SITE_PAGE), onNav = { goBack() }, navIsBack = true, actions = close)
         HorizontalDivider(color = Palette.border)
         // 一覧は長いので、外のスクロールに入れず自分でスクロールする
         if (sub == "licenses") { LicensesPage(); return@Column }

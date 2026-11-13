@@ -434,15 +434,15 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                         val n = tag.substringAfter(':').substringBefore(',').toIntOrNull()
                         open(if (n != null && tag[0] in "arxn") peekJumpNo(pick.kind, n) else null)
                     }
-                    // サムネイルの読み方はスレ表示と同じ設定に従う(通信の状態は窓ごとに 1 回だけ調べる)
-                    val thumbContext = LocalContext.current
-                    val thumbs = remember(vm.prefs.thumbMode, vm.prefs.blurGross, vm.prefs.grossWords) {
+                    // サムネイルの読み方はスレ表示と同じ設定に従う
+                    val wifi = rememberIsWifi(vm.prefs.thumbMode == io.github.contentsview08.obb.data.ThumbMode.WIFI)
+                    val thumbs = remember(vm.prefs.thumbMode, vm.prefs.blurGross, vm.prefs.grossWords, wifi) {
                         val mode = vm.prefs.thumbMode
                         if (mode == io.github.contentsview08.obb.data.ThumbMode.NEVER) null
                         else PeekThumbs(
                             autoLoad = when (mode) {
                                 io.github.contentsview08.obb.data.ThumbMode.ALWAYS -> true
-                                io.github.contentsview08.obb.data.ThumbMode.WIFI -> isWifi(thumbContext)
+                                io.github.contentsview08.obb.data.ThumbMode.WIFI -> wifi
                                 else -> false
                             },
                             grossWords = if (vm.prefs.blurGross) vm.prefs.grossWords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() } else emptyList(),

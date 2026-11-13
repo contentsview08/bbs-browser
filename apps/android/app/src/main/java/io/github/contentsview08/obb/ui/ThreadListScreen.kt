@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -137,11 +138,9 @@ fun momentumText(m: Double): String = if (m >= 100) "%.0f".format(m) else "%.1f"
 fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = Modifier) {
     // タブ・検索・スクロールの位置は、スレを開いて戻っても残すためページに持つ
     val tab = ListTab.entries.firstOrNull { it.key == page.tab }
-    // 行ごとに通信の状態を調べないよう、画面で 1 回だけ決める
-    val thumbContext = androidx.compose.ui.platform.LocalContext.current
-    val thumbAllowed = remember(vm.prefs.thumbMode) {
-        when (vm.prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(thumbContext); ThumbMode.TAP, ThumbMode.NEVER -> false }
-    }
+    // 行ごとに通信の状態を調べないよう、画面で見張る(Wi-Fi ⇄ モバイル通信の切り替えにはすぐ合わせる)
+    val wifi = rememberIsWifi(vm.prefs.thumbMode == ThumbMode.WIFI)
+    val thumbAllowed = when (vm.prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> wifi; ThumbMode.TAP, ThumbMode.NEVER -> false }
     var searching by page::searching
     var query by page::query
     var menu by remember { mutableStateOf(false) }
@@ -469,7 +468,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             listOf(
                 listOf(
                     MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
-                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
+                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Filled.StarBorder) { vm.toggleFavorite(page.board) },
                     MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
                     MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
                     styleMenuItem { styleSheet = true },

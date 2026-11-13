@@ -32,6 +32,8 @@ import io.github.contentsview08.obb.data.shownPastTabs
 import io.github.contentsview08.obb.data.Prefs
 import io.github.contentsview08.obb.data.ThreadState
 import io.github.contentsview08.obb.data.unreadEntries
+import io.github.contentsview08.obb.data.favoriteChange
+import io.github.contentsview08.obb.data.isFavoriteIn
 import io.github.contentsview08.obb.ui.Palette
 import io.github.contentsview08.obb.ui.PostLinks
 import io.github.contentsview08.obb.ui.RenderOptions
@@ -934,7 +936,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 favorites = db.favorites()
                 sites = db.siteMenuUrls()
                 reloadSide()
-                toast = "バックアップから戻しました(設定は、アプリを開き直すと全部に効きます)"
+                toast = "バックアップから戻しました"
             } catch (e: Exception) {
                 toast = "戻せませんでした: ${e.message ?: e}"
             }
@@ -959,12 +961,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun isFavorite(board: Board) = favorites.any { it.url == board.url }
+    fun isFavorite(board: Board) = isFavoriteIn(favorites, board.url)
 
-    fun toggleFavorite(board: Board) {
+    fun toggleFavorite(board: Board) = setFavorite(board, !isFavorite(board))
+
+    /** お気に入り板に入れる・外す。on は押した後の状態(画面に出ていた印の逆)。変え方は今の DB から決める */
+    fun setFavorite(board: Board, on: Boolean) {
         viewModelScope.launch {
-            val on = !isFavorite(board)
-            db.userOps.setFavorite(board, on)
+            val change = favoriteChange(db.favorites(), board, on)
+            change.add?.let { db.userOps.setFavorite(it, true) }
+            for (u in change.remove) db.userOps.setFavorite(Board(u, board.name), false)
             favorites = db.favorites()
             toast = if (on) "お気に入り板に足しました" else "お気に入り板から外しました"
         }

@@ -17,6 +17,16 @@ titles = dict(re.findall(r'"(\w+)" to "([^"]+)"', src[src.index("val TITLES"):sr
 # ページの本体の終わり(次の宣言)
 NEXT_DECL = re.compile(r"\n(?:private fun |@)")
 rows = []
+
+
+def page_of(fn, body, at):
+    """SitesPage は「お気に入り板」(sites)と「BBS メニュー」(menus)の 2 つのページ。if (!menus) の Group はお気に入り板の方"""
+    if fn != "SitesPage":
+        return keys[fn]
+    line_start = body.rfind("\n", 0, at) + 1
+    return "sites" if "if (!menus)" in body[line_start:at] else "menus"
+
+
 for m in re.finditer(r"private fun (\w+Page)\(", src):
     fn = m.group(1)
     if fn not in keys:
@@ -31,7 +41,7 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
         if r.group(1):
             rows.append((keys[fn], r.group(1), r.group(2) or ""))
         elif r.group(3) or r.group(4):
-            rows.append((keys[fn], r.group(3) or titles[keys[fn]], r.group(4) or ""))
+            rows.append((page_of(fn, body, r.start()), r.group(3) or titles[keys[fn]], r.group(4) or ""))
 
 # 見た目ごとの設定(StyleOptionsGroup)はページの外の関数で、見出しが見た目で変わるので、ここに書く
 rows += [

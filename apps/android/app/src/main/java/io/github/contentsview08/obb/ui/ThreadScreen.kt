@@ -220,12 +220,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun nameNgItem(p: Post) = MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterName", p.name)) }
     val own = page.ownNos
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
-    val autoLoad = remember(vm.prefs.thumbMode) {
-        when (vm.prefs.thumbMode) {
-            ThumbMode.ALWAYS -> true
-            ThumbMode.WIFI -> isWifi(context)
-            ThumbMode.TAP, ThumbMode.NEVER -> false
-        }
+    val wifi = rememberIsWifi(vm.prefs.thumbMode == ThumbMode.WIFI)
+    val autoLoad = when (vm.prefs.thumbMode) {
+        ThumbMode.ALWAYS -> true
+        ThumbMode.WIFI -> wifi
+        ThumbMode.TAP, ThumbMode.NEVER -> false
     }
     val counts = remember(index, own) { Filter.entries.associateWith { index.count(it, own) } }
     // 実況モードでまだ出していないレスは並べない
@@ -817,7 +816,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
             if (!atBottom && index.posts.isNotEmpty()) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).barPadding(bottom = { 14.dp.toPx() + footerH * footerShown() }).padding(end = if (vm.prefs.showMinimap) MINIMAP_WIDTH + 16.dp else 16.dp).size(48.dp)
+                    Modifier.align(Alignment.BottomEnd).barPadding(bottom = { 14.dp.toPx() + footerH * footerShown() }).padding(end = if (vm.prefs.showMinimap && rowCount > 1) MINIMAP_WIDTH + 16.dp else 16.dp).size(48.dp)
                         .background(Palette.surface2, RoundedCornerShape(6.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(6.dp))
                         .clickable { scroller.toBottom(); bars.show() },
                     contentAlignment = Alignment.Center,

@@ -68,19 +68,28 @@ fun withStyleOptions(json: String, style: String, o: StyleOptions): String {
 fun styleTabOf(saved: String, tabs: List<String>): String = (if (saved == "look") "color" else saved).takeIf { it in tabs } ?: tabs.first()
 
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
-private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T, private val changed: (String, Any?) -> Unit) : ReadWriteProperty<Any?, T> {
+private class Pref<T>(private val sp: SharedPreferences, private val key: String, private val def: T, private val changed: (String, Any?) -> Unit) : ReadWriteProperty<Any?, T> {
     @Suppress("UNCHECKED_CAST")
-    private var state = mutableStateOf(
-        runCatching {
-            when (def) {
-                is Boolean -> sp.getBoolean(key, def)
-                is Int -> sp.getInt(key, def)
-                is Float -> sp.getFloat(key, def)
-                is String -> sp.getString(key, def) ?: def
-                else -> def
-            } as T
-        }.getOrDefault(def),
-    )
+    private fun stored(): T = runCatching {
+        when (def) {
+            is Boolean -> sp.getBoolean(key, def)
+            is Int -> sp.getInt(key, def)
+            is Float -> sp.getFloat(key, def)
+            is String -> sp.getString(key, def) ?: def
+            else -> def
+        } as T
+    }.getOrDefault(def)
+
+    private var state = mutableStateOf(stored())
+
+    /** SharedPreferences を直に書き換えたあと(バックアップから戻す)、画面の値を合わせる。変わったら前の値を返す */
+    fun reload(): Pair<Boolean, Any?> {
+        val before = state.value
+        val now = stored()
+        if (before == now) return false to null
+        state.value = now
+        return true to before
+    }
 
     override fun getValue(thisRef: Any?, property: KProperty<*>): T = state.value
     override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
@@ -124,7 +133,7 @@ class Prefs(context: Context) {
     private val knownKeys = hashSetOf("ngRules", "aiNgRules", "aiNgOverrides", "boardMeta")
     private val prefByKey = HashMap<String, Pref<*>>()
 
-    /** 利用者が設定を変えた(名前と前の値)。同期の適用とバックアップの読み込みからは呼ばない */
+    /** 利用者が設定を変えた(名前と前の値)。同期の適用からは呼ばない(バックアップから戻したときは、利用者の操作として呼ぶ) */
     var onSettingChange: ((String, Any?) -> Unit)? = null
 
     private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> {
@@ -535,7 +544,7 @@ class Prefs(context: Context) {
     /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
     fun export(): JSONObject = exportedSettings(sp.all, knownKeys)
 
-    /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く)。commit はディスクに書くので IO で */
+    /** バックアップから戻す(戻したらすぐ画面に効く)。commit はディスクに書くので IO で */
     suspend fun import(o: JSONObject) = withContext(Dispatchers.IO) {
         val e = sp.edit()
         for ((k, v) in restoredSettings(o, floatKeys)) {
@@ -548,6 +557,25 @@ class Prefs(context: Context) {
             }
         }
         e.commit()
+        // 画面の値は Compose の状態に持っているので、読み直さないと開き直すまで前の値のまま(変えたときに前の値で上書きもしてしまう)
+        withContext(Dispatchers.Main) { reloadAfterImport() }
+    }
+
+    /** 戻したあとに読み直す。変わった項目の名前と前の値を返す(同期に送るため) */
+    private fun reloadAfterImport(): List<Pair<String, Any?>> {
+        val changed = ArrayList<Pair<String, Any?>>()
+        for ((k, pr) in prefByKey) {
+            val (did, before) = pr.reload()
+            if (did) changed += k to before
+        }
+        aiNgRules = loadAiRules()
+        aiNgOverrides = loadAiOverrides()
+        val metaBefore = boardMetaFields()
+        boardMeta = loadBoardMeta()
+        if (boardMetaFields() != metaBefore) changed += BOARD_META_KEY to metaBefore
+        // 戻したのは利用者の操作なので、同期する項目は変えたときと同じく送る(送らないと、次の同期で表の値に戻される)
+        for ((k, before) in changed) onSettingChange?.invoke(k, before)
+        return changed
     }
 
     companion object {

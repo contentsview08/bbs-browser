@@ -58,6 +58,27 @@ fun isWifi(context: Context): Boolean = runCatching {
 }.getOrDefault(false)
 
 /**
+ * いま Wi-Fi か(つながり方が変わったら変わる)。「Wi-Fi のときだけ」のサムネイルを、画面を開き直さなくても
+ * モバイル通信 ⇄ Wi-Fi の切り替えに合わせるため。want が false の間は見張らない
+ */
+@Composable
+fun rememberIsWifi(want: Boolean = true): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var wifi by remember { mutableStateOf(isWifi(context)) }
+    if (want) androidx.compose.runtime.DisposableEffect(context) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: android.net.Network, caps: NetworkCapabilities) { wifi = isWifi(context) }
+            override fun onLost(network: android.net.Network) { wifi = isWifi(context) }
+        }
+        wifi = isWifi(context)
+        val ok = runCatching { cm.registerDefaultNetworkCallback(cb) }.isSuccess
+        onDispose { if (ok) runCatching { cm.unregisterNetworkCallback(cb) } }
+    }
+    return wifi
+}
+
+/**
  * レスの画像のサムネイルを並べる。autoLoad でなければ「画像」の札を出し、押したものだけ読む(モバイル通信で通信量を使わないように)。
  * 読み込んだサムネイルを押すと onOpen(ビューアー)
  */

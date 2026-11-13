@@ -24,8 +24,9 @@ export interface SettingsProps {
   loadBoards: (site: SiteConfig, refresh: boolean) => Promise<Board[]>
   /** サイトごとの設定の一覧を作る URL(取ってある板一覧・お気に入りのスレ・閲覧履歴の板) */
   loadSiteUrls?: () => Promise<string[]>
-  onToggleFavorite: (board: Board) => void
-  /** 板一覧でダブルクリックした板を開く(設定は閉じる) */
+  /** on は押した後の状態。省くと今の状態を反転する */
+  onToggleFavorite: (board: Board, on?: boolean) => void
+  /** 板一覧で押した板を開く(設定は閉じる) */
   onOpenBoard: (board: Board) => void
   /** サイトのアカウント(保存してあるもの)と、ログインの状態 */
   accounts: AccountRecord[]

@@ -35,4 +35,11 @@ class SettingsIndexTest {
         assertTrue(has("theme", "返信先の引用"))
         assertTrue(has("thread", "細かい表示"))
     }
+
+    // お気に入り板の並べ替えは「お気に入り板」のページにしかない。BBS メニューのページへ飛ぶと探した項目が出ない
+    @Test fun お気に入り板はお気に入り板のページを開く() {
+        assertTrue(has("sites", "お気に入り板"))
+        assertFalse(has("menus", "お気に入り板"))
+        assertTrue(has("menus", "サイト(BBS メニュー)"))
+    }
 }

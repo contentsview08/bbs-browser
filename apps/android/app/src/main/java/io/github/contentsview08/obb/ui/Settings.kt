@@ -643,7 +643,7 @@ private fun NotifyPage(vm: AppViewModel) {
         }
     }
     Group("知らせる種類") {
-        SwitchRow("あなた宛てのレス", p.notifyReply, desc = "自分が書き込んだスレで、自分の書き込みにアンカーが付いたとき") { p.notifyReply = it }
+        SwitchRow("あなた宛てのレス", p.notifyReply, desc = "自分が書き込んだスレで、自分の書き込みにアンカーが付いたとき。「スクロールと更新」の閲覧履歴の新着の確認の間隔で確かめます(「しない」なら届きません)") { p.notifyReply = it }
         SwitchRow("お気に入りのスレの新着", p.notifyFav, desc = "お気に入りのスレに新しいレスが付いたとき") { p.notifyFav = it }
         SwitchRow("キーワードに合うスレ", p.notifyKeyword, desc = "お気に入り板に、「スレ一覧 → キーワード」に合うスレが立ったとき") { p.notifyKeyword = it }
     }

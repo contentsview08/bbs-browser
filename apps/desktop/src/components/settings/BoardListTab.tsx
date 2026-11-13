@@ -3,6 +3,7 @@ import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import { ICON_BTN, INPUT } from '../DialogParts'
 import { type SettingsProps, Choice } from './common'
 import { SearchInput } from '../ClearButton'
+import { favoriteKey, favoriteKeys } from '../../utils/favoriteBoards'
 
 export function BoardListTab(props: {
   sites: SiteConfig[]
@@ -19,7 +20,8 @@ export function BoardListTab(props: {
   const [openCats, setOpenCats] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
-  const favoriteUrls = useMemo(() => new Set(props.favorites.map((b) => b.url)), [props.favorites])
+  // 板一覧と同期で来た行は URL の書き方が違うことがあるので、同じ板の鍵で比べる
+  const favorites = useMemo(() => favoriteKeys(props.favorites), [props.favorites])
 
   // 切り替えたあとに遅れて返った、前の BBS メニューの応答を捨てるための番号
   const loadSeq = useRef(0)
@@ -81,7 +83,7 @@ export function BoardListTab(props: {
         </button>
       </div>
       <SearchInput value={query} onValue={setQuery} placeholder="板の名前やカテゴリで絞り込む" wrapClassName="w-full mb-1" className={`${INPUT} w-full`} />
-      <p className="text-xs text-c-text-muted mb-2">☆ でお気に入りに登録・解除、ダブルクリックでその板を開きます</p>
+      <p className="text-xs text-c-text-muted mb-2">☆ でお気に入りに登録・解除、板の名前を押すとその板を開きます</p>
       {message && <p className="text-sm text-c-heat-very-hot mb-2">{message}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)]">
         {!boards && busy && <p className="px-3 py-2 text-sm text-c-text-muted">読み込み中…</p>}
@@ -105,23 +107,21 @@ export function BoardListTab(props: {
               </button>
               {open &&
                 list.map((b) => {
-                  const fav = favoriteUrls.has(b.url)
+                  const fav = favorites.has(favoriteKey(b.url))
+                  // ☆ は押した後の状態を渡す(見えている印から決め、見た目と結果をずらさない)。☆ 以外を押すと板を開く
                   return (
-                    <div
-                      key={b.url}
-                      onDoubleClick={() => props.onOpenBoard(b)}
-                      className="flex items-center gap-2 pl-8 pr-3 py-1 text-sm cursor-default select-none hover:bg-c-surface2"
-                      title="ダブルクリックで開く"
-                    >
+                    <div key={b.url} className="flex items-center pl-6 text-sm select-none hover:bg-c-surface2">
                       <button
                         type="button"
-                        onClick={() => props.onToggleFavorite(b)}
-                        className={fav ? 'text-mark-fav' : 'text-c-text-muted hover:text-mark-fav'}
+                        onClick={() => props.onToggleFavorite(b, !fav)}
+                        className={`shrink-0 w-9 h-9 flex items-center justify-center rounded ${fav ? 'text-mark-fav' : 'text-c-text-muted hover:text-mark-fav'}`}
                         title={fav ? 'お気に入りから外す' : 'お気に入りに追加'}
                       >
-                        <span className={`material-symbols-outlined text-lg leading-none ${fav ? 'fill' : ''}`}>star</span>
+                        <span className={`material-symbols-outlined text-[22px] leading-none ${fav ? 'fill' : ''}`}>star</span>
                       </button>
-                      <span className="text-c-text-body">{b.name}</span>
+                      <button type="button" onClick={() => props.onOpenBoard(b)} className="flex-1 min-w-0 self-stretch text-left pl-1 pr-3 truncate text-c-text-body" title="開く">
+                        {b.name}
+                      </button>
                     </div>
                   )
                 })}

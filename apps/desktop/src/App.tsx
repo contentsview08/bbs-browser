@@ -58,6 +58,7 @@ import { openLogStore } from './host/logStore'
 import { canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
 import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
+import { favoriteChange, isFavoriteIn } from './utils/favoriteBoards'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import { newRule, postMatcher, pruneExpired, threadMatcher, todayDateString, type NgRule, type NgTarget } from './utils/ng'
@@ -2308,13 +2309,17 @@ export default function App() {
 
   const reloadFavorites = async (s: LogStore) => setFavorites(await s.listFavorites())
 
-  const toggleFavorite = (b: Board) => {
+  /** on は押した後の状態(板一覧の ☆ は見えている印の逆を渡す)。省くと今の状態を反転する */
+  const toggleFavorite = (b: Board, on = !isFavoriteIn(favorites ?? [], b.url)) => {
     if (!store) return
-    const on = favorites?.some((f) => f.url === b.url)
-    const board = { connectorId: b.connectorId, url: b.url, name: b.name }
+    const change = favoriteChange(favorites ?? [], b, on)
     // 先に画面を変えてから、DB は裏で書く
-    setFavorites((list) => (on ? list?.filter((f) => f.url !== b.url) : [...(list ?? []), board]))
-    void run(null, () => (on ? new UserOps(store).favoriteBoardRemove(b.url) : new UserOps(store).favoriteBoardAdd(board)))
+    setFavorites((list) => [...(list ?? []).filter((f) => !change.remove.includes(f.url)), ...(change.add ? [change.add] : [])])
+    void run(null, async () => {
+      const ops = new UserOps(store)
+      for (const url of change.remove) await ops.favoriteBoardRemove(url)
+      if (change.add) await ops.favoriteBoardAdd(change.add)
+    })
   }
 
   const addFavoriteUrl = async (url: string) => {
@@ -2620,7 +2625,7 @@ export default function App() {
   const settingsProps = () => ({
     loadBoards,
     loadSiteUrls,
-    onToggleFavorite: (b: Board) => void toggleFavorite(b),
+    onToggleFavorite: (b: Board, on?: boolean) => void toggleFavorite(b, on),
     onOpenBoard: (b: Board) => {
       setSettingsTab(undefined)
       void openBoard(b)

@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,7 +85,8 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var urlDialog by rememberSaveable { mutableStateOf(false) }
-    val favUrls = remember(vm.favorites) { vm.favorites.map { it.url }.toSet() }
+    // 板一覧と同期で来た行は URL の書き方が違うことがあるので、同じ板の鍵で比べる
+    val favKeys = remember(vm.favorites) { io.github.contentsview08.obb.data.favoriteKeys(vm.favorites) }
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.reloadSites() }
     // サイトを選んだら、その板の一覧を読む
     androidx.compose.runtime.LaunchedEffect(page.site) { page.site?.let { if (vm.siteUrl != it || vm.boards.isEmpty()) vm.selectSite(it) } }
@@ -106,7 +109,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
                 val q = query.trim()
                 val hits = vm.boards.filter { it.name.contains(q, true) || (it.category ?: "").contains(q, true) }
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(hits, key = { it.url }) { b -> BoardRow(b, b.url in favUrls, onStar = { vm.toggleFavorite(b) }, onClick = { vm.openBoard(b) }) }
+                    items(hits, key = { it.url }) { b -> BoardRow(b, io.github.contentsview08.obb.data.favoriteKey(b.url) in favKeys, onStar = { on -> vm.setFavorite(b, on) }, onClick = { vm.openBoard(b) }) }
                     item { Spacer(Modifier.navigationBarsPadding()) }
                 }
             }
@@ -135,7 +138,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
             else -> {
                 val list = remember(vm.boards, page.category) { vm.boards.filter { (it.category ?: "その他") == page.category } }
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(list, key = { it.url }) { b -> BoardRow(b, b.url in favUrls, onStar = { vm.toggleFavorite(b) }, onClick = { vm.openBoard(b) }) }
+                    items(list, key = { it.url }) { b -> BoardRow(b, io.github.contentsview08.obb.data.favoriteKey(b.url) in favKeys, onStar = { on -> vm.setFavorite(b, on) }, onClick = { vm.openBoard(b) }) }
                     item { Spacer(Modifier.navigationBarsPadding()) }
                 }
             }
@@ -164,12 +167,23 @@ private fun FolderRow(title: String, sub: String?, icon: androidx.compose.ui.gra
     HorizontalDivider(color = Palette.border)
 }
 
+/**
+ * 板の行: ☆ 以外を押すと板を開き、☆ はお気に入りに入れる(★)・外す(☆)。
+ * onStar には押した後の状態を渡す(見えている印から決め、見た目と結果をずらさない)
+ */
 @Composable
-private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(start = 20.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(b.name, Modifier.weight(1f), color = Palette.textStrong, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        IconButton(onClick = onStar) {
-            Icon(if (favorite) Icons.Filled.Star else Icons.Outlined.Star, "お気に入り", tint = if (favorite) Palette.markFav else Palette.textMuted)
+private fun BoardRow(b: Board, favorite: Boolean, onStar: (Boolean) -> Unit, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            b.name, Modifier.weight(1f).heightIn(min = 56.dp).clickable(onClick = onClick).padding(start = 20.dp, end = 8.dp).wrapContentHeight(Alignment.CenterVertically),
+            color = Palette.textStrong, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        // 押せる広さは 56dp 四方。☆ は外枠だけの星、★ は塗った星(印だけで入っているかが分かるように)
+        Box(Modifier.size(56.dp).clickable { onStar(!favorite) }.padding(end = 4.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                if (favorite) Icons.Filled.Star else Icons.Filled.StarBorder, if (favorite) "お気に入りから外す" else "お気に入りに追加",
+                Modifier.size(30.dp), tint = if (favorite) Palette.markFav else Palette.textMuted,
+            )
         }
     }
     HorizontalDivider(color = Palette.border)

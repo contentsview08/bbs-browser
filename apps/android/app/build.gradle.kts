@@ -106,8 +106,8 @@ android {
         applicationId = "io.github.contentsview08.obb"
         minSdk = 26
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.1.7"
+        versionCode = 9
+        versionName = "0.1.8"
         // ONNX Runtime(AI NG)はネイティブのライブラリを持つので、スマホ(arm64)とエミュレーター(x86_64)の分だけ入れる
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         // Google ドライブの同期のクライアント(PC と同じ「デスクトップ アプリ」)。値をリポジトリに置かないので、ビルドのときに

@@ -32,6 +32,8 @@ interface Props {
   onSelect: (id: string) => void
   onClose: (ids: string[]) => void
   onRefreshAll: () => void
+  /** タブをダブルクリックしたとき(開いて、そのスレを更新する) */
+  onRefresh?: (id: string) => void
   refreshingAll: boolean
   onDeleteLogs: (ids: string[]) => void
   /** Ctrl/Shift+クリックで選んだタブ(開いているタブも入ることがある) */
@@ -166,6 +168,10 @@ export default function TabBar(props: Props) {
               key={t.id}
               ref={active ? activeRef : undefined}
               onClick={(e) => onTabClick(e, t.id)}
+              onDoubleClick={(e) => {
+                // 1 回目のクリックでタブは開いているので、ここでは更新だけ(選ぶための Ctrl/Shift のときはしない)
+                if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey) props.onRefresh?.(t.id)
+              }}
               onMouseDown={(e) => onDragMouseDown(e, t.id, i)}
               onAuxClick={(e) => {
                 if (e.button === 1) closeByPointer(t.id)

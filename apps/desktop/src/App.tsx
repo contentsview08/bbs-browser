@@ -2928,6 +2928,9 @@ export default function App() {
           onSelect={selectTab}
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}
+          onRefresh={(id) => {
+            if (activeTab?.id === id) void refreshThread()
+          }}
           refreshingAll={refreshingAll}
           onDeleteLogs={(ids) => confirmDeleteLogs(ids)}
           selectedIds={selectedTabs}

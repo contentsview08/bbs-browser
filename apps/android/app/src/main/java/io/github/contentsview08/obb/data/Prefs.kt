@@ -256,7 +256,7 @@ class Prefs(context: Context) {
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
     /** 一覧の下に出すタブと並び(カンマ区切り。order / unread / visited / momentum / newest / count) */
-    var listTabs by wordsPref("listTabs", listOf("order", "unread", "momentum", "newest"), ",")
+    var listTabs by wordsPref("listTabs", listOf("unread", "momentum", "newest"), ",")
     /** 履歴の画面に出すタブと並び(カンマ区切り。PAST_TABS のキー) */
     var pastTabs by wordsPref("pastTabs", PAST_TABS.map { it.first }, ",")
     /** 履歴の画面のタブの置き場: footer / header */

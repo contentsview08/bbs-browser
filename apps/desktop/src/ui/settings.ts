@@ -575,7 +575,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   unreadFirst: false,
-  listTabs: ['order', 'unread', 'momentum', 'newest'],
+  listTabs: ['unread', 'momentum', 'newest'],
   pastTabs: ['unread', 'history', 'fav', 'posts', 'uploads'],
   pastTabsPosition: 'footer',
   listPageSize: 100,

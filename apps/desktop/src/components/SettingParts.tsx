@@ -74,14 +74,13 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
             ng={false}
             ngMode="aborn"
             showThumbnails={false}
-            showIdenticon={s.idStyle === 'icon' || s.idStyle === 'chara'}
+            showIdenticon={s.idStyle === 'icon'}
             showLinkPreview={false}
             display={{ nonameName: '名無しさん', omitNoname: s.omitNoname, tidyBlankLines: s.tidyBlankLines }}
             isOp={p.id === SAMPLE[0].id}
             handlers={{
               ...SAMPLE_HANDLERS,
               idColor: s.idStyle === 'color' ? { dark: isDarkScheme(effectiveScheme(s)), sky: false } : undefined,
-              avatar: s.idStyle === 'chara' ? { dark: isDarkScheme(effectiveScheme(s)) } : undefined,
               heatStyle: s.heatStyle,
               dateStyle: s.dateStyle,
               idShort: s.idShort,

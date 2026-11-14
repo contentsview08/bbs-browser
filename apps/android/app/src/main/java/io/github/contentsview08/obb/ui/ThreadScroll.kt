@@ -209,7 +209,8 @@ fun centerOffset(viewportPx: Int, itemPx: Int): Int = maxOf(0, (viewportPx - ite
 
 /** 開いたときの行き先(PC 版の OpenTarget の写し) */
 sealed class OpenTarget {
-    data class Saved(val pos: ScrollPos) : OpenTarget()
+    /** pendingUnread: 前に閉じた位置へ戻したうえで、新着が届いたら未読の頭へ移る */
+    data class Saved(val pos: ScrollPos, val pendingUnread: Boolean = false) : OpenTarget()
     /** pendingUnread: 未読の頭がまだ手元にないので、新着が届いたらそこへ移る */
     data class Bottom(val pendingUnread: Boolean) : OpenTarget()
     data class Unread(val no: Int) : OpenTarget()
@@ -231,15 +232,25 @@ fun shouldAutoRefresh(visible: Boolean, archived: Boolean, postCount: Int, maxPo
  * - 既読が 0 で覚えた位置もなければ先頭
  * 覚えた位置の no は画面の上に見えていたレスなので、既読そのものとは比べない(既読は 1 画面ぶん先にある)。
  * 既読を添えていない古い覚えは、そのまま使う
+ * closed は前に閉じたときの位置(スレ一覧などから開き直したとき)。saved と違い設定より先には使わず、
+ * 「最初の未読」で未読の頭がないとき(全部読んでいた)にだけ戻す(PC 版の closed と同じ)。closedFound はそのレスが手元にあるか
  */
-fun openTarget(saved: ScrollPos?, savedFound: Boolean, openPosition: String, readNo: Int, unreadFrom: Int, hasUnreadPost: Boolean): OpenTarget {
-    val advanced = saved?.readNo != null && readNo > saved.readNo
-    if (saved != null && !advanced) {
-        if (saved.bottom) return OpenTarget.Bottom(pendingUnread = false)
-        if (savedFound) return OpenTarget.Saved(saved)
+fun openTarget(
+    saved: ScrollPos?, savedFound: Boolean, openPosition: String, readNo: Int, unreadFrom: Int, hasUnreadPost: Boolean,
+    closed: ScrollPos? = null, closedFound: Boolean = false,
+): OpenTarget {
+    fun usable(p: ScrollPos?) = p?.takeIf { !(it.readNo != null && readNo > it.readNo) }
+    val s = usable(saved)
+    if (s != null) {
+        if (s.bottom) return OpenTarget.Bottom(pendingUnread = false)
+        if (savedFound) return OpenTarget.Saved(s)
     }
     if (openPosition == "bottom") return OpenTarget.Bottom(pendingUnread = false)
-    if (openPosition == "unread" && unreadFrom > 1) return if (hasUnreadPost) OpenTarget.Unread(unreadFrom) else OpenTarget.Bottom(pendingUnread = true)
+    if (openPosition == "unread" && unreadFrom > 1) {
+        if (hasUnreadPost) return OpenTarget.Unread(unreadFrom)
+        val c = usable(closed)
+        return if (c != null && !c.bottom && closedFound) OpenTarget.Saved(c, pendingUnread = true) else OpenTarget.Bottom(pendingUnread = true)
+    }
     return OpenTarget.Top
 }
 
@@ -308,17 +319,22 @@ class ThreadScroller(
     }
 
     /** 開いたときの位置(どこへ置くかは openTarget が決める)。jumpTo: 開いてすぐ飛ぶレス(手元にあるもの)。最初の描画からそのレスを真ん中に */
-    suspend fun open(saved: ScrollPos?, openPosition: String, jumpTo: Int? = null) {
+    suspend fun open(saved: ScrollPos?, openPosition: String, jumpTo: Int? = null, closed: ScrollPos? = null) {
         val page = ctl.page
         val posts = page.index.posts
         ctl.sent = maxOf(ctl.sent, page.readNo)
-        val savedIdx = saved?.let { s -> shown().indexOf(s.no).takeIf { s.no > 0 } } ?: -1
+        fun idx(p: ScrollPos?) = p?.let { s -> shown().indexOf(s.no).takeIf { s.no > 0 } } ?: -1
+        val savedIdx = idx(saved)
+        val closedIdx = idx(closed)
         val unreadFrom = page.unreadFrom
-        when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom })) {
+        when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom }, closed, closedIdx >= 0)) {
             // ツリー表示では、一番下が最後のレスとは限らないので、既読のレスの位置へ
             is OpenTarget.Bottom -> if (tree() && t.pendingUnread) toUnreadNow(ctl.sent) else { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
             // 覚えたずれは「上の帯の下からの位置」(上へはみ出していれば負)。scrollToItem は送る量なので符号を返す
-            is OpenTarget.Saved -> state.scrollToItem(savedIdx, -t.pos.offset)
+            is OpenTarget.Saved -> {
+                state.scrollToItem(if (t.pos === saved) savedIdx else closedIdx, -t.pos.offset)
+                ctl.pendingUnread = t.pendingUnread
+            }
             // ツリー表示では、未読の頭は離れた枝にあることがあるので、既読の番号のレスの位置へ
             is OpenTarget.Unread -> toUnreadNow(if (tree()) maxOf(1, t.no - 1) else t.no)
             OpenTarget.Top -> if (jumpTo != null) jumpToNow(jumpTo) else state.scrollToItem(0)

@@ -9,6 +9,29 @@ class ThreadScrollTest {
     private fun open(saved: ScrollPos?, found: Boolean, readNo: Int, hasUnread: Boolean, position: String = "unread") =
         openTarget(saved, found, position, readNo, readNo + 1, hasUnread)
 
+    // スレ一覧などから開き直したとき: 前に閉じた位置(closed)より、開く位置の設定を先にする(PC 版の closed と同じ)
+    private fun reopen(closed: ScrollPos?, readNo: Int, hasUnread: Boolean, position: String) =
+        openTarget(null, false, position, readNo, readNo + 1, hasUnread, closed, closed != null)
+
+    @Test fun 開き直しは設定が先頭なら前の位置があっても先頭() {
+        assertEquals(OpenTarget.Top, reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "top"))
+    }
+
+    @Test fun 開き直しは設定が一番下なら一番下() {
+        assertEquals(OpenTarget.Bottom(pendingUnread = false), reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "bottom"))
+    }
+
+    @Test fun 開き直しは未読があれば未読の頭() {
+        assertEquals(OpenTarget.Unread(101), reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "unread"))
+    }
+
+    @Test fun 開き直しで全部読んでいたら前の位置へ戻して新着を待つ() {
+        val closed = ScrollPos(95, -8, false, readNo = 100)
+        assertEquals(OpenTarget.Saved(closed, pendingUnread = true), reopen(closed, 100, false, "unread"))
+        // 一番下で閉じていたら一番下
+        assertEquals(OpenTarget.Bottom(pendingUnread = true), reopen(ScrollPos(95, 0, true, readNo = 100), 100, false, "unread"))
+    }
+
     @Test fun 覚えたときより既読が先なら既読の次から() {
         val saved = ScrollPos(95, 0, false, readNo = 100)
         assertEquals(OpenTarget.Unread(201), open(saved, true, 200, true))

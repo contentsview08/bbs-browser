@@ -318,7 +318,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             scroller.open(null, "top", jumpTo = jumpNo.takeIf { here })
             if (here && page.jumpNo == jumpNo) { page.jumpNo = null; reportRead(ctl, scroller, vm, page) }
         } else {
-            scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
+            // 覚えた位置は前に閉じたときのもの。開く位置の設定を先にし、全部読んでいたときだけそこへ戻す
+            scroller.open(null, vm.prefs.openPosition, closed = vm.position(page.summary.id))
             reportRead(ctl, scroller, vm, page)
         }
     }

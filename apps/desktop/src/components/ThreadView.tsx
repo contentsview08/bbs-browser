@@ -73,6 +73,8 @@ import {
 import { anchorTreeOf, type AnchorTreeRow } from '../utils/postTree'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
+import { isCustomDark, parseCustom } from '../ui/customScheme'
+import { useOsDark } from '../hooks/useOsDark'
 import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 import { ClearButton, CLEAR_PAD } from './ClearButton'
 
@@ -2020,6 +2022,11 @@ export default function ThreadView(props: Props) {
   const dataRef = useRef({ byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts, anchorRowsOf })
   dataRef.current = { byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts, anchorRowsOf }
   const thumbAuto = settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi())
+  // ID の色は配色の明るさで変える。OS に合わせているときは OS の切り替えも、自分の配色は 6 色も見る(設定の値が同じでも明るさが変わるため)
+  useOsDark()
+  const schemeNow = effectiveScheme(settings)
+  const custom = schemeNow === 'custom' ? parseCustom(settings.customScheme) : null
+  const schemeDark = custom ? isCustomDark(custom) : isDarkScheme(schemeNow)
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
       const d = () => dataRef.current
@@ -2116,7 +2123,7 @@ export default function ThreadView(props: Props) {
         urls: { shorten: settings.urlShorten, omitImages: settings.urlShorten, collapseImageRuns: settings.urlShorten },
         // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)
         idColor: settings.idStyle === 'color'
-          ? { dark: isDarkScheme(effectiveScheme(settings)), sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
+          ? { dark: schemeDark, sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
           : undefined,
         heatStyle: settings.heatStyle,
         doubleTapReply: settings.doubleTapReply,
@@ -2146,7 +2153,7 @@ export default function ThreadView(props: Props) {
     // ポップアップの中身は renderRef で最新の値で描くので、NG の判定や自分のレスなど描くための値はここに入れない
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
     // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
-    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
+    [schemeDark, settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
   )
 
   /** アンカーツリーを描く(ポップアップの中身) */

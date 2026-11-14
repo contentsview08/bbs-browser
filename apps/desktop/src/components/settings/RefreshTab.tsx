@@ -3,9 +3,10 @@ import { NumberField, Toggle } from '../SettingParts'
 import { Choice, type SettingsProps, Section } from './common'
 import { formatLiveSpeed, LIVE_REFRESH_CHOICES } from '../../utils/autoScroll'
 import LiveSpeedSlider from '../LiveSpeedSlider'
+import { AUTO_REFRESH_SECS } from '../../ui/settings'
 
 /** 開いているスレの自動更新の間隔(秒)。スマホ版の選択肢と同じ */
-const AUTO_REFRESH_CHOICES = [0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
+const AUTO_REFRESH_CHOICES = AUTO_REFRESH_SECS.map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
 
 export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 流す速さを動かしている間の値(離すまでは保存しない)
@@ -13,8 +14,8 @@ export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'setting
   return (
     <>
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
-        {/* 自由な数は入れさせない(1 秒ごとのような設定が掲示板の負担になる)。選択肢はスマホ版と同じ */}
-        <Choice value={AUTO_REFRESH_CHOICES.some((o) => o.key === s.autoRefreshSec) ? s.autoRefreshSec : 0} options={AUTO_REFRESH_CHOICES} onChange={(v) => update('autoRefreshSec', v)} />
+        {/* 選択肢にない古い値は、読み込むときに寄せてある(ui/settings.ts の snapAutoRefresh) */}
+        <Choice value={s.autoRefreshSec} options={AUTO_REFRESH_CHOICES} onChange={(v) => update('autoRefreshSec', v)} />
       </Section>
       <Section
         title="実況モード"

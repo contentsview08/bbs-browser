@@ -123,3 +123,14 @@ describe('見た目ごとの設定(styleOptions)', () => {
     expect(migrateValues({ postStyle: 'card' })).not.toHaveProperty('styleOptions')
   })
 })
+
+describe('開いているスレの自動更新の古い値', () => {
+  it('選択肢にない値は、同じか長い方の一番近い選択肢に寄せる', () => {
+    expect(migrateValues({ autoRefreshSec: 3 }).autoRefreshSec).toBe(5)
+    expect(migrateValues({ autoRefreshSec: 15 }).autoRefreshSec).toBe(20)
+    expect(migrateValues({ autoRefreshSec: 45 }).autoRefreshSec).toBe(60)
+    expect(migrateValues({ autoRefreshSec: 600 }).autoRefreshSec).toBe(60)
+    expect(migrateValues({ autoRefreshSec: 30 }).autoRefreshSec).toBe(30)
+    expect(migrateValues({ autoRefreshSec: 0 }).autoRefreshSec).toBe(0)
+  })
+})

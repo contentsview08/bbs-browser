@@ -897,6 +897,15 @@ function withoutOldGestures(g: AppSettings['swipeGestures']): AppSettings['swipe
 /**
  * 今はない値を今の値に読み替える。s にある項目だけを返す(設定の読み込みと、書き出したファイルの読み込みで使う)
  */
+/** 開いているスレの自動更新の選択肢(秒。0 はしない。スマホ版と同じ)。自由な数は入れさせない(1 秒ごとのような設定が掲示板の負担になる) */
+export const AUTO_REFRESH_SECS = [0, 5, 10, 20, 30, 60] as const
+
+/** 前の版で自由に入れた間隔を、選択肢のうち同じか長い方の一番近いものに寄せる(画面の見た目と実際の間隔を合わせる) */
+export function snapAutoRefresh(v: number): number {
+  if (!(v > 0)) return 0
+  return AUTO_REFRESH_SECS.find((n) => n >= v) ?? AUTO_REFRESH_SECS[AUTO_REFRESH_SECS.length - 1]
+}
+
 export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {}
   // 今はない「タイムライン(X 風)」は、いちばん近い Discord 風に
@@ -909,6 +918,7 @@ export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
   if (s.swipeGestures !== undefined) out.swipeGestures = withoutOldGestures(s.swipeGestures)
   if (s.mouseGestures !== undefined) out.mouseGestures = migrateMouseGestures(s.mouseGestures)
   if (s.liveRefreshSec !== undefined) out.liveRefreshSec = clampLiveRefresh(s.liveRefreshSec)
+  if (s.autoRefreshSec !== undefined) out.autoRefreshSec = snapAutoRefresh(s.autoRefreshSec)
   if (s.liveScrollSpeed !== undefined) out.liveScrollSpeed = clampLiveSpeed(s.liveScrollSpeed)
   if (s.styleOptions !== undefined) out.styleOptions = cleanStyleOptions(s.styleOptions)
   return out

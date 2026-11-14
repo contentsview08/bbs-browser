@@ -345,6 +345,8 @@ export interface AppSettings {
   openInNewTab: boolean
   /** PC: タブの帯の上でホイールを回すと、タブを切り替える */
   tabWheelSwitch: boolean
+  /** PC: 画像ビューワーを閉じるマウスのボタン */
+  lightboxCloseClick: LightboxCloseClick
   openTabs: SavedTab[]
   /** 開いていたタブ(threadId) */
   activeTab: string
@@ -529,6 +531,14 @@ export const ID_POSITIONS: { key: IdPosition; name: string }[] = [
 ]
 
 /** PC: マウスジェスチャーを何を押しながら動かすか */
+/** PC: 画像ビューワーを閉じるマウスのボタン */
+export type LightboxCloseClick = 'right' | 'middle' | 'none'
+export const LIGHTBOX_CLOSE_CLICKS: { key: LightboxCloseClick; name: string }[] = [
+  { key: 'right', name: '右クリック' },
+  { key: 'middle', name: '中クリック(ホイール押し)' },
+  { key: 'none', name: '使わない' },
+]
+
 export type MouseGestureTrigger = 'ctrl' | 'right'
 export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[] = [
   { key: 'ctrl', name: 'Ctrl を押しながら' },
@@ -589,6 +599,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabsEnabled: true,
   openInNewTab: true,
   tabWheelSwitch: false,
+  lightboxCloseClick: 'right',
   openTabs: [],
   activeTab: '',
   openPosition: 'unread',

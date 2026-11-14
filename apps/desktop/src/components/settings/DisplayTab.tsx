@@ -306,7 +306,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           checked={s.tabWheelSwitch}
           onChange={(v) => update('tabWheelSwitch', v)}
           label="タブの帯の上でホイールを回すとタブを切り替える"
-          note="下へ回すと右のタブ、上へ回すと左のタブに移ります。Shift を押しながら回すと、今までどおり帯を横にスクロールします"
+          note="下へ回すと右のタブ、上へ回すと左のタブに移ります(端まで行くと反対の端へ回ります)。Shift を押しながら回すと、今までどおり帯を横にスクロールします"
         />
         )}
       </Section>

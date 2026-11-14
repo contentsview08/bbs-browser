@@ -1,7 +1,7 @@
 // 設定の「レス表示」。
 
 import { Fragment, useEffect, useState } from 'react'
-import { POST_DOUBLE_CLICKS, ID_STYLES, ID_POSITIONS, DEFAULT_SETTINGS } from '../../ui/settings'
+import { POST_DOUBLE_CLICKS, ID_STYLES, ID_POSITIONS, DEFAULT_SETTINGS, LIGHTBOX_CLOSE_CLICKS } from '../../ui/settings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import FontSizeSlider, { PostFontSliders, setCssVar } from '../FontSizeSlider'
 import { ListEditor, ThumbSample, Toggle, TextSetting } from '../SettingParts'
@@ -211,6 +211,9 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           label="スレの最後に次の未読スレを出す"
           note="-END- の下に、いまのスレ一覧で次に未読のあるスレへのボタンを出します"
         />
+      </Section>
+      <Section desktopOnly title="画像ビューワーを閉じるボタン" note="画像ビューワーの上でこのボタンを押すと閉じます。Esc・背景のクリックでも閉じます">
+        <Choice value={s.lightboxCloseClick} options={LIGHTBOX_CLOSE_CLICKS} onChange={(v) => update('lightboxCloseClick', v)} />
       </Section>
       <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、このフォルダの下へ保存します。空のときはダウンロードフォルダです。フォルダとファイル名は、板・スレの名前や日付で分けられます">
         <div className="flex items-center gap-2">

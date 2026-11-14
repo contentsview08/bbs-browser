@@ -14,6 +14,13 @@ import MobileImageViewer from './mobile/MobileImageViewer'
 import { mediaSrc, videoSrc } from '../utils/httpsFirst'
 import { VideoPlaybackHelp, ViewerImageFailed } from './MediaFailed'
 import { canPlayVideo } from '../utils/videoSupport'
+import type { LightboxCloseClick } from '../ui/settings'
+
+/** 閉じるボタン。開く所が 4 つあり、それぞれに設定を配らずに済むよう、App が設定の変わるたびにここへ入れる */
+let closeClick: LightboxCloseClick = 'right'
+export function setLightboxCloseClick(v: LightboxCloseClick) {
+  closeClick = v
+}
 
 interface Props {
   urls: string[]
@@ -251,8 +258,23 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveTo, onIndex, 
       ref={overlayRef}
       data-lightbox
       className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden"
-      onMouseDown={() => {
+      onMouseDown={(e) => {
         dragged.current = false
+        // 中ボタンで閉じるときは、押したときに出る自動スクロールを止める
+        if (e.button === 1 && closeClick === 'middle') e.preventDefault()
+      }}
+      onAuxClick={(e) => {
+        if (e.button !== 1 || closeClick !== 'middle') return
+        e.preventDefault()
+        e.stopPropagation()
+        onClose()
+      }}
+      onContextMenu={(e) => {
+        // 右ボタンのジェスチャーをしたあとは、ジェスチャーの方がこの右クリックを先に止めるので、ここには来ない
+        if (closeClick !== 'right') return
+        e.preventDefault()
+        e.stopPropagation()
+        onClose()
       }}
       onClick={() => {
         // 絵をドラッグして絵の外で離したときは閉じない(click が背景で起きる)

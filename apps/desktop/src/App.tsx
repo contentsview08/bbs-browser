@@ -51,6 +51,7 @@ import { PostHistoryList } from './components/PostHistoryDialog'
 import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
+import { setLightboxCloseClick } from './components/Lightbox'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
@@ -2117,6 +2118,7 @@ export default function App() {
         },
       ]),
   )
+  useEffect(() => setLightboxCloseClick(settings.lightboxCloseClick), [settings.lightboxCloseClick])
   const mouse = useMouseGesture(mouseMap, settings.mouseGestureTrigger, !isMobile && settings.mouseGestureEnabled)
   const mouseLabels = Object.fromEntries(PIE_DIRS.map((d) => [d, mouseMap[d]?.label])) as Partial<Record<PieDir, string | undefined>>
   // 指の動きは画面全体(document)で受ける。アプリの枠の中だけで受けると、body の直下に出した

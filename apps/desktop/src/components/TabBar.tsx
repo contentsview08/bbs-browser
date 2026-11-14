@@ -133,8 +133,8 @@ export default function TabBar(props: Props) {
       const step = acc > 0 ? 1 : -1
       acc = 0
       const i = tabs.findIndex((t) => t.id === activeId)
-      // 端では止まる(一周しない)
-      const next = tabs[i < 0 ? 0 : i + step]
+      // 端まで行ったら反対の端へ回る
+      const next = tabs[i < 0 ? 0 : (i + step + tabs.length) % tabs.length]
       if (next && next.id !== activeId) onSelect(next.id)
     }
     el.addEventListener('wheel', onWheel, { passive: false })

@@ -51,6 +51,8 @@ export default function MobileImageViewer(props: Props) {
   const zoomRef = useRef<HTMLDivElement>(null)
   const bgRef = useRef<HTMLDivElement>(null)
   const [chrome, setChrome] = useState(true)
+  // 開いた直後は画像を広く見せるため、本文の帯は出さない(たたくと出る)
+  const [caption, setCaption] = useState(false)
   const [sheet, setSheet] = useState(false)
   const [toast, setToast] = useState<string>()
   const [allowLocal, setAllowLocal] = useState(new Set<string>())
@@ -123,6 +125,17 @@ export default function MobileImageViewer(props: Props) {
     [],
   )
 
+  // たたくたび: 上の帯だけ → 本文も出す → 全部隠す → 全部出す
+  const toggleUi = () => {
+    if (!chrome) {
+      setChrome(true)
+      setCaption(true)
+    } else if (!caption) setCaption(true)
+    else {
+      setChrome(false)
+      setCaption(false)
+    }
+  }
   const onTouchStart = (e: React.TouchEvent) => {
     // 操作シートは portal でも、タッチは React の木を通ってここへ届く。シートの上の操作を絵の操作にしない
     if (sheet) return
@@ -244,7 +257,7 @@ export default function MobileImageViewer(props: Props) {
         return
       }
       s.lastTap = { t: now, x: t.clientX, y: t.clientY }
-      s.tapTimer = setTimeout(() => setChrome((v) => !v), DOUBLE_TAP_MS)
+      s.tapTimer = setTimeout(toggleUi, DOUBLE_TAP_MS)
       return
     }
     if (mode === 'pan') {
@@ -407,7 +420,7 @@ export default function MobileImageViewer(props: Props) {
       {post && (
         <div
           data-viewer-ui
-          className={`absolute bottom-0 inset-x-0 max-h-[40%] overflow-y-auto px-4 pt-6 text-white bg-gradient-to-t from-black/80 via-black/60 to-transparent transition-opacity duration-200 ${chrome ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          className={`absolute bottom-0 inset-x-0 max-h-[40%] overflow-y-auto px-4 pt-6 text-white bg-gradient-to-t from-black/80 via-black/60 to-transparent transition-opacity duration-200 ${chrome && caption ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)', touchAction: 'pan-y' }}
         >
           <div className="flex items-center gap-2 mb-1 text-xs text-white/70">

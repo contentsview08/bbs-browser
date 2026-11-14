@@ -104,6 +104,8 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     val pager = rememberPagerState(initialPage = urls.indexOf(start).coerceAtLeast(0) + 1) { urls.size + 2 }
     val current = (pager.currentPage - 1).coerceIn(0, urls.lastIndex.coerceAtLeast(0))
     var chrome by remember { mutableStateOf(true) }
+    // 開いた直後は画像を広く見せるため、本文の帯は出さない(たたくと出る)
+    var caption by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     /** 保存中は次の保存を受け付けない(続けて長押ししても二重に保存しない) */
@@ -156,7 +158,12 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                     ZoomPage(
                         url, active = page == pager.currentPage,
                         onZoomed = { if (page == pager.currentPage) zoomed = it },
-                        onTap = { chrome = !chrome },
+                        // たたくたび: 上の帯だけ → 本文も出す → 全部隠す → 全部出す
+                        onTap = {
+                            if (!chrome) { chrome = true; caption = true }
+                            else if (!caption) caption = true
+                            else { chrome = false; caption = false }
+                        },
                         onLongPress = { Haptics.longPress(view); save(url) },
                         onDismissDrag = { dy -> scope.launch { dismiss.snapTo(dy) } },
                         onDismissEnd = { dy, v ->
@@ -184,7 +191,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
 
             val post = posts.getOrNull(current)
             if (post != null) {
-                AnimatedVisibility(chrome && open.value > 0.5f, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), modifier = Modifier.align(Alignment.BottomCenter)) {
+                AnimatedVisibility(chrome && caption && open.value > 0.5f, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), modifier = Modifier.align(Alignment.BottomCenter)) {
                     Column(
                         Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.8f))))
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp).navigationBarsPadding(),

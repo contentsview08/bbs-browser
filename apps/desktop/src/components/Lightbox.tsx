@@ -144,7 +144,8 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveTo, onIndex, 
   const [imageError, setImageError] = useState(false)
   const [imageAttempt, setImageAttempt] = useState(0)
   const [save, setSave] = useState<SaveState>()
-  const [panelOpen, setPanelOpen] = useState(true)
+  // 開いた直後は画像を広く見せるため、本文のパネルは出さない(絵をクリックすると出る)
+  const [panelOpen, setPanelOpen] = useState(false)
   const [zoom, setZoomState] = useState<Zoom>(NO_ZOOM)
   // ホイール・ドラッグの途中は、描き直しを待たずに今の値を読みたいので、控えも同時に書き換える
   const zoomRef = useRef(zoom)

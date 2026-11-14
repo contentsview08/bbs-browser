@@ -1,5 +1,5 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
-// 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・もとにする配色を選び直す
+// 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・JSON を貼り付け・もとにする配色を選び直す
 import { useMemo, useRef, useState } from 'react'
 import { COLOR_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
 import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
@@ -37,6 +37,14 @@ export default function CustomSchemeEditor(props: {
     }, COLOR_COMMIT_MS)
   }
   const shown: CustomDef = { ...def, ...draft }
+  /** コピー・貼り付けの結果 */
+  const [notice, setNotice] = useState<string>()
+  // 別の端末・別のアプリで「JSON をコピー」したものを取り込む
+  const paste = async () => {
+    const got = parseCustom((await navigator.clipboard.readText().catch(() => '')).trim())
+    if (got) save(got)
+    setNotice(got ? '配色を取り込みました' : 'クリップボードに配色の JSON がありません')
+  }
   const vars = customVars(shown)
   const using = s.scheme === 'custom' && !s.followOsTheme
   const BTN = 'px-4 py-2.5 rounded-md text-[14px]'
@@ -129,7 +137,7 @@ export default function CustomSchemeEditor(props: {
         ))}
       </div>
 
-      <div className="flex gap-2 px-4">
+      <div className="flex flex-wrap gap-2 px-4">
         <button
           type="button"
           disabled={using}
@@ -142,10 +150,18 @@ export default function CustomSchemeEditor(props: {
         >
           {using ? '使っています' : 'この配色を使う'}
         </button>
-        <button type="button" onClick={() => void navigator.clipboard.writeText(customToJson(def))} className={`${BTN} border border-c-border text-c-text-strong`}>
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard.writeText(customToJson(def)).then(() => setNotice('JSON をコピーしました'))}
+          className={`${BTN} border border-c-border text-c-text-strong`}
+        >
           JSON をコピー
         </button>
+        <button type="button" onClick={() => void paste()} className={`${BTN} border border-c-border text-c-text-strong`}>
+          JSON を貼り付け
+        </button>
       </div>
+      {notice && <p className="px-4 pt-2 text-[12px] text-c-text-muted">{notice}</p>}
 
       <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します</p>
       <div className="flex gap-2 px-4 overflow-x-auto no-scrollbar">

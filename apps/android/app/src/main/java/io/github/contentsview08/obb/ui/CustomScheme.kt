@@ -149,7 +149,8 @@ fun SchemePreview(s: Scheme, own: Color, accent: Color = s.accent, accentText: C
 
 }
 
-/** 設定の「自分の配色」のページ: 見本・6 色・コントラストの判定・使う・JSON をコピー */
+/** 設定の「自分の配色」のページ: 見本・6 色・コントラストの判定・使う・JSON をコピー・JSON を貼り付け */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -157,6 +158,8 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
     fun save(d: CustomDef) { prefs.customScheme = d.toJson() }
     val s = buildScheme(def)
     var editing by remember { mutableStateOf<String?>(null) }
+    /** コピー・貼り付けの結果 */
+    var notice by remember { mutableStateOf<String?>(null) }
 
     SchemePreview(s, def.own)
 
@@ -189,7 +192,8 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
         }
     }
 
-    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 狭い画面では 2 段に折り返す
+    androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val using = prefs.scheme == "custom" && !prefs.followOsTheme
         Text(
             if (using) "使っています" else "この配色を使う",
@@ -200,10 +204,25 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
         Text(
             "JSON をコピー",
             Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                .clickable { copyText(context, def.toJson()) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                .clickable { copyText(context, def.toJson()); notice = "JSON をコピーしました" }.padding(horizontal = 16.dp, vertical = 10.dp),
+            color = Palette.textStrong, fontSize = 14.sp,
+        )
+        // 別の端末・PC 版で「JSON をコピー」したものを取り込む
+        Text(
+            "JSON を貼り付け",
+            Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                .clickable {
+                    val clip = runCatching {
+                        context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+                    }.getOrNull()
+                    val got = clip?.let { CustomDef.parse(it) }
+                    if (got != null) save(got)
+                    notice = if (got != null) "配色を取り込みました" else "クリップボードに配色の JSON がありません"
+                }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = Palette.textStrong, fontSize = 14.sp,
         )
     }
+    notice?.let { Text(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), color = Palette.textMuted, fontSize = 12.sp) }
     Text("もとにする配色を選ぶと、6 色をその配色の色に戻します", Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
     Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (sc in SCHEMES) Column(Modifier.clickable { save(CustomDef.of(sc)) }, horizontalAlignment = Alignment.CenterHorizontally) {

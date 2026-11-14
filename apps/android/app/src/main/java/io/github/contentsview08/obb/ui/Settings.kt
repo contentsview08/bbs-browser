@@ -471,7 +471,8 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
         SegmentRow("ID の位置", p.idPosition, ID_POSITIONS) { p.idPosition = it }
-        SegmentRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
+        // LINE 風は吹き出しの隣に時刻だけを出すので、日時の出し方は効かない
+        if (p.postStyle != "line") SegmentRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
         SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
         SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
@@ -583,13 +584,14 @@ private fun SaveNameHelp(onPick: (String) -> Unit) {
 @Composable
 private fun WritePage(vm: AppViewModel) {
     val p = vm.prefs
-    Group("名前") {
+    // 書き込むと、そのとき使った名前に変わる(PC 版と同じ)。それを言っておかないと、設定が勝手に変わったように見える
+    Group("名前", note = "書き込み欄に最初に入る名前です。書き込むと、そのとき使った名前に変わります(板ごとの名前を決めた板は別)") {
         TextRow("名前", p.postName, "名無し") { p.postName = it }
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
         EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }
     }
-    if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
+    if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、このアプリからは置き場から消せません(imgbb は履歴の長押しから削除ページを開けます)。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
         ChoiceRow(
             "上げ先", p.uploadHost,
             io.github.contentsview08.obb.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },

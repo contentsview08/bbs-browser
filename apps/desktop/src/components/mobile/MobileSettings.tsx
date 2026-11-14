@@ -13,6 +13,7 @@ import {
   SCREEN_PX_RANGE,
   MOBILE_POST_STYLES,
   COLOR_SCHEMES,
+  AUTO_REFRESH_SECS,
   ID_STYLES,
   baseFontPx,
   effectivePostStyle,
@@ -402,7 +403,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
     case 'write':
       return (
         <>
-          <Group title="ふだん使う名前" note="板ごとの名前は、お気に入り板の設定で変えられます">
+          <Group title="ふだん使う名前" note="書き込み欄に最初に入る名前です。書き込むと、そのとき使った名前に変わります。板ごとの名前は、お気に入り板の設定で変えられます">
             <TextRow label="名前" value={s.postName} placeholder="名無し" onChange={(v) => update('postName', v)} />
             <TextRow label="メール" value={s.postMail} placeholder="sage など" onChange={(v) => update('postMail', v)} />
           </Group>
@@ -438,7 +439,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               label="開いているスレの自動更新"
               desc="実況など、流れの速いスレ向け"
               value={s.autoRefreshSec}
-              options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))}
+              options={AUTO_REFRESH_SECS.map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))}
               onChange={(v) => update('autoRefreshSec', v)}
             />
             <ChoiceRow

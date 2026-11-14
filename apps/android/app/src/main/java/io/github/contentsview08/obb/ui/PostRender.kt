@@ -358,7 +358,8 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
             append("  ")
             withStyle(small) { append("#${p.no}") }
             append("  ")
-            withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
+            // 日時の出し方の設定に従う(ふつうの見た目と同じ)
+            withStyle(small) { append(displayDate(p.date, o.dateStyle).replace(' ', '\u00A0')) }
         }
         if (p.id != null && o.idPosition == "header") {
             append("  ")

@@ -273,7 +273,7 @@ class Prefs(context: Context) {
     var highlightOp by pref("highlightOp", true)
     /** ID の見せ方: none(文字だけ) / color(2 回以上書いた ID を ID ごとの色に)。PC・Web の idStyle と同じ(模様はスマホにない) */
     var idStyle by pref("idStyle", "none")
-    /** レスの頭の日時の出し方: md_w_hms(11/02(月) 19:01:15。既定)/ md_hm(11/02 19:01)/ full(掲示板が出したまま) */
+    /** レスの頭の日時の出し方: md_w_hms(11/02(月) 19:01:15)/ md_hm(11/02 19:01。既定)/ full(掲示板が出したまま) */
     var dateStyle by pref("dateStyle", "md_hm")
     /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
     var idShort by pref("idShort", false)

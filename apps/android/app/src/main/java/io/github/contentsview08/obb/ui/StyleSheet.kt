@@ -227,8 +227,11 @@ private fun PostDisplayTab(p: Prefs) {
     SheetSwitch("ID ごとに色を付ける", p.idStyle == "color") { p.idStyle = if (it) "color" else "none" }
     SheetLabel("ID の位置")
     ChipRow(ID_POSITIONS, p.idPosition) { p.idPosition = it }
-    SheetLabel("日時の出し方")
-    ChipRow(DATE_STYLES, p.dateStyle) { p.dateStyle = it }
+    // LINE 風は吹き出しの隣に時刻だけを出すので、日時の出し方は効かない
+    if (p.postStyle != "line") {
+        SheetLabel("日時の出し方")
+        ChipRow(DATE_STYLES, p.dateStyle) { p.dateStyle = it }
+    }
     SheetSwitch("ワッチョイを短く出す", p.watchoiShort) { p.watchoiShort = it }
     SheetSwitch("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi) { p.iconFromWatchoi = it }
     SheetSwitch("スレ主に「主」の印", p.highlightOp) { p.highlightOp = it }

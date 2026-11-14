@@ -3034,6 +3034,11 @@ export default function App() {
             await new UserOps(store).uploadRemove(url)
             setUploads(await store.listUploads())
           }}
+          onForget={async (url) => {
+            if (!store) return
+            await new UserOps(store).uploadRemove(url)
+            setUploads(await store.listUploads())
+          }}
           onClose={() => setUploads(undefined)}
         />
       )}

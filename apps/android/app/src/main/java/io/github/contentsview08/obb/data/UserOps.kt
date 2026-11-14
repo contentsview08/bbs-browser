@@ -114,6 +114,9 @@ class UserOps(
         put(list.map { SqlStatement(UploadSql.IMPORT, UploadSql.importArgs(it).toList()) } + list.flatMap { uploadOps(it, now, images, secret) })
     }
 
+    /** 上げた画像を履歴から外す(置き場のファイルはそのまま) */
+    suspend fun removeUpload(url: String, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { removeUploadNow(url, now) }
+
     internal fun removeUploadNow(url: String, now: Long) = put(
         listOf(SqlStatement(UploadSql.REMOVE, listOf(url))) +
             (if (isOn("images")) listOf(plainOp("upload_remove", url, mapOf("url" to url), now)) else emptyList()) +

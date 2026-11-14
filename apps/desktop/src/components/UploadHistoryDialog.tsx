@@ -30,6 +30,8 @@ interface Props {
   canDelete: boolean
   /** サーバー上のファイルを消して、履歴からも外す */
   onDelete: (url: string) => Promise<void>
+  /** 履歴からだけ外す(置き場のファイルはそのまま。匿名で上げたもの・置き場で消したものの行を片づける) */
+  onForget: (url: string) => Promise<void>
   /** その画像を貼ったレス(書き込み履歴から探したもの)。分かればスレタイと番号を出し、押すとそのレスへ */
   postedIn?: (url: string) => { title: string; no?: number; open: () => void } | undefined
   onOpen: (url: string) => void
@@ -114,6 +116,14 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
               <span className="material-symbols-outlined text-base leading-none">delete_forever</span>
             </button>
           )}
+          <button
+            type="button"
+            className={TOOL}
+            title="履歴から消す(置き場のファイルは消えません)"
+            onClick={() => void props.onForget(u.url).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
+          >
+            <span className="material-symbols-outlined text-base leading-none">playlist_remove</span>
+          </button>
           {u.withAccount && props.canDelete && (
             <button
               type="button"
@@ -218,8 +228,8 @@ function MobileUploadHistory(props: Props) {
       onClose={props.onClose}
       note={
         props.canDelete
-          ? '長押しで URL のコピー・削除ができます。消せるのは、アカウント(userhash)で上げたものだけです'
-          : '長押しで URL をコピーできます。消すには、設定 → 書き込み で catbox のアカウント(userhash)を登録してください'
+          ? '長押しで URL のコピー・履歴から消す・置き場からの削除ができます。置き場から消せるのは、アカウント(userhash)で上げたものだけです'
+          : '長押しで URL のコピー・履歴から消すができます。置き場から消すには、設定 → 書き込み で catbox のアカウント(userhash)を登録してください'
       }
     >
       {error && <p className="px-4 py-2 text-xs text-c-heat-very-hot">{error}</p>}
@@ -258,6 +268,14 @@ function MobileUploadHistory(props: Props) {
                   },
                 ]
               : []),
+            {
+              label: '履歴から消す(置き場のファイルは消えません)',
+              icon: 'playlist_remove',
+              onClick: () => {
+                setError(undefined)
+                props.onForget(sheet.url).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+              },
+            },
           ]}
         />
       )}

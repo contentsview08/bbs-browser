@@ -448,7 +448,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
     }
 }
 
-/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・置き場の削除ページ(imgbb)。履歴から消す操作はない */
+/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・置き場の削除ページ(imgbb)・履歴から消す */
 @Composable
 fun UploadsScreen(vm: AppViewModel) {
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -472,6 +472,7 @@ fun UploadsScreen(vm: AppViewModel) {
                     // imgbb(API キー)は上げたときに消すためのページが返る。API では消せないので、ブラウザで開いて消す
                     vm.uploads.firstOrNull { it.url == url }?.deleteUrl?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete) { openExternal(context, d, false) } },
                 ),
+                listOf(MenuItem("履歴から消す(置き場のファイルは消えません)", Icons.Filled.Delete, danger = true) { vm.forgetUpload(url) }),
             ),
             MenuAt.Center,
         ) { menuFor = null }

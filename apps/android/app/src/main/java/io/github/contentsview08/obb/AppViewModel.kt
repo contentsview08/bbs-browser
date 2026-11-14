@@ -454,6 +454,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.userOps.postRemove(e); postHistory = db.postHistory() }
     }
 
+    /** 上げた画像を履歴から外す(置き場のファイルは消えない) */
+    fun forgetUpload(url: String) {
+        uploads = uploads.filter { it.url != url }
+        viewModelScope.launch { db.userOps.removeUpload(url); uploads = db.listUploads() }
+    }
+
     /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
     fun postedIn(url: String): PostHistoryEntry? = postHistory.firstOrNull { it.body.contains(url) }
 
@@ -1309,9 +1315,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
+    // 配色は名前でなく配色そのもの(自分の配色は直しても名前が custom のままなので、色を変えたら作り直された配色で比べる)
     private fun renderKey() = listOf(
         prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.idPosition, prefs.watchoiShort, prefs.nameSubtle, prefs.urlShorten,
-        prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta, prefs.styleOptions(prefs.postStyle).quote,
+        prefs.blurGross, prefs.grossWords, Palette.scheme, prefs.postStyle, prefs.heatStyle, prefs.boardMeta, prefs.styleOptions(prefs.postStyle).quote,
     )
 
     /** 組み立て直すスレ(開いているものと、「進む」で開き直すもの) */

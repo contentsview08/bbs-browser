@@ -210,6 +210,15 @@ export default function ThreadListPanel(props: Props) {
   const { threads, stateOf } = props
   const defaultSort: SortState = props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' }
   const [sort, setSort] = useState<SortState>(defaultSort)
+  // 設定の並びを変えたら(同期で届いたときも)、開いている板もその並びにする。開き直すまで前の並びのままにしない
+  const firstSort = useRef(true)
+  useEffect(() => {
+    if (firstSort.current) {
+      firstSort.current = false
+      return
+    }
+    setSort(props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' })
+  }, [props.defaultSort])
   const onSortChange = useRef(props.onSortChange)
   onSortChange.current = props.onSortChange
   useEffect(() => {
@@ -232,7 +241,9 @@ export default function ThreadListPanel(props: Props) {
   const visitedOnly = filter === 'visited'
   const filtering = filter !== null
   /** 上に出すタブ(設定の並び) */
-  const tabs = props.tabs ?? ['unread', 'momentum', 'newest']
+  // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(スレ順(標準)は選んでいないのと同じなので足さない)
+  const listed = props.tabs ?? ['unread', 'momentum', 'newest']
+  const tabs: ListTabKey[] = defaultSort && !listed.includes(defaultSort.mode as ListTabKey) ? [...listed, defaultSort.mode as ListTabKey] : listed
   /** 閲覧履歴の「見た順」を逆にしている(最近見たものが下) */
   const [reversed, setReversed] = useState(false)
   // タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び。

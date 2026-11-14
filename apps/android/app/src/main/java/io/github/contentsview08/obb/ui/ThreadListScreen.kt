@@ -399,7 +399,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) {
             HorizontalDivider(color = Palette.border)
             Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(スレ順(標準)は選んでいないのと同じなので足さない)
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
+                    .let { ts -> defaultTab(sort).let { d -> if (d == ListTab.ORDER || d in ts) ts else ts + d } }
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }

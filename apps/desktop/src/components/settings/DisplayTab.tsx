@@ -301,6 +301,14 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           note="オフにすると、いま見ているタブを置き換えます。そのときも、Ctrl を押しながらクリックすると新しいタブで開きます"
         />
         )}
+        {s.tabsEnabled && (
+        <Toggle
+          checked={s.tabWheelSwitch}
+          onChange={(v) => update('tabWheelSwitch', v)}
+          label="タブの帯の上でホイールを回すとタブを切り替える"
+          note="下へ回すと右のタブ、上へ回すと左のタブに移ります。Shift を押しながら回すと、今までどおり帯を横にスクロールします"
+        />
+        )}
       </Section>
     </>
   )

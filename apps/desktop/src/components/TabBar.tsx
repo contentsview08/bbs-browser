@@ -41,7 +41,12 @@ interface Props {
   onSelectionChange: (ids: Set<string>) => void
   /** つかんで動かしたタブを、index の位置へ移す */
   onReorder: (id: string, index: number) => void
+  /** タブの帯の上でホイールを回すと、タブを切り替える(下へ回すと右のタブ) */
+  wheelSwitch?: boolean
 }
+
+/** タッチパッドのように細かく来るときは、これだけたまったら 1 つ動かす(ホイールの 1 目盛りはおよそ 100) */
+const WHEEL_STEP = 50
 
 
 const MAX_WIDTH = 220
@@ -52,6 +57,10 @@ export default function TabBar(props: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
   const stripRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
+  /** ホイールの受け手は 1 度だけ付けるので、今のタブ・開いているタブはここから読む */
+  const latest = useRef(props)
+  latest.current = props
   const [stripWidth, setStripWidth] = useState(0)
   /** × で閉じている間の固定幅。マウスがタブ列から出たら undefined に戻して整え直す */
   const [frozenWidth, setFrozenWidth] = useState<number>()
@@ -106,6 +115,32 @@ export default function TabBar(props: Props) {
     props.onSelect(id)
   }
 
+  // ページのスクロールを止めるため、受け身でない(passive: false)受け手を直に付ける
+  useEffect(() => {
+    const el = barRef.current
+    if (!el || !props.wheelSwitch) return
+    let acc = 0
+    const onWheel = (e: WheelEvent) => {
+      const { tabs, activeId, onSelect } = latest.current
+      // 横のホイール(Shift+ホイール・タッチパッドの横なぞり)は、今までどおり帯の横スクロールに使う
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      e.preventDefault()
+      const d = e.deltaMode === 0 ? e.deltaY : e.deltaY * 100
+      // 向きが変わったら、ためた分を捨てる
+      if (Math.sign(d) !== Math.sign(acc)) acc = 0
+      acc += d
+      if (Math.abs(acc) < WHEEL_STEP) return
+      const step = acc > 0 ? 1 : -1
+      acc = 0
+      const i = tabs.findIndex((t) => t.id === activeId)
+      // 端では止まる(一周しない)
+      const next = tabs[i < 0 ? 0 : i + step]
+      if (next && next.id !== activeId) onSelect(next.id)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [hasTabs, props.wheelSwitch])
+
   // 全部閉じると帯がなくなって onMouseLeave が来ないので、ここで固定を解く
   useEffect(() => {
     if (props.tabs.length === 0) setFrozenWidth(undefined)
@@ -150,7 +185,7 @@ export default function TabBar(props: Props) {
     : []
 
   return (
-    <div className="flex-shrink-0 flex items-end pt-1.5 bg-panel-tabbar">
+    <div ref={barRef} className="flex-shrink-0 flex items-end pt-1.5 bg-panel-tabbar">
       <div
         ref={stripRef}
         className="flex-1 min-w-0 flex items-end overflow-x-auto no-scrollbar px-2"

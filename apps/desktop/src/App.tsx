@@ -2929,6 +2929,7 @@ export default function App() {
           onSelect={selectTab}
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}
+          wheelSwitch={settings.tabWheelSwitch}
           onRefresh={(id) => {
             if (activeTab?.id === id) void refreshThread()
           }}

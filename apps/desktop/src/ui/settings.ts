@@ -343,6 +343,8 @@ export interface AppSettings {
   /** PC: タブを使う。オフならタブの帯を出さず、いつも今のスレを置き換える */
   tabsEnabled: boolean
   openInNewTab: boolean
+  /** PC: タブの帯の上でホイールを回すと、タブを切り替える */
+  tabWheelSwitch: boolean
   openTabs: SavedTab[]
   /** 開いていたタブ(threadId) */
   activeTab: string
@@ -586,6 +588,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boardVisits: {},
   tabsEnabled: true,
   openInNewTab: true,
+  tabWheelSwitch: false,
   openTabs: [],
   activeTab: '',
   openPosition: 'unread',

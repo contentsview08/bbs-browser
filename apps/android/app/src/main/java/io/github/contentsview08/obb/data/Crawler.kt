@@ -207,7 +207,11 @@ class CrawlWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         Http.init(applicationContext)
         val db = LogDb(applicationContext)
         return try {
-            runCatching { Crawler.run(applicationContext, db, Prefs(applicationContext)) }.fold({ Result.success() }, { Result.retry() })
+            val prefs = Prefs(applicationContext)
+            // 間隔を「しない」(0)にしたものは、アプリを閉じている間も見ない(開いている間の CrawlClock と同じ)
+            val scope = CrawlScope(history = prefs.historyCheckMin > 0, fav = prefs.favCheckMin > 0, keyword = prefs.keywordWatchMin > 0)
+            if (!scope.history && !scope.fav && !scope.keyword) return Result.success()
+            runCatching { Crawler.run(applicationContext, db, prefs, scope) }.fold({ Result.success() }, { Result.retry() })
         } finally {
             db.close()
         }

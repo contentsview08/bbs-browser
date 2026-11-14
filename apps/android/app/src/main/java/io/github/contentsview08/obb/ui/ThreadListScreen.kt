@@ -125,8 +125,13 @@ private enum class ListTab(val key: String, val label: String, val icon: ImageVe
     COUNT("count", "レス数順", Icons.Filled.FormatListNumbered),
 }
 
-/** 設定の「板を開いたときの並び」のうち、並べ替えるもの(ほかはスレ順 = 掲示板の並びのまま) */
-private val SORT_KEYS = setOf("momentum", "newest", "count")
+/** 設定の「板を開いたときの並び」に当たるタブ(タブを選んでいないときは、これを選んでいる。PC 版の defaultSort と同じ) */
+private fun defaultTab(sort: String): ListTab = when (sort) {
+    "momentum" -> ListTab.MOMENTUM
+    "newest" -> ListTab.NEWEST
+    "count" -> ListTab.COUNT
+    else -> ListTab.ORDER
+}
 
 /** 勢い(1 日あたりのレス数) */
 fun momentum(t: ThreadSummary, now: Long): Double {
@@ -179,13 +184,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         val terms = io.github.contentsview08.obb.data.searchTerms(query)
         if (terms.isNotEmpty()) list = list.filter { io.github.contentsview08.obb.data.matchesTerms("${it.title} ${it.authorId ?: ""}", terms) }
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
-        list = when (tab) {
-            null -> when (sort) {
-                "momentum" -> list.sortedByDescending { momentum(it, now) }
-                "newest" -> list.sortedByDescending { it.createdAt ?: 0 }
-                "count" -> list.sortedByDescending { it.postCount }
-                else -> list
-            }
+        // タブを選んでいないときは、設定の並びのタブを選んでいる(押せば逆順にもなる)
+        list = when (tab ?: defaultTab(sort)) {
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states[it.key]) > 0 }
             ListTab.VISITED -> list.filter { page.states[it.key] != null }
             // スレ順は いつもの並び ⇄ 逆順(page.reversed)
@@ -215,7 +215,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     var styleSheet by remember { mutableStateOf(false) }
     menuFor?.let { p -> ThreadPeek(vm, p, page.states[p.thread.key] != null) { menuFor = null } }
-    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
+    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.reversed || page.only != null) {
         if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
     }
     // 取り直したら一番上へ戻す。位置を保つと、その上に新しいスレが足されて分かりにくい
@@ -230,7 +230,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         mapOf(
             // 絞り込み(未読など)・並べ替え・検索をしていれば、まずそれを外す。外れていればメニュー
             "drawer" to {
-                if (page.tab != null || searching || query.isNotEmpty() || page.only != null) { page.tab = null; page.reversed = false; page.only = null; searching = false; query = ""; scope.launch { listState.scrollToItem(0) } }
+                if (page.tab != null || page.reversed || searching || query.isNotEmpty() || page.only != null) { page.tab = null; page.reversed = false; page.only = null; searching = false; query = ""; scope.launch { listState.scrollToItem(0) } }
                 else vm.drawerOpen = true
             },
             "forward" to { vm.forward() },
@@ -404,8 +404,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
                 for (t in tabs) {
-                    // 並べ替えていない(設定の並びがスレ順)ときは、スレ順のタブを選んでいる(PC 版と同じ)
-                    val active = tab == t || (t == ListTab.ORDER && tab == null && sort !in SORT_KEYS)
+                    // タブを選んでいないときは、設定の並びのタブを選んでいる(PC 版と同じ)
+                    val active = tab == t || (tab == null && t == defaultTab(sort))
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED
                     Box(
                         Modifier.clickable {

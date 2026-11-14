@@ -933,11 +933,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** バックアップから戻す(今あるものに足す。設定は上書き) */
+    /** 自分の配色を JSON のファイルに書き出す(「JSON をコピー」と同じ形。PC 版の配色の書き出しとも同じ) */
+    fun exportScheme(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val json = io.github.contentsview08.obb.ui.CustomDef.parse(prefs.customScheme)?.toJson() ?: throw IllegalStateException("まだ自分の配色を作っていません")
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
+                }
+                toast = "配色を保存しました"
+            } catch (e: Exception) {
+                toast = "保存できませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
+    /** バックアップから戻す(今あるものに足す。設定は上書き)。自分の配色のファイルを選んだときは、その配色を取り込んで使う */
     fun importBackup(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
                 val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
+                io.github.contentsview08.obb.ui.CustomDef.parse(text.trim())?.let { d ->
+                    prefs.customScheme = d.toJson()
+                    prefs.followOsTheme = false
+                    prefs.scheme = "custom"
+                    toast = "自分の配色を読み込んで、使うようにしました"
+                    return@launch
+                }
                 // 先に全部読む(途中の行が壊れていても、半分だけ戻さない)
                 val b = io.github.contentsview08.obb.data.parseBackup(text)
                 b.settings?.let {

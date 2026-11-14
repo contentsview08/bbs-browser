@@ -1187,9 +1187,14 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
 private fun BackupPage(vm: AppViewModel) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
+    val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
     Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイトを 1 つのファイルに書き出します。スレのログは入りません") {
         ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
         ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
+    }
+    Group("自分の配色", note = "自分の配色の 6 色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
+        if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
+        ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
 }
 

@@ -111,6 +111,8 @@ val SETTINGS_INDEX = listOf(
     Triple("backup", "バックアップ", "設定・NG・お気に入り板・お気に入りのスレ・サイトを 1 つのファイルに書き出します。スレのログは入りません"),
     Triple("backup", "バックアップを書き出す", ""),
     Triple("backup", "バックアップから戻す", ""),
+    Triple("backup", "配色を書き出す", "自分の配色の 6 色を JSON のファイルに"),
+    Triple("backup", "配色を読み込む", "書き出した自分の配色を取り込んで使う"),
     Triple("about", "掲示板", "要望や不具合は、運営要望板か GitHub の Issues へ"),
     Triple("about", "運営要望板を開く", ""),
     Triple("about", "ライセンス", "このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます"),

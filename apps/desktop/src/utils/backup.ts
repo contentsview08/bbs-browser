@@ -156,7 +156,7 @@ export function mergeNgRules(current: NgRule[], incoming: NgRule[], newId: () =>
 }
 
 /** 書き出すファイルの名前(日付入り) */
-export function backupFileName(kind: 'settings' | 'ng' | 'db', now = new Date()): string {
+export function backupFileName(kind: 'settings' | 'ng' | 'scheme' | 'db', now = new Date()): string {
   const d = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
   return kind === 'db' ? `OBB-${d}.db` : `OBB-${kind}-${d}.json`
 }

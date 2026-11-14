@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
 import { openJson, saveJson } from '../../host/backup'
+import { customToJson, parseCustom } from '../../ui/customScheme'
 import { type SettingsProps, Section } from './common'
 
 /** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
@@ -29,11 +30,20 @@ export function BackupTab({
     }
   }
 
-  /** 選んだファイルを、設定か NG かを見分けて読み込む */
-  const importFile = (expect: 'settings' | 'ng') =>
+  /** 選んだファイルを、設定か NG か配色かを見分けて読み込む */
+  const importFile = (expect: 'settings' | 'ng' | 'scheme') =>
     act(async () => {
       const text = await openJson()
       if (text === undefined) return undefined
+      // 自分の配色(「JSON をコピー」・配色の書き出しと同じ形)は、どの「読み込む」で選んでも取り込んで使う
+      const scheme = parseCustom(text.trim())
+      if (scheme) {
+        update('customScheme', customToJson(scheme))
+        update('followOsTheme', false)
+        update('scheme', 'custom')
+        return '自分の配色を読み込んで、使うようにしました'
+      }
+      if (expect === 'scheme') throw new Error('配色のファイルではありません')
       const parsed = parseBackup(text)
       if (parsed.kind === 'error') throw new Error(parsed.error)
       if (parsed.kind !== expect) throw new Error(expect === 'settings' ? '設定のファイルではありません(NG のファイルです)' : 'NG のファイルではありません(設定のファイルです)')
@@ -74,6 +84,22 @@ export function BackupTab({
             書き出す
           </button>
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => importFile('ng')}>
+            読み込む
+          </button>
+        </div>
+      </Section>
+      <Section title="自分の配色" note="表示 → 自分の配色で作った 6 色を JSON に書き出します。読み込むと、その配色に切り替えます(Android 版で書き出したものも読めます)">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={BTN_PRIMARY}
+            disabled={busy || !parseCustom(s.customScheme)}
+            title={parseCustom(s.customScheme) ? undefined : 'まだ自分の配色を作っていません'}
+            onClick={() => act(async () => ((await saveJson('scheme', JSON.parse(s.customScheme))) ? '書き出しました' : undefined))}
+          >
+            書き出す
+          </button>
+          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => importFile('scheme')}>
             読み込む
           </button>
         </div>

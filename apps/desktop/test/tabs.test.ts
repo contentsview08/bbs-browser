@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignGroup, closable, dissolveGroup, insertTab, moveTab, nextGroupColor, pruneGroups, removeFromGroup, segmentTabs, setPinned, visibleTabs, type TabGroup } from '../src/utils/tabs'
+import { assignGroup, closable, dissolveGroup, insertTab, isGroupPinned, moveTab, nextGroupColor, pruneGroups, removeFromGroup, segmentTabs, setGroupPinned, setPinned, visibleTabs, type TabGroup } from '../src/utils/tabs'
 
 type T = { id: string; pinned?: boolean; groupId?: string }
 const t = (id: string, extra: Partial<T> = {}): T => ({ id, ...extra })
@@ -68,6 +68,22 @@ describe('固定', () => {
   it('まとめて閉じるときは固定したタブを残す', () => {
     expect(ids(closable([t('P', { pinned: true }), t('A')]))).toBe('A')
   })
+  it('グループごとに固定すると、グループのまま左の列へ', () => {
+    const tabs = [t('P', { pinned: true }), t('X'), t('A', { groupId: 'g' }), t('B', { groupId: 'g' })]
+    const out = setGroupPinned(tabs, 'g', true)
+    expect(ids(out)).toBe('PABX')
+    expect(out.slice(1, 3).map((x) => [x.pinned, x.groupId])).toEqual([[true, 'g'], [true, 'g']])
+    expect(isGroupPinned(out, 'g')).toBe(true)
+    const back = setGroupPinned(out, 'g', false)
+    expect(ids(back)).toBe('PABX')
+    expect(isGroupPinned(back, 'g')).toBe(false)
+  })
+  it('固定したグループに入れたタブは固定になる', () => {
+    const tabs = [t('A', { pinned: true, groupId: 'g' }), t('X')]
+    const out = assignGroup(tabs, ['X'], 'g')
+    expect(ids(out)).toBe('AX')
+    expect(out[1]).toEqual({ id: 'X', pinned: true, groupId: 'g' })
+  })
 })
 
 describe('グループ', () => {
@@ -83,7 +99,7 @@ describe('グループ', () => {
     expect(ids(out)).toBe('ABDC')
     expect(out.map((x) => x.groupId)).toEqual([undefined, 'n', 'n', undefined])
   })
-  it('固定したタブを入れると固定が解ける', () => {
+  it('固定していないグループに固定したタブを入れると固定が解ける', () => {
     const tabs = [t('P', { pinned: true }), t('A', { groupId: 'g' })]
     const out = assignGroup(tabs, ['P'], 'g')
     expect(ids(out)).toBe('AP')
@@ -112,9 +128,9 @@ describe('グループ', () => {
 
 describe('帯に並べる', () => {
   const tabs = [t('P', { pinned: true }), t('A', { groupId: 'g' }), t('B', { groupId: 'g' }), t('C'), t('D', { groupId: 'h' })]
-  it('固定・グループ・ひとつのタブに分ける', () => {
+  it('グループとひとつのタブに分ける(固定したタブも同じ並びの中)', () => {
     const segs = segmentTabs(tabs, groups)
-    expect(segs.map((s) => s.kind)).toEqual(['pinned', 'group', 'tab', 'group'])
+    expect(segs.map((s) => s.kind)).toEqual(['tab', 'group', 'tab', 'group'])
     expect(segs[1].kind === 'group' && ids(segs[1].tabs)).toBe('AB')
   })
   it('折りたたんだグループのタブは見えない', () => {

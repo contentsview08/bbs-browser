@@ -1836,7 +1836,7 @@ export default function App() {
     setGroups((gs) => (gs.find((g) => g.id === t.groupId)?.collapsed ? gs.map((g) => (g.id === t.groupId ? { ...g, collapsed: false } : g)) : gs))
   }, [activeId])
   /** タブを固定する・固定を解く(utils/tabs.ts の決まりで並べ直す) */
-  const pinTabs = (ids: string[], on: boolean) => setTabs((ts) => setPinned(ts, ids, on))
+  const pinTabs = (ids: string[], on: boolean, keepGroup = false) => setTabs((ts) => setPinned(ts, ids, on, keepGroup))
   /** タブをグループに入れる。groupId がなければ新しいグループ(名前なし・使っていない色)を作って、その id を返す */
   const groupTabs = (ids: string[], groupId?: string): string => {
     const id = groupId ?? newGroupId()

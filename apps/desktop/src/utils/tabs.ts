@@ -1,7 +1,9 @@
-// タブの並びの決まり(固定・グループ)。Chrome・Edge と同じ:
-// - 固定したタブは左(縦なら上)にまとめて置き、幅を狭くする。まとめて閉じる操作(他のタブ・右側・すべて・未読なし・終わったスレ)では閉じない
+// タブの並びの決まり(固定・グループ)。Chrome・Edge に寄せつつ、固定したタブもふつうのタブと同じ見た目にする:
+// - 固定したタブは左(縦なら上)にまとめて置く(ピンの印を付ける)。まとめて閉じる操作(他のタブ・右側・すべて・未読なし・終わったスレ)では閉じない
 // - グループのタブは隣り合わせに置く。つかんで動かしてグループの中に落とすとそのグループに入り、外に出すと抜ける
-// - 固定したタブはグループに入れない(固定するときに抜ける)
+// - 固定はグループごとにもできる(そのグループの全部のタブが固定になり、グループのまま左の列に入る)。
+//   タブ 1 つだけを固定するときはグループから抜ける(グループの一部だけが左の列に行くと、隣り合わせでなくなるため)。
+//   固定したグループに入れたタブは固定になる
 // ここは配列を並べ替えるだけの純粋な関数。画面(TabBar)と状態(App)はこれを呼ぶ
 
 export interface TabGroup {
@@ -65,9 +67,8 @@ export function moveTab<T extends Arrangeable>(tabs: T[], id: string, index: num
   const rest = tabs.filter((t) => t.id !== id)
   const prev = rest[bounded - 1]
   const next = rest[bounded]
-  const groupId = tab.pinned
-    ? undefined
-    : prev?.groupId !== undefined && prev.groupId === next?.groupId
+  const groupId =
+    prev?.groupId !== undefined && prev.groupId === next?.groupId
       ? prev.groupId
       : tab.groupId !== undefined && (prev?.groupId === tab.groupId || next?.groupId === tab.groupId)
         ? tab.groupId
@@ -76,25 +77,40 @@ export function moveTab<T extends Arrangeable>(tabs: T[], id: string, index: num
   return [...rest.slice(0, bounded), moved, ...rest.slice(bounded)]
 }
 
-/** 固定する(固定の列の右端へ。グループからは抜ける)・固定を解く(固定でない列の左端へ) */
-export function setPinned<T extends Arrangeable>(tabs: T[], ids: string[], on: boolean): T[] {
+/**
+ * 固定する(固定の列の右端へ)・固定を解く(固定でない列の左端へ)。
+ * keepGroup: グループごとの固定(ids にそのグループの全部が入っている)。そうでなければグループから抜ける
+ */
+export function setPinned<T extends Arrangeable>(tabs: T[], ids: string[], on: boolean, keepGroup = false): T[] {
   const targets = tabs.filter((t) => ids.includes(t.id) && !!t.pinned !== on)
   if (targets.length === 0) return tabs
   const rest = tabs.filter((t) => !targets.includes(t))
   const at = pinnedCount(rest)
-  const changed = targets.map((t) => ({ ...t, pinned: on, groupId: undefined }))
+  const changed = targets.map((t) => ({ ...t, pinned: on, groupId: keepGroup ? t.groupId : undefined }))
   return [...rest.slice(0, at), ...changed, ...rest.slice(at)]
+}
+
+/** グループの全部のタブを固定する・固定を解く(グループのまま列を移る) */
+export function setGroupPinned<T extends Arrangeable>(tabs: T[], groupId: string, on: boolean): T[] {
+  return setPinned(tabs, tabs.filter((t) => t.groupId === groupId).map((t) => t.id), on, true)
+}
+
+/** そのグループが固定か(グループのタブが全部固定なら固定。タブがなければ false) */
+export const isGroupPinned = <T extends Arrangeable>(tabs: T[], groupId: string): boolean => {
+  const members = tabs.filter((t) => t.groupId === groupId)
+  return members.length > 0 && members.every((t) => t.pinned)
 }
 
 /**
  * タブをグループに入れる。グループにもうタブがあればその右端へ、まだなければ最初のタブの位置に作る。
- * 固定したタブは固定を解いて入れる(固定とグループは一緒にならない)
+ * 入れた先のグループが固定ならタブも固定に、そうでなければ固定を解く(グループの中で固定がそろうように)
  */
 export function assignGroup<T extends Arrangeable>(tabs: T[], ids: string[], groupId: string): T[] {
   const targets = tabs.filter((t) => ids.includes(t.id))
   if (targets.length === 0) return tabs
   const rest = tabs.filter((t) => !targets.includes(t))
-  const changed = targets.map((t) => (t.groupId === groupId && !t.pinned ? t : { ...t, pinned: false, groupId }))
+  const pinned = rest.some((t) => t.groupId === groupId) && isGroupPinned(rest, groupId)
+  const changed = targets.map((t) => (t.groupId === groupId && !!t.pinned === pinned ? t : { ...t, pinned, groupId }))
   const last = rest.map((t) => t.groupId).lastIndexOf(groupId)
   const at = last >= 0 ? last + 1 : Math.max(pinnedCount(rest), Math.min(rest.length, tabs.indexOf(targets[0])))
   return [...rest.slice(0, at), ...changed, ...rest.slice(at)]
@@ -128,15 +144,12 @@ export function pruneGroups<T extends Arrangeable>(groups: TabGroup[], tabs: T[]
   return groups.every((g) => used.has(g.id)) ? groups : groups.filter((g) => used.has(g.id))
 }
 
-/** 帯に並べるもの。固定したタブ・グループ(見出しの後ろにそのタブ)・ひとつのタブ。折りたたんだグループのタブは出さない */
-export type TabSegment<T> = { kind: 'pinned'; tabs: T[] } | { kind: 'group'; group: TabGroup; tabs: T[] } | { kind: 'tab'; tab: T }
+/** 帯に並べるもの。グループ(見出しの後ろにそのタブ)か、ひとつのタブ。固定したタブも同じ並びの中(先頭に寄っている) */
+export type TabSegment<T> = { kind: 'group'; group: TabGroup; tabs: T[] } | { kind: 'tab'; tab: T }
 
 export function segmentTabs<T extends Arrangeable>(tabs: T[], groups: TabGroup[]): TabSegment<T>[] {
   const out: TabSegment<T>[] = []
-  const pinned = tabs.filter((t) => t.pinned)
-  if (pinned.length > 0) out.push({ kind: 'pinned', tabs: pinned })
   for (const t of tabs) {
-    if (t.pinned) continue
     const group = t.groupId !== undefined ? groups.find((g) => g.id === t.groupId) : undefined
     if (!group) {
       out.push({ kind: 'tab', tab: t })

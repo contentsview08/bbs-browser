@@ -9,7 +9,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import BoardIcon from './BoardIcon'
 import { INPUT } from './DialogParts'
-import { TAB_GROUP_COLORS, TAB_GROUP_COLOR_KEYS, closable, moveTab, segmentTabs, visibleTabs, type TabGroup, type TabGroupColor } from '../utils/tabs'
+import { TAB_GROUP_COLORS, TAB_GROUP_COLOR_KEYS, closable, isGroupPinned, moveTab, segmentTabs, visibleTabs, type TabGroup, type TabGroupColor } from '../utils/tabs'
 
 export interface TabItem {
   id: string
@@ -58,7 +58,8 @@ interface Props {
   /** 縦に並べるときの帯の幅(px)。右の端をつかんで変えられる */
   sideWidth?: number
   onResize?: (width: number) => void
-  onPin: (ids: string[], on: boolean) => void
+  /** 固定する・解く。keepGroup はグループごとの固定(ids はそのグループの全部) */
+  onPin: (ids: string[], on: boolean, keepGroup?: boolean) => void
   /** グループに入れる。groupId がなければ新しいグループを作って、その id を返す */
   onGroup: (ids: string[], groupId?: string) => string
   onUngroup: (ids: string[]) => void
@@ -75,10 +76,6 @@ const DRAG_PX = 4
 
 const MAX_WIDTH = 220
 const MIN_WIDTH = 72
-/** 固定したタブの幅(横に並べるとき。アイコンだけ) */
-const PIN_WIDTH = 40
-/** 縦に並べるときの 1 行の高さ(h-8) */
-const ROW_HEIGHT = 32
 /** 縦に並べるときの帯の幅(既定と、つかんで変えられる範囲) */
 export const SIDE_WIDTH = 240
 const SIDE_WIDTH_MIN = 160
@@ -123,7 +120,7 @@ export default function TabBar(props: Props) {
 
   const segments = segmentTabs(props.tabs, props.groups)
   const visible = visibleTabs(props.tabs, props.groups)
-  const normalCount = visible.filter((t) => !t.pinned).length
+  const normalCount = visible.length
 
   useEffect(() => {
     const el = stripRef.current
@@ -169,8 +166,7 @@ export default function TabBar(props: Props) {
     const from = order.indexOf(id)
     if (from < 0) return
     const tab = props.tabs.find((t) => t.id === id)
-    // 縦に並べていても、固定したタブは上の格子に横に並ぶので横に動かす
-    const alongY = vertical && !tab?.pinned
+    const alongY = vertical
     const rects = els.map((x) => x.getBoundingClientRect())
     const centers = rects.map((r) => (alongY ? r.top + r.height / 2 : r.left + r.width / 2))
     const size = alongY ? rects[from].height : rects[from].width
@@ -382,7 +378,13 @@ export default function TabBar(props: Props) {
         { label: '未読のないタブを閉じる', disabled: closable(noUnread).length === 0, run: () => props.onClose(closableIds(noUnread)) },
         { label: '終わったスレ(落ち・満)のタブを閉じる', disabled: closable(ended).length === 0, run: () => props.onClose(closableIds(ended)) },
         { label: 'すべて閉じる', disabled: closable(props.tabs).length === 0, run: () => props.onClose(closableIds(props.tabs)) },
-        { label: me.pinned ? 'タブの固定を解除' : 'タブを固定', sep: true, run: () => props.onPin([menu.id], !me.pinned) },
+        // グループの中のタブは、グループごと固定する(タブ 1 つだけ固定するとグループから外れる)
+        ...(myGroup
+          ? [
+              { label: isGroupPinned(props.tabs, myGroup.id) ? `「${groupLabel(myGroup)}」の固定を解除` : `「${groupLabel(myGroup)}」を固定`, sep: true, run: () => props.onPin(props.tabs.filter((t) => t.groupId === myGroup.id).map((t) => t.id), !isGroupPinned(props.tabs, myGroup.id), true) },
+              ...(me.pinned ? [] : [{ label: 'このタブだけ固定(グループから外れます)', run: () => props.onPin([menu.id], true) }]),
+            ]
+          : [{ label: me.pinned ? 'タブの固定を解除' : 'タブを固定', sep: true, run: () => props.onPin([menu.id], !me.pinned) }]),
         ...groupItems([menu.id], me.groupId),
         ...(myGroup ? [{ label: `「${groupLabel(myGroup)}」から外す`, run: () => props.onUngroup([menu.id]) }] : []),
         { label: 'ログを削除して閉じる (Shift+Delete)', sep: true, run: () => props.onDeleteLogs([menu.id]) },
@@ -391,57 +393,6 @@ export default function TabBar(props: Props) {
   }
   const menuGroup = menu?.kind === 'group' ? props.groups.find((g) => g.id === menu.groupId) : undefined
   const groupTabs = (g: TabGroup) => props.tabs.filter((t) => t.groupId === g.id)
-
-  /** 固定したタブ(アイコンだけ。横は帯の左、縦は上の格子) */
-  const renderPinned = (t: TabItem) => {
-    const active = t.id === props.activeId
-    const selected = !active && props.selectedIds.has(t.id)
-    const vi = visibleIndex(t.id)
-    const dragging = drag?.id === t.id
-    return (
-      <div
-        key={t.id}
-        data-tab-id={t.id}
-        data-fixed=""
-        ref={active ? activeRef : undefined}
-        onClick={(e) => onTabClick(e, t.id)}
-        onDoubleClick={(e) => {
-          if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey) props.onRefresh?.(t.id)
-        }}
-        onMouseDown={(e) => onDragMouseDown(e, t.id)}
-        onAuxClick={(e) => {
-          if (e.button === 1) closeByPointer(t.id)
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          setMenu({ kind: 'tab', id: t.id, x: e.clientX, y: e.clientY })
-        }}
-        title={`${t.title}(固定)${t.ended ? ` ${ENDED[t.ended].name}` : ''}`}
-        style={{
-          width: vertical ? ROW_HEIGHT : PIN_WIDTH,
-          background: active ? 'var(--tab-active-fill)' : selected ? 'color-mix(in srgb, var(--tab-active-fill) 70%, transparent)' : undefined,
-          transform: dragging ? `translateX(${drag.delta}px)` : vertical ? undefined : `translateX(${shiftOf(vi)}px)`,
-          transition: dragging ? 'none' : 'transform 150ms ease-out, background-color 150ms',
-        }}
-        className={`relative flex-shrink-0 h-8 flex items-center justify-center cursor-pointer select-none ${vertical ? 'rounded-md' : 'rounded-t-lg'} ${
-          active ? 'z-10' : 'hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
-        } ${dragging ? 'z-30 shadow-lg' : ''}`}
-      >
-        {active && !vertical && <span className="absolute left-2 right-2 top-0 h-[2px] rounded-b-full bg-c-accent pointer-events-none" />}
-        {t.loading ? (
-          <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-        ) : t.ended ? (
-          <span className="w-[14px] h-[14px] rounded-sm flex items-center justify-center text-[10px] font-bold leading-none text-white" style={{ background: ENDED[t.ended].color }}>
-            {ENDED[t.ended].mark}
-          </span>
-        ) : (
-          <BoardIcon boardUrl={t.boardUrl} override={t.icon} size={16} />
-        )}
-        {/* 未読は数の代わりに点で(幅がないので) */}
-        {t.unread > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: 'var(--c-unread)' }} title={`未読 ${t.unread}`} />}
-      </div>
-    )
-  }
 
   /** グループの見出し。押すと折りたたむ・広げる。右クリックで名前と色 */
   const renderGroupHeader = (g: TabGroup, count: number) => {
@@ -468,6 +419,7 @@ export default function TabBar(props: Props) {
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: hex }} />
           <span className={`flex-1 min-w-0 truncate font-bold ${g.name ? '' : 'text-c-text-muted'}`}>{groupLabel(g)}</span>
           {g.collapsed && <span className="text-[10px] text-c-text-muted tabular-nums">{count}</span>}
+          {isGroupPinned(props.tabs, g.id) && <span className="material-symbols-outlined text-sm leading-none text-c-text-muted" title="固定したグループ">keep</span>}
         </div>
       )
     return (
@@ -484,6 +436,7 @@ export default function TabBar(props: Props) {
           className={`h-5 flex items-center rounded-full text-[11px] font-bold leading-none text-white max-w-[9rem] ${g.name || g.collapsed ? 'px-2' : 'w-5 justify-center'}`}
           style={{ background: hex, boxShadow: joining ? `0 0 0 2px var(--c-text-strong)` : undefined }}
         >
+          {isGroupPinned(props.tabs, g.id) && <span className="material-symbols-outlined text-[12px] leading-none mr-0.5">keep</span>}
           <span className="truncate">
             {g.name}
             {g.collapsed && ` ${count}`}
@@ -523,7 +476,7 @@ export default function TabBar(props: Props) {
           e.preventDefault()
           setMenu({ kind: 'tab', id: t.id, x: e.clientX, y: e.clientY })
         }}
-        title={t.ended ? `${t.title}(${ENDED[t.ended].name})` : t.title}
+        title={`${t.title}${t.pinned ? '(固定)' : ''}${t.ended ? `(${ENDED[t.ended].name})` : ''}`}
         style={{
           width: vertical ? undefined : tabWidth,
           background: active
@@ -588,6 +541,7 @@ export default function TabBar(props: Props) {
             +{t.unread}
           </span>
         )}
+        {/* 固定したタブはピンの印。マウスを乗せると × に替わる(固定していても自分で閉じるのはできる) */}
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
@@ -595,25 +549,32 @@ export default function TabBar(props: Props) {
             e.stopPropagation()
             closeByPointer(t.id)
           }}
-          className={`flex-shrink-0 p-0.5 rounded-full hover:bg-c-surface3 ${active ? '' : 'opacity-0 group-hover:opacity-100'}`}
-          title="閉じる (Ctrl+W)"
+          className={`relative flex-shrink-0 w-5 h-5 rounded-full hover:bg-c-surface3 ${active || t.pinned ? '' : 'opacity-0 group-hover:opacity-100'}`}
+          title={t.pinned ? '固定したタブ(閉じる: Ctrl+W)' : '閉じる (Ctrl+W)'}
         >
-          <span className="material-symbols-outlined text-sm leading-none">close</span>
+          {t.pinned && <span className="material-symbols-outlined text-sm leading-none absolute inset-0 flex items-center justify-center group-hover:opacity-0 text-c-text-muted">keep</span>}
+          <span className={`material-symbols-outlined text-sm leading-none absolute inset-0 flex items-center justify-center ${t.pinned ? 'opacity-0 group-hover:opacity-100' : ''}`}>close</span>
         </button>
       </div>
     )
   }
 
-  const body = segments.map((seg) => {
-    if (seg.kind === 'pinned')
-      return vertical ? (
-        <div key="pinned" className="flex flex-wrap gap-1 px-1.5 pb-1.5 mb-1 border-b border-c-border">
-          {seg.tabs.map(renderPinned)}
-        </div>
-      ) : (
-        seg.tabs.map(renderPinned)
-      )
-    if (seg.kind === 'tab') return renderTab(seg.tab)
+  /** 固定の列の最後のタブの id(そのあとに区切りを入れる) */
+  const lastPinnedId = [...props.tabs].reverse().find((t) => t.pinned)?.id
+  const pinnedDivider = lastPinnedId !== undefined && props.tabs.some((t) => !t.pinned)
+  /** 固定の列と残りの間の区切り(横は細い縦線、縦は横線) */
+  const divider = vertical ? (
+    <div key="pin-divider" className="mx-3 my-1 border-t border-c-border" />
+  ) : (
+    <span key="pin-divider" data-fixed="" className="flex-shrink-0 w-px h-5 mx-1 mb-1.5 self-center" style={{ background: 'color-mix(in srgb, var(--c-text-muted) 45%, transparent)' }} />
+  )
+  const body = segments.flatMap((seg) => {
+    const out = renderSegment(seg)
+    const tabsIn = seg.kind === 'tab' ? [seg.tab] : seg.tabs
+    return pinnedDivider && tabsIn.some((t) => t.id === lastPinnedId) ? [...out, divider] : out
+  })
+  function renderSegment(seg: (typeof segments)[number]): React.ReactNode[] {
+    if (seg.kind === 'tab') return [renderTab(seg.tab)]
     const hex = groupHex(seg.group)
     const inner = seg.group.collapsed ? [] : seg.tabs.map((t) => renderTab(t, hex))
     // 縦: グループのタブは見出しの下に少し字下げし、左にまっすぐな色の線を 1 本(タブごとではなくまとめて引く。角が丸まらない)
@@ -629,7 +590,7 @@ export default function TabBar(props: Props) {
           : []),
       ]
     return [renderGroupHeader(seg.group, seg.tabs.length), ...inner]
-  })
+  }
 
   const refreshAll = (
     <button
@@ -674,6 +635,11 @@ export default function TabBar(props: Props) {
           x={menu.x}
           y={menu.y}
           onChange={props.onGroupChange}
+          pinned={isGroupPinned(props.tabs, menuGroup.id)}
+          onPin={(on) => {
+            props.onPin(groupTabs(menuGroup).map((t) => t.id), on, true)
+            setMenu(undefined)
+          }}
           onDissolve={() => {
             props.onDissolveGroup(menuGroup.id)
             setMenu(undefined)
@@ -732,6 +698,8 @@ const GroupEditor = forwardRef<
     x: number
     y: number
     onChange: (g: TabGroup) => void
+    pinned: boolean
+    onPin: (on: boolean) => void
     onDissolve: () => void
     onCloseTabs: () => void
     onDone: () => void
@@ -742,7 +710,7 @@ const GroupEditor = forwardRef<
     <div
       ref={ref}
       className="fixed z-[9600] w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl p-3 text-sm flex flex-col gap-2"
-      style={clampPos(props.x, props.y, 256, 220)}
+      style={clampPos(props.x, props.y, 256, 250)}
       onKeyDown={(e) => {
         if (e.key === 'Escape' || e.key === 'Enter') props.onDone()
       }}
@@ -773,6 +741,9 @@ const GroupEditor = forwardRef<
       <div className="flex flex-col border-t border-c-border pt-1 -mx-1">
         <button type="button" onClick={() => props.onChange({ ...g, collapsed: !g.collapsed })} className="text-left px-2 py-1 rounded text-c-text-body hover:bg-c-surface2">
           {g.collapsed ? 'グループを広げる' : 'グループを折りたたむ'}
+        </button>
+        <button type="button" onClick={() => props.onPin(!props.pinned)} className="text-left px-2 py-1 rounded text-c-text-body hover:bg-c-surface2">
+          {props.pinned ? 'グループの固定を解除' : 'グループを固定(左の列へ)'}
         </button>
         <button type="button" onClick={props.onDissolve} className="text-left px-2 py-1 rounded text-c-text-body hover:bg-c-surface2">
           グループを解除(タブは残す)

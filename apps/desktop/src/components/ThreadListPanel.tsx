@@ -243,7 +243,8 @@ export default function ThreadListPanel(props: Props) {
   /** 上に出すタブ(設定の並び) */
   // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(スレ順(標準)は選んでいないのと同じなので足さない)
   const listed = props.tabs ?? ['unread', 'momentum', 'newest']
-  const tabs: ListTabKey[] = defaultSort && !listed.includes(defaultSort.mode as ListTabKey) ? [...listed, defaultSort.mode as ListTabKey] : listed
+  // タブを 1 つも出さない一覧(通知)には足さない
+  const tabs: ListTabKey[] = defaultSort && listed.length > 0 && !listed.includes(defaultSort.mode as ListTabKey) ? [...listed, defaultSort.mode as ListTabKey] : listed
   /** 閲覧履歴の「見た順」を逆にしている(最近見たものが下) */
   const [reversed, setReversed] = useState(false)
   // タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び。

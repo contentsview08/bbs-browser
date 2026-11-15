@@ -3023,7 +3023,8 @@ export default function App() {
           // 狭くて自動で 1 画面になったときは幅いっぱいに。設定で 1 画面にしたときは読みやすい幅で真ん中に
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
-          defaultSort={history ? 'subject' : settings.threadSort}
+          // 板のスレ一覧だけ設定の並びで。履歴・通知はサーバーの順がなく、並びのタブも出さない
+          defaultSort={history || notifView ? 'subject' : settings.threadSort}
           unreadFirst={!history && !notifView && settings.unreadFirst}
           onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!history && listOrder ? orderOf(listOrder) : undefined}

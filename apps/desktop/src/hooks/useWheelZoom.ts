@@ -1,14 +1,18 @@
 // Ctrl + ホイールで文字の大きさを変える(PC)
 import { useEffect, useRef, type MutableRefObject } from 'react'
-import { FONT_PX_MAX, FONT_PX_MIN, applyCssVar, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { FONT_PX_MAX, FONT_PX_MIN, applyCssVar, baseFontPx, replyFontDefaultPx, type AppSettings, type UpdateSetting } from '../ui/settings'
 
 /** 回し終えてから、文字の大きさを設定に書くまで待つ時間 */
 const WHEEL_ZOOM_COMMIT_MS = 300
 /** 大きさの表示を、回し終えてから消すまでの時間 */
 const WHEEL_ZOOM_HINT_MS = 900
 
+type ZoomKey = 'listFontPx' | 'postBodyPx' | 'replyFontPx'
+const ZOOM_NAMES: Record<ZoomKey, string> = { listFontPx: 'スレ一覧の文字', postBodyPx: 'レスの本文', replyFontPx: '書き込み欄の文字' }
+
 /**
  * Ctrl + ホイール: キーを受け取っている方(スレ一覧かスレ表示)の文字の大きさを 1px ずつ変える(WebView の画面ごとの拡大は止める)。
+ * 書き込み欄(data-zoom="reply" の中)の上で回したときは、書き込み欄の本文の文字を変える。
  * 刻みは溜めて処理する: 刻みごとに設定を書き換えると、そのたびにアプリ全体の描き直しと DB 書き込みの予約が走って重い。
  * 見た目は CSS の変数だけをコマごと(requestAnimationFrame)にまとめて変え、設定に書くのは回し終えて少し経ってから 1 回
  * 返すのは、回している間に大きさを出す要素に付ける ref。
@@ -23,7 +27,7 @@ export function useWheelZoom(
     acc: 0,
     update: updateSetting,
     /** まだ設定に書いていない大きさ(px)。回している間はこれが本当の値 */
-    pending: undefined as { key: 'listFontPx' | 'postBodyPx'; px: number } | undefined,
+    pending: undefined as { key: ZoomKey; px: number } | undefined,
     frame: 0,
     commitTimer: undefined as ReturnType<typeof setTimeout> | undefined,
     hintTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -49,10 +53,11 @@ export function useWheelZoom(
       const p = z.pending
       if (!p) return
       if (p.key === 'listFontPx') applyCssVar('--list-zoom', String(p.px / baseFontPx(settingsRef.current)))
+      else if (p.key === 'replyFontPx') applyCssVar('--reply-font-size', `${p.px}px`)
       else applyCssVar('--post-body-size', `${p.px}px`)
       const hint = zoomHintRef.current
       if (hint) {
-        hint.textContent = `${p.key === 'listFontPx' ? 'スレ一覧の文字' : 'レスの本文'} ${p.px}px`
+        hint.textContent = `${ZOOM_NAMES[p.key]} ${p.px}px`
         hint.style.opacity = '1'
         if (z.hintTimer) clearTimeout(z.hintTimer)
         z.hintTimer = setTimeout(() => (hint.style.opacity = '0'), WHEEL_ZOOM_HINT_MS)
@@ -67,8 +72,9 @@ export function useWheelZoom(
       const step = z.acc < 0 ? 1 : -1
       z.acc = 0
       const s = settingsRef.current
-      const base = baseFontPx(s)
-      const key = z.listFocused ? 'listFontPx' : 'postBodyPx'
+      const inReply = e.target instanceof Element && !!e.target.closest('[data-zoom="reply"]')
+      const key: ZoomKey = inReply ? 'replyFontPx' : z.listFocused ? 'listFontPx' : 'postBodyPx'
+      const base = key === 'replyFontPx' ? replyFontDefaultPx(s) : baseFontPx(s)
       // 一覧とスレ表示を行き来したら、前の方の分を先に書く
       if (z.pending && z.pending.key !== key) commit()
       const cur = z.pending?.px ?? (s[key] || base)

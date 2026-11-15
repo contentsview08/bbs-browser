@@ -267,6 +267,8 @@ export interface AppSettings {
   /** スレ表示のレスの本文・頭(名前・日付など)の文字の大きさ(px)。0 なら contentFontPx のまま */
   postBodyPx: number
   postHeadPx: number
+  /** PC: 書き込み欄の本文の文字の大きさ(px)。0 なら入力欄の既定(基本の文字の 0.875 倍)のまま。書き込み欄で Ctrl+ホイールを回すと変わる */
+  replyFontPx: number
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
   listPadPx: number
   postPadPx: number
@@ -558,6 +560,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mobileFontPx: 14,
   listFontPx: 0,
   postBodyPx: 0,
+  replyFontPx: 0,
   postHeadPx: 0,
   listPadPx: -1,
   postPadPx: -1,
@@ -767,6 +770,11 @@ export const BAR_PX_MIN = 32
 export const HEADER_PX_MAX = 120
 export const FOOTER_PX_MAX = 110
 /** レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字(メニュー・ボタン・ポップアップなどの部品だけ)から切り離す */
+/** 書き込み欄の本文の、決めていないときの文字の大きさ(px)。入力欄の text-sm(基本の文字の 0.875 倍)と同じ */
+export function replyFontDefaultPx(s: AppSettings): number {
+  return Math.round(baseFontPx(s) * 0.875)
+}
+
 export function contentFontPx(s: AppSettings): number {
   return isMobile ? s.mobileContentBasePx || DEFAULT_SETTINGS.mobileContentBasePx : s.contentBasePx || DEFAULT_SETTINGS.contentBasePx
 }
@@ -993,6 +1001,7 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   root.style.setProperty('--list-unzoom', listUnzoom(base, content))
   root.style.setProperty('--post-head-zoom', String((s.postHeadPx || content) / base))
   root.style.setProperty('--post-body-size', `${s.postBodyPx || content}px`)
+  root.style.setProperty('--reply-font-size', `${s.replyFontPx || replyFontDefaultPx(s)}px`)
   // スライダーの窓は、基本の文字を変えても大きさを変えない(打ち消す)
   root.style.setProperty('--dialog-zoom', isMobile ? '1' : String(16 / base))
   // ヘッダー・フッターの高さと文字(スマホ。文字は中身を比のまま拡大・縮小し、高さは拡大の分で割り戻して決めた高さに保つ)

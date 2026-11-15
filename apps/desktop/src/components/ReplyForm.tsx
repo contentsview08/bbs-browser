@@ -436,7 +436,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden" {...dropProps(media)}>
+    // data-zoom="reply": この中で Ctrl+ホイールを回すと、書き込み欄の本文の文字の大きさが変わる(hooks/useWheelZoom.ts)
+    <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden" data-zoom="reply" {...dropProps(media)}>
       {media.confirmView}
       {media.error && (
         <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
@@ -522,6 +523,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           disabled={!!props.disabled}
           wrap={isAA ? 'off' : undefined}
           className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed pb-6 ${aaClass}`}
+          style={{ fontSize: 'var(--reply-font-size)' }}
         />
           {measure && (measure.over.length > 0 || measure.messageBytes > 0) && (
             <span

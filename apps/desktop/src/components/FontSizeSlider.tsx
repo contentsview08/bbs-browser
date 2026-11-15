@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
-import { BAR_PX_MIN, listUnzoom, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, FOOTER_PX_MAX, HEADER_PX_MAX, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PAD_PX_MAX, ROOT_FONT_SIZE, SCREEN_PX_RANGE, applyCssVar, baseFontPx, contentFontPx, scaledPxRange, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { BAR_PX_MIN, listUnzoom, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, FOOTER_PX_MAX, HEADER_PX_MAX, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PAD_PX_MAX, ROOT_FONT_SIZE, SCREEN_PX_RANGE, applyCssVar, baseFontPx, contentFontPx, replyFontDefaultPx, scaledPxRange, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
 import { broadcast, toolKindOfThisWindow } from '../host/crossWindow'
 
@@ -269,6 +269,17 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
         onCommit={(px) => update('postHeadPx', px)}
         resettable
       />
+      {/* 書き込み欄は PC だけ(スマホの入力欄は OS のキーボードと合わせた大きさのまま) */}
+      {!isMobile && (
+        <FontSizeSlider
+          label="書き込み欄の本文(書き込み欄で Ctrl+ホイールでも変えられます)"
+          value={s.replyFontPx}
+          base={replyFontDefaultPx(s)}
+          preview={(px) => setCssVar('--reply-font-size', `${px}px`)}
+          onCommit={(px) => update('replyFontPx', px)}
+          resettable
+        />
+      )}
       <FontSizeSlider
         label="レスの本文の行間"
         value={s.postLineHeight}

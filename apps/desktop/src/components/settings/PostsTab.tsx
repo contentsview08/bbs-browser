@@ -1,6 +1,7 @@
 // 設定の「レス表示」。
 
 import { Fragment, useEffect, useState } from 'react'
+import { isMobile } from '../../utils/platform'
 import { POST_DOUBLE_CLICKS, ID_STYLES, ID_POSITIONS, DEFAULT_SETTINGS, LIGHTBOX_CLOSE_CLICKS } from '../../ui/settings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import FontSizeSlider, { PostFontSliders, setCssVar } from '../FontSizeSlider'
@@ -139,7 +140,8 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           value={s.thumbLoad}
           options={[
             { key: 'always' as const, name: 'いつも' },
-            { key: 'wifi' as const, name: 'Wi-Fi のときだけ' },
+            // PC は回線の種類が分からず「いつも」と同じになるので、スマホだけ
+            ...(isMobile ? [{ key: 'wifi' as const, name: 'Wi-Fi のときだけ' }] : []),
             { key: 'tap' as const, name: '押したら' },
             { key: 'never' as const, name: '出さない' },
           ]}

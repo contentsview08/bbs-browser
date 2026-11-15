@@ -404,7 +404,8 @@ private fun ListPage(vm: AppViewModel) {
     if (LocalAdvanced.current) Group("行の見た目") {
         ChoiceRow("行の形", p.listShape, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listShape = it }
     }
-    if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
+    // 「板を開いたときの並び」の説明がここを指すので、ふだんの設定に出す
+    Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
         val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
         val on = p.listTabs.split(',').filter { it.isNotEmpty() }
         @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
@@ -587,6 +588,7 @@ private fun WritePage(vm: AppViewModel) {
     // 書き込むと、そのとき使った名前に変わる(PC 版と同じ)。それを言っておかないと、設定が勝手に変わったように見える
     Group("名前", note = "書き込み欄に最初に入る名前です。書き込むと、そのとき使った名前に変わります(板ごとの名前を決めた板は別)") {
         TextRow("名前", p.postName, "名無し") { p.postName = it }
+        TextRow("メール", p.postMail, "sage など") { p.postMail = it }
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
         EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }

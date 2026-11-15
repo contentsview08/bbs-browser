@@ -200,11 +200,6 @@ function ThumbSpinner() {
   )
 }
 
-/** 日付を短くする(「2026/10/19(日) 12:34:56.78」→「10/19 12:34」)。読めない形ならそのまま */
-function shortDate(date: string): string {
-  const m = /(?:\d{2,4}\/)?(\d{1,2})\/(\d{1,2})[^\d]*?(\d{1,2}:\d{2})/.exec(date)
-  return m ? `${m[1]}/${m[2]} ${m[3]}` : date
-}
 
 /**
  * スマホ: AA の字を、横幅に収まるまで小さくする(横にずらして読むと、スワイプの操作とぶつかるため)。
@@ -825,9 +820,9 @@ function PostArticle(props: Props) {
           {ngChip}
           {/* 番号は名前のすぐ後ろに(右端はマウスを乗せたときの操作バーと重なるため) */}
           <span className="flex-shrink-0 text-xs">{numBtn('#', isMobile ? HEAD_TEXT : 'text-sm')}</span>
-          {/* スマホは日付を短く(「10/19 12:34」)して、頭を 1〜2 行に収める */}
+          {/* 日時は設定の「日時の出し方」に従う(スマホの既定は短い形「10/19 12:34」) */}
           <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
-            {isMobile ? shortDate(post.date) : shownDate}
+            {shownDate}
           </span>
           {idInHeader}
           {voteChip}

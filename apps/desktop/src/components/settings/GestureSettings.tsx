@@ -3,6 +3,7 @@ import GestureRecorder, { gestureArrows } from '../GestureRecorder'
 import ActionSheet from '../ActionSheet'
 import { GESTURE_ACTIONS } from '../../utils/gestures'
 import { type SettingsProps, Section, Choice } from './common'
+import { DEFAULT_SETTINGS } from '../../ui/settings'
 
 /** スマホ: 画面ごとに、スワイプに割り当てる操作と、感度 */
 export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
@@ -65,6 +66,9 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
           ]}
           onChange={(v) => update('gestureSensitivity', v)}
         />
+        <button type="button" onClick={() => update('swipeGestures', DEFAULT_SETTINGS.swipeGestures)} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
+          割り当てをすべて既定に戻す
+        </button>
       </Section>
       {picking && (
         <ActionSheet

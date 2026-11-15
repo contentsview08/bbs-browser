@@ -36,6 +36,10 @@ export interface Tab {
   liveRefreshAt?: number
   /** レスへの反応の数(ふたばのそうだねなど)。キーはレスの画面の番号(ref があれば ref)、中は反応の id → 数 */
   reactions?: Map<number, Record<string, number>>
+  /** 固定したタブ(左にまとめて置き、まとめて閉じる操作では閉じない。utils/tabs.ts) */
+  pinned?: boolean
+  /** 入っているタブグループ */
+  groupId?: string
 }
 
 /** アプリ側の処理。どれも関数そのものは変わらない(描き直しても同じもの) */

@@ -27,6 +27,7 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'imgurClientId',
   'openTabs',
   'activeTab',
+  'tabGroups',
   'lastBoardUrl',
   'backgroundImage',
   'imageSaveDir',

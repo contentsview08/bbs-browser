@@ -302,6 +302,25 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         />
         )}
         {s.tabsEnabled && (
+          <div>
+          <p className="text-sm text-c-text-body mb-1">タブの置き場</p>
+          <Choice
+            value={s.tabLayout}
+            options={[
+              { key: 'top' as const, name: 'スレ表示の上に横に並べる' },
+              { key: 'side' as const, name: 'スレ表示の左に縦に並べる(垂直タブ。題名が長くても読めます)' },
+            ]}
+            onChange={(v) => update('tabLayout', v)}
+          />
+          </div>
+        )}
+        {s.tabsEnabled && (
+          <p className="text-xs text-c-text-muted">
+            タブを右クリックすると、固定(左にまとめて置き、まとめて閉じる操作では閉じません)・グループ(色と名前を付けてまとめ、見出しを押すと折りたたみます)・
+            未読のないタブや終わったスレのタブをまとめて閉じる、ができます。つかんで動かすと並べ替え、グループの中に落とすとそのグループに入ります
+          </p>
+        )}
+        {s.tabsEnabled && (
         <Toggle
           checked={s.tabWheelSwitch}
           onChange={(v) => update('tabWheelSwitch', v)}

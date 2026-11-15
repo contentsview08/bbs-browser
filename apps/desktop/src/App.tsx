@@ -51,6 +51,7 @@ import { PostHistoryList } from './components/PostHistoryDialog'
 import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
+import { assignGroup, closable, dissolveGroup, insertTab, moveTab, newGroupId, nextGroupColor, pruneGroups, removeFromGroup, setPinned, type TabGroup } from './utils/tabs'
 import { describeExtras, type BackupExtras } from './utils/backup'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { setLightboxCloseClick } from './components/Lightbox'
@@ -303,6 +304,8 @@ export default function App() {
   const historyShownRef = useRef(historyShown)
   historyShownRef.current = historyShown
   const [tabs, setTabs] = useState<Tab[]>([])
+  /** タブグループ(名前・色・折りたたみ)。タブがなくなったグループは消える */
+  const [groups, setGroups] = useState<TabGroup[]>([])
   /** Ctrl/Shift+クリックで選んだタブ */
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
   const [refreshingAll, setRefreshingAll] = useState(false)
@@ -1299,8 +1302,10 @@ export default function App() {
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
         if (i < 0) return [...ts, newTab(t)]
-        if (!inNew) return ts.map((x, j) => (j === i ? newTab(t) : x))
-        return [...ts.slice(0, i + 1), newTab(t), ...ts.slice(i + 1)]
+        // 置き換えるときは、固定・グループはそのタブのまま(Chrome の固定したタブで別のページへ移るのと同じ)
+        if (!inNew) return ts.map((x, j) => (j === i ? { ...newTab(t), pinned: x.pinned, groupId: x.groupId } : x))
+        // 新しいタブは開いているタブの右に(同じグループに入る。固定したタブの右なら固定の列の外に)
+        return insertTab(ts, newTab(t), current)
       })
       // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
       updateView((s) => showThread(s, id, (opts.record ?? true) ? threadEntry(t) : undefined))
@@ -1632,7 +1637,8 @@ export default function App() {
         return true
       case 'closeAllTabs':
         setSelectedTabs(new Set())
-        closeTabs(ids)
+        // 固定したタブは残す
+        closeTabs(closable(tabsRef.current).map((t) => t.id))
         return true
       case 'deleteLogAndClose': {
         const targets = targetTabs()
@@ -1785,8 +1791,9 @@ export default function App() {
     if (restored.current || !settingsLoaded || !store) return
     restored.current = true
     // いまは使えないコネクタのスレは戻さない(描画の中で例外になり、起動できなくなる)
-    const ts = settings.openTabs.filter((s) => findConnector(s.connectorId)).map((s) => newTab(fromSaved(s)))
+    const ts = settings.openTabs.filter((s) => findConnector(s.connectorId)).map((s) => ({ ...newTab(fromSaved(s)), pinned: s.pinned, groupId: s.groupId }))
     setTabs(ts)
+    setGroups(pruneGroups(settings.tabGroups, ts))
     const active = ts.find((t) => t.id === settings.activeTab) ?? ts[0]
     if (active) {
       updateView((s) => selectQuietly(s, active.id))
@@ -1803,12 +1810,40 @@ export default function App() {
         title: t.log?.title || t.thread.title,
         postCount: t.thread.postCount,
         createdAt: t.thread.createdAt?.getTime(),
+        ...(t.pinned ? { pinned: true } : {}),
+        ...(t.groupId !== undefined ? { groupId: t.groupId } : {}),
       }),
     ),
   )
   useEffect(() => {
     if (restored.current) updateSetting('openTabs', JSON.parse(savedTabs) as SavedTab[])
   }, [savedTabs])
+  useEffect(() => {
+    if (restored.current) updateSetting('tabGroups', groups)
+  }, [groups])
+  // 最後のタブを閉じたグループは消す(Chrome と同じ)
+  useEffect(() => {
+    setGroups((gs) => pruneGroups(gs, tabs))
+  }, [tabs])
+  // 折りたたんだグループの中のタブを開いたら、そのグループを広げる(開いているタブが見えないままにしない)
+  useEffect(() => {
+    const t = tabsRef.current.find((x) => x.id === activeId)
+    if (t?.groupId === undefined) return
+    setGroups((gs) => (gs.find((g) => g.id === t.groupId)?.collapsed ? gs.map((g) => (g.id === t.groupId ? { ...g, collapsed: false } : g)) : gs))
+  }, [activeId])
+  /** タブを固定する・固定を解く(utils/tabs.ts の決まりで並べ直す) */
+  const pinTabs = (ids: string[], on: boolean) => setTabs((ts) => setPinned(ts, ids, on))
+  /** タブをグループに入れる。groupId がなければ新しいグループ(名前なし・使っていない色)を作って、その id を返す */
+  const groupTabs = (ids: string[], groupId?: string): string => {
+    const id = groupId ?? newGroupId()
+    if (groupId === undefined) setGroups((gs) => [...gs, { id, name: '', color: nextGroupColor(gs) }])
+    setTabs((ts) => assignGroup(ts, ids, id))
+    return id
+  }
+  const ungroupTabs = (ids: string[]) => setTabs((ts) => removeFromGroup(ts, ids))
+  const changeGroup = (g: TabGroup) => setGroups((gs) => gs.map((x) => (x.id === g.id ? g : x)))
+  /** グループを解く(タブは残る。タブがなくなるので上の効果でグループも消える) */
+  const dissolveTabGroup = (groupId: string) => setTabs((ts) => dissolveGroup(ts, groupId))
   useEffect(() => {
     if (restored.current) updateSetting('activeTab', activeId ?? '')
   }, [activeId])
@@ -2491,6 +2526,44 @@ export default function App() {
   const deferredPane = useDeferredValue(activeId)
   const paneId = activeTab && !activeTab.log ? activeId : deferredPane
   const switchingPane = paneId !== activeId
+  /** タブの帯(PC)。置き場(上・左)は描くところで決める */
+  const tabBar = (
+    <TabBar
+      tabs={tabs.map((t) => ({
+        id: t.id,
+        title: t.log?.title || t.thread.title,
+        // ログのレス数に加えて、スレ一覧などの取り直しで分かった新着も数える(タブを開き直さなくても +n が出る)
+        unread: t.log ? unreadCount(t.readNo, t.log.postCount, knownCount(t.id)) : 0,
+        loaded: !!t.log,
+        loading: t.loading,
+        ended: t.log?.status === 'archived' ? 'archived' : t.log && isFull(t.thread, t.log.posts) ? 'full' : undefined,
+        boardUrl: t.thread.boardUrl,
+        icon: settings.boardMeta[t.thread.boardUrl]?.icon,
+        pinned: t.pinned,
+        groupId: t.groupId,
+      }))}
+      groups={groups}
+      activeId={tabPreview ?? activeId}
+      onSelect={selectTab}
+      onClose={closeTabs}
+      onRefreshAll={() => void refreshAll()}
+      wheelSwitch={settings.tabWheelSwitch}
+      vertical={settings.tabLayout === 'side'}
+      onRefresh={(id) => {
+        if (activeTab?.id === id) void refreshThread()
+      }}
+      refreshingAll={refreshingAll}
+      onDeleteLogs={(ids) => confirmDeleteLogs(ids)}
+      selectedIds={selectedTabs}
+      onSelectionChange={setSelectedTabs}
+      onReorder={(id, index) => setTabs((ts) => moveTab(ts, id, index))}
+      onPin={pinTabs}
+      onGroup={groupTabs}
+      onUngroup={ungroupTabs}
+      onGroupChange={changeGroup}
+      onDissolveGroup={dissolveTabGroup}
+    />
+  )
   /**
    * 見ているスレ(2 画面ならいつも開いているタブ、1 画面ならスレ表示を出しているとき)の通知は、通知センターから消す。
    * 知らせの元のスレを開いたら、その知らせは用済み(溜まり続けて、数の印がいつまでも消えないのを防ぐ)。
@@ -3013,43 +3086,11 @@ export default function App() {
         onPointerDownCapture={() => setFocusPane('thread')}
       >
         {!single && <FocusLine on={!listFocused} />}
-        {!isMobile && settings.tabsEnabled && (
-        <TabBar
-          tabs={tabs.map((t) => ({
-            id: t.id,
-            title: t.log?.title || t.thread.title,
-            // ログのレス数に加えて、スレ一覧などの取り直しで分かった新着も数える(タブを開き直さなくても +n が出る)
-            unread: t.log ? unreadCount(t.readNo, t.log.postCount, knownCount(t.id)) : 0,
-            loading: t.loading,
-            ended:
-              t.log?.status === 'archived' ? 'archived' : t.log && isFull(t.thread, t.log.posts) ? 'full' : undefined,
-            boardUrl: t.thread.boardUrl,
-            icon: settings.boardMeta[t.thread.boardUrl]?.icon,
-          }))}
-          activeId={tabPreview ?? activeId}
-          onSelect={selectTab}
-          onClose={closeTabs}
-          onRefreshAll={() => void refreshAll()}
-          wheelSwitch={settings.tabWheelSwitch}
-          onRefresh={(id) => {
-            if (activeTab?.id === id) void refreshThread()
-          }}
-          refreshingAll={refreshingAll}
-          onDeleteLogs={(ids) => confirmDeleteLogs(ids)}
-          selectedIds={selectedTabs}
-          onSelectionChange={setSelectedTabs}
-          onReorder={(id, index) =>
-            setTabs((ts) => {
-              const from = ts.findIndex((t) => t.id === id)
-              if (from < 0) return ts
-              const next = [...ts]
-              const [moved] = next.splice(from, 1)
-              next.splice(index, 0, moved)
-              return next
-            })
-          }
-        />
-        )}
+        {/* タブの帯は、設定に合わせてスレ表示の上(横)か左(縦)に置く */}
+        <div className="flex-1 min-h-0 flex">
+        {!isMobile && settings.tabsEnabled && settings.tabLayout === 'side' && tabBar}
+        <div className="flex-1 min-w-0 flex flex-col">
+        {!isMobile && settings.tabsEnabled && settings.tabLayout !== 'side' && tabBar}
 
         {/* 最近開いたタブのスレ表示は残しておき、切り替えは見せる・隠すだけにする(作り直さない) */}
         <div className="relative flex-1 min-h-0 flex">
@@ -3102,6 +3143,8 @@ export default function App() {
               <div className="text-c-text-muted text-sm">スレッドを選択してください</div>
             </main>
           )}
+        </div>
+        </div>
         </div>
       </div>
       </div>

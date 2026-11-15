@@ -1,6 +1,7 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
 // 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
 // 実際の色や余白は theme/theme.css・theme/patterns.css が CSS 変数で切り替える。
+import type { TabGroup } from '../utils/tabs'
 import { AI_NG_SAMPLES, type AiNgOverride, type AiNgRule } from '../utils/aiNg'
 import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './customScheme'
@@ -209,7 +210,13 @@ export interface SavedTab {
   title: string
   postCount: number
   createdAt?: number
+  /** 固定したタブ(utils/tabs.ts) */
+  pinned?: boolean
+  /** 入っているタブグループ(tabGroups の id) */
+  groupId?: string
 }
+/** PC: タブの置き場。top: スレ表示の上に横に並べる / side: スレ表示の左に縦に並べる(Edge の垂直タブ) */
+export type TabLayout = 'top' | 'side'
 
 /** 板ごとの情報(お気に入り板の編集画面で設定する)。どれも空なら既定のまま */
 export interface BoardMeta {
@@ -352,6 +359,10 @@ export interface AppSettings {
   openTabs: SavedTab[]
   /** 開いていたタブ(threadId) */
   activeTab: string
+  /** 開いていたタブのグループ(名前・色・折りたたみ。openTabs の groupId が指す) */
+  tabGroups: TabGroup[]
+  /** PC: タブの置き場 */
+  tabLayout: TabLayout
   // レス表示
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
@@ -605,6 +616,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lightboxCloseClick: 'right',
   openTabs: [],
   activeTab: '',
+  tabGroups: [],
+  tabLayout: 'top',
   openPosition: 'unread',
   anchorPopup: 'click',
   postThumbSize: 80,

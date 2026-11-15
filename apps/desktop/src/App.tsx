@@ -1818,13 +1818,17 @@ export default function App() {
   useEffect(() => {
     if (restored.current) updateSetting('openTabs', JSON.parse(savedTabs) as SavedTab[])
   }, [savedTabs])
+  // 保存と整理は、配列そのものではなく中身の文字列を見て行う。tabs・groups の配列は、同じ中身でも描き直しのたびに
+  // 別の配列になることがある(transition の中の更新を React が作り直すため)ので、配列の同一性に効果を掛けると描き直しが止まらなくなる
+  const groupsJson = JSON.stringify(groups)
   useEffect(() => {
-    if (restored.current) updateSetting('tabGroups', groups)
-  }, [groups])
-  // 最後のタブを閉じたグループは消す(Chrome と同じ)
+    if (restored.current) updateSetting('tabGroups', JSON.parse(groupsJson) as TabGroup[])
+  }, [groupsJson])
+  // 最後のタブを閉じたグループは消す(Chrome と同じ)。使っているグループの顔ぶれが変わったときだけ見る
+  const usedGroupKey = [...new Set(tabs.map((t) => t.groupId).filter((g): g is string => g !== undefined))].sort().join('\n')
   useEffect(() => {
-    setGroups((gs) => pruneGroups(gs, tabs))
-  }, [tabs])
+    setGroups((gs) => pruneGroups(gs, tabsRef.current))
+  }, [usedGroupKey])
   // 折りたたんだグループの中のタブを開いたら、そのグループを広げる(開いているタブが見えないままにしない)
   useEffect(() => {
     const t = tabsRef.current.find((x) => x.id === activeId)

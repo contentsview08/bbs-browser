@@ -340,7 +340,7 @@ export default function TabBar(props: Props) {
         { label: '他のタブを閉じる', disabled: closable(others).length === 0, run: () => props.onClose(closableIds(others)) },
         { label: `${after}のタブを閉じる`, disabled: closable(rightSide).length === 0, run: () => props.onClose(closableIds(rightSide)) },
         { label: '未読のないタブを閉じる', disabled: closable(noUnread).length === 0, run: () => props.onClose(closableIds(noUnread)) },
-        { label: `終わったスレのタブを閉じる(落ち・満 ${closable(ended).length})`, disabled: closable(ended).length === 0, run: () => props.onClose(closableIds(ended)) },
+        { label: '終わったスレ(落ち・満)のタブを閉じる', disabled: closable(ended).length === 0, run: () => props.onClose(closableIds(ended)) },
         { label: 'すべて閉じる', disabled: closable(props.tabs).length === 0, run: () => props.onClose(closableIds(props.tabs)) },
         { label: me.pinned ? 'タブの固定を解除' : 'タブを固定', sep: true, run: () => props.onPin([menu.id], !me.pinned) },
         ...groupItems([menu.id], me.groupId),
@@ -592,8 +592,8 @@ export default function TabBar(props: Props) {
       {menu && menuItems.length > 0 && (
         <div
           ref={menuRef}
-          className="fixed z-[9600] w-56 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 text-sm"
-          style={clampPos(menu.x, menu.y, 224, menuItems.length * 32 + 24)}
+          className="fixed z-[9600] w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 text-sm"
+          style={clampPos(menu.x, menu.y, 256, menuItems.length * 32 + 24)}
         >
           {menuItems.map((m, i) => (
             <button

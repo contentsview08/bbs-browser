@@ -1192,7 +1192,7 @@ private fun BackupPage(vm: AppViewModel) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
     val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
-    Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイトを 1 つのファイルに書き出します。スレのログは入りません") {
+    Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴を 1 つのファイルに書き出します。スレのログは入りません。戻すと設定は置き換え、お気に入りなどは今あるものに足します。PC 版で書き出した設定・NG のファイルも読めます") {
         ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
         ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }

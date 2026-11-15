@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { DEFAULT_SETTINGS, accentKeyOf, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
-import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
+import { describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
 import { openJson, saveJson } from '../../host/backup'
 import { customToJson, parseCustom } from '../../ui/customScheme'
 import { type SettingsProps, Section } from './common'
@@ -12,7 +12,9 @@ export function BackupTab({
   update,
   onBackupDb,
   onRestoreDb,
-}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb'>) {
+  onExportExtras,
+  onImportExtras,
+}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onExportExtras' | 'onImportExtras'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -52,7 +54,9 @@ export function BackupTab({
       if (parsed.kind === 'settings') {
         const values = importableSettings(parsed, DEFAULT_SETTINGS)
         for (const [k, v] of Object.entries(values)) update(k as keyof AppSettings, v as never)
-        return `設定を読み込みました(${Object.keys(values).length} 項目)`
+        // お気に入り板・スレ・サイト・画像の履歴は今あるものに足す(Android 版のバックアップにも入っている)
+        const added = describeExtras(parsed) && onImportExtras ? await onImportExtras(parsed) : ''
+        return `設定を読み込みました(${Object.keys(values).length} 項目${added ? `。${added}` : ''})`
       }
       const { rules, added } = mergeNgRules(s.ngRules, parsed.rules, () => crypto.randomUUID())
       update('ngRules', rules, s.ngRules)
@@ -69,10 +73,10 @@ export function BackupTab({
       )}
       <Section
         title="設定"
-        note="表示・スレ一覧・キー操作などの設定を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません"
+        note="表示・スレ一覧・キー操作などの設定と、お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません。読み込むと設定は置き換え、お気に入りなどは今あるものに足します。Android 版のバックアップも読めます"
       >
         <div className="flex gap-2">
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(async () => ((await saveJson('settings', settingsFile(s))) ? '書き出しました' : undefined))}>
+          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(async () => ((await saveJson('settings', settingsFile(s, await onExportExtras?.()))) ? '書き出しました' : undefined))}>
             書き出す
           </button>
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => importFile('settings')}>

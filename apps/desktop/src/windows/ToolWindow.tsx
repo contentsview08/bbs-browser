@@ -9,6 +9,7 @@ import { useSettings } from '../ui/settings'
 import { broadcast, callMain, onBroadcast, onToolOpen, toolKindOfThisWindow } from '../host/crossWindow'
 import { mirrorAiModelStatus } from '../hooks/useAiNg'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { BackupExtras } from '../utils/backup'
 import { backupDatabase, restoreDatabase } from '../host/backup'
 import SettingsDialog, { type SettingsTab } from '../components/SettingsDialog'
 import NgManager from '../components/NgManager'
@@ -106,6 +107,8 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
           .then(() => reloadAccounts())
           .then(() => broadcast('accounts-changed', null))
           .catch(backgroundError('アカウントの削除')),
+      onExportExtras: () => callMain<BackupExtras>('exportBackupExtras'),
+      onImportExtras: (e: BackupExtras) => callMain<string>('importBackupExtras', e).then((r) => reloadFavorites().then(() => reloadSites()).then(() => r)),
       onBackupDb: () => backupDatabase(),
       onRestoreDb: restoreDatabase,
       onPruneLogs: () => callMain<number>('pruneLogs'),

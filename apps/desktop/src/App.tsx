@@ -51,6 +51,7 @@ import { PostHistoryList } from './components/PostHistoryDialog'
 import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
+import { describeExtras, type BackupExtras } from './utils/backup'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { setLightboxCloseClick } from './components/Lightbox'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -2334,6 +2335,69 @@ export default function App() {
     await reloadFavorites(store)
   }
 
+  /** 設定のファイルに一緒に入れる、お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴 */
+  const exportBackupExtras = async (): Promise<BackupExtras> => {
+    if (!store) return {}
+    const [boards, threads, siteList, ups] = await Promise.all([store.listFavorites(), store.listFavoriteThreads(), store.listSites(), store.listUploads()])
+    return {
+      favoriteBoards: boards.map((b) => ({ url: b.url, name: b.name })),
+      favoriteThreads: threads.map((f) => ({ boardUrl: f.thread.boardUrl, key: f.thread.key, title: f.thread.title })),
+      sites: siteList.map((x) => ({ url: x.menuUrl, name: x.name })),
+      uploads: ups,
+    }
+  }
+  /**
+   * 設定のファイルから読んだお気に入りなどを、今あるものに足す(同じものは重ねない。読めない URL は飛ばす)。
+   * 板・スレの URL はコネクタで確かめ、この端末で扱えないもの(家の中のアドレスなど)は入れない。足した数の言い方を返す
+   */
+  const importBackupExtras = async (e: BackupExtras): Promise<string> => {
+    if (!store) return ''
+    const ops = new UserOps(store)
+    const have = new Set((await store.listFavorites()).map((b) => b.url))
+    let boards = 0
+    for (const b of e.favoriteBoards ?? []) {
+      const r = await resolve(b.url).catch(() => undefined)
+      if (!r || have.has(r.board.url)) continue
+      await ops.favoriteBoardAdd({ ...r.board, name: b.name || r.board.name })
+      have.add(r.board.url)
+      boards++
+    }
+    const haveThreads = new Set((await store.listFavoriteThreads()).map((f) => threadId(f.thread)))
+    let threads = 0
+    for (const t of e.favoriteThreads ?? []) {
+      const r = await resolve(t.boardUrl).catch(() => undefined)
+      if (!r) continue
+      const summary: ThreadSummary = { connectorId: r.board.connectorId, boardUrl: r.board.url, key: t.key, title: t.title, postCount: 0, order: 0 }
+      if (haveThreads.has(threadId(summary))) continue
+      await ops.favoriteThreadAdd(summary)
+      haveThreads.add(threadId(summary))
+      threads++
+    }
+    const haveSites = new Set((await store.listSites()).map((x) => x.menuUrl))
+    let siteCount = 0
+    for (const x of e.sites ?? []) {
+      if (haveSites.has(x.url)) continue
+      await addSite(x.name, x.url).catch(() => undefined)
+      haveSites.add(x.url)
+      siteCount++
+    }
+    const haveUploads = new Set((await store.listUploads()).map((u) => u.url))
+    let uploadCount = 0
+    for (const u of e.uploads ?? []) {
+      if (haveUploads.has(u.url)) continue
+      await ops.uploadAdd(u, u.uploadedAt)
+      uploadCount++
+    }
+    await Promise.all([reloadFavorites(store), reloadFavThreads(store), store.listSites().then(setSites)])
+    if (uploads) setUploads(await store.listUploads())
+    return describeExtras({
+      favoriteBoards: Array.from({ length: boards }, () => ({ url: '', name: '' })),
+      favoriteThreads: Array.from({ length: threads }, () => ({ boardUrl: '', key: '', title: '' })),
+      sites: Array.from({ length: siteCount }, () => ({ url: '', name: '' })),
+      uploads: Array.from({ length: uploadCount }, () => ({ url: '', name: '', size: 0, uploadedAt: 0, withAccount: false })),
+    }) || 'お気に入りなどは足すものがありませんでした'
+  }
+
   const addSite = async (name: string, menuUrl: string) => {
     if (!store) return
     const host = new URL(menuUrl).host // URL として読めなければここで例外になる
@@ -2359,8 +2423,8 @@ export default function App() {
     const [boards, favBoards, favThreads] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavorites(), store.listFavoriteThreads()])
     return [...boards.flat().map((b) => b.url), ...favBoards.map((b) => b.url), ...favThreads.map((f) => f.thread.boardUrl)]
   }
-  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus })
-  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus }
+  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras })
+  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras }
   useEffect(() => {
     if (!store || !canOpenToolWindow) return
     const offs = [
@@ -2375,6 +2439,8 @@ export default function App() {
           void getCurrentWindow().setFocus()
         },
         addFavoriteUrl: (url: string) => rpcRef.current.addFavoriteUrl(url),
+        exportBackupExtras: () => rpcRef.current.exportBackupExtras(),
+        importBackupExtras: (e: BackupExtras) => rpcRef.current.importBackupExtras(e),
         addSite: ({ name, menuUrl }: { name: string; menuUrl: string }) => rpcRef.current.addSite(name, menuUrl),
         login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),
         pruneLogs: () => rpcRef.current.pruneLogs(),
@@ -2659,6 +2725,8 @@ export default function App() {
     onLogin: saveAndLogin,
     onSaveAccount: (a: Parameters<typeof saveAccount>[0]) => void run(null, () => saveAccount(a)),
     onDeleteAccount: (c: Parameters<typeof deleteAccount>[0], a: Parameters<typeof deleteAccount>[1]) => void run(null, () => deleteAccount(c, a)),
+    onExportExtras: exportBackupExtras,
+    onImportExtras: importBackupExtras,
     onBackupDb: () => (store ? backupDatabase() : Promise.resolve(false)),
     onRestoreDb: restoreDatabase,
     onPruneLogs: pruneLogs,

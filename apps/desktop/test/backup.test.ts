@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '../src/ui/settings'
-import { backupFileName, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../src/utils/backup'
+import { backupFileName, describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../src/utils/backup'
 import type { NgRule } from '../src/utils/ng'
 
 const rule = (pattern: string, target: NgRule['target'] = 'content'): NgRule => ({
@@ -205,5 +205,57 @@ describe('backupFileName', () => {
     expect(backupFileName('settings', d)).toBe('OBB-settings-20260102.json')
     expect(backupFileName('ng', d)).toBe('OBB-ng-20260102.json')
     expect(backupFileName('db', d)).toBe('OBB-20260102.db')
+  })
+})
+
+describe('お気に入りなどを一緒に書き出す・Android 版のファイルを読む', () => {
+  const extras = {
+    favoriteBoards: [{ url: 'https://x.test/a/', name: '板 A' }],
+    favoriteThreads: [{ boardUrl: 'https://x.test/a/', key: '1700000000', title: 'スレ 1' }],
+    sites: [{ url: 'https://x.test/bbsmenu.json', name: 'サイト' }],
+    uploads: [{ url: 'https://i.test/1.png', name: '1.png', size: 10, uploadedAt: 1700000000000, withAccount: false, hash: 'ab', deleteUrl: 'https://i.test/del' }],
+  }
+
+  it('書き出したお気に入り・スレ・サイト・画像の履歴を読み戻せる。削除ページの URL は書き出さない', () => {
+    const parsed = parseBackup(JSON.stringify(settingsFile(DEFAULT_SETTINGS, extras)))
+    expect(parsed.kind).toBe('settings')
+    if (parsed.kind !== 'settings') return
+    expect(parsed.favoriteBoards).toEqual(extras.favoriteBoards)
+    expect(parsed.favoriteThreads).toEqual(extras.favoriteThreads)
+    expect(parsed.sites).toEqual(extras.sites)
+    expect(parsed.uploads).toEqual([{ url: 'https://i.test/1.png', name: '1.png', size: 10, uploadedAt: 1700000000000, withAccount: false, hash: 'ab' }])
+    expect(describeExtras(parsed)).toBe('お気に入り板 1・お気に入りのスレ 1・サイト 1・上げた画像 1')
+  })
+
+  it('Android 版のバックアップ(app: OBB、kind なし)を設定のファイルとして読む', () => {
+    const android = { app: 'OBB', version: 1, settings: { postName: '名前', fontScale: 1.2 }, favoriteBoards: extras.favoriteBoards, favoriteThreads: [], sites: [], uploads: [] }
+    const parsed = parseBackup(JSON.stringify(android))
+    expect(parsed.kind).toBe('settings')
+    if (parsed.kind !== 'settings') return
+    // 名前の合う項目だけ読み、Android だけの項目は捨てる
+    expect(importableSettings(parsed, DEFAULT_SETTINGS)).toEqual({ postName: '名前' })
+    expect(parsed.favoriteBoards).toEqual(extras.favoriteBoards)
+    expect(describeExtras(parsed)).toBe('お気に入り板 1')
+  })
+
+  it('前の版のファイル(お気に入りなどがない)もそのまま読める', () => {
+    const old = { app: 'bbs-browser', kind: 'settings', version: 1, exportedAt: '2026-01-01T00:00:00.000Z', settings: { postName: '前' } }
+    const parsed = parseBackup(JSON.stringify(old))
+    expect(parsed.kind).toBe('settings')
+    if (parsed.kind !== 'settings') return
+    expect(importableSettings(parsed, DEFAULT_SETTINGS)).toEqual({ postName: '前' })
+    expect(describeExtras(parsed)).toBe('')
+  })
+
+  it('形の合わない行は捨てる(URL のない板・時刻のない画像)', () => {
+    const file = { ...settingsFile(DEFAULT_SETTINGS), favoriteBoards: [{ name: 'URL なし' }, 1, extras.favoriteBoards[0]], uploads: [{ url: 'https://i.test/x' }] }
+    const parsed = parseBackup(JSON.stringify(file))
+    if (parsed.kind !== 'settings') throw new Error(parsed.kind)
+    expect(parsed.favoriteBoards).toEqual(extras.favoriteBoards)
+    expect(parsed.uploads).toBeUndefined()
+  })
+
+  it('ほかのアプリの名乗りは断る', () => {
+    expect(parseBackup(JSON.stringify({ app: 'other', version: 1, settings: {} })).kind).toBe('error')
   })
 })

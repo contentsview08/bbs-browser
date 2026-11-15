@@ -5,9 +5,12 @@ import io.github.contentsview08.obb.bbs.ThreadSummary
 import org.json.JSONArray
 import org.json.JSONObject
 
-// バックアップのファイル: 設定・お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴。設定と履歴の名前と形は PC 版と同じ
+// バックアップのファイル: 設定・お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴。設定と履歴の名前と形は PC 版と同じ。
+// PC 版が書き出した設定(kind: settings。お気に入りなども入っている)と NG(kind: ng)のファイルも読む
 
 internal const val BACKUP_APP = "OBB"
+/** PC 版の名乗り */
+internal const val BACKUP_APP_PC = "bbs-browser"
 internal const val BACKUP_VERSION = 1
 
 internal class BackupFile(
@@ -57,10 +60,11 @@ private fun parsedJson(s: String): Any? = runCatching {
 /** ファイルを読む。別の JSON や壊れた行は例外(何も戻さない) */
 internal fun parseBackup(text: String): BackupFile {
     val o = JSONObject(text)
-    if (o.optString("app") != BACKUP_APP) throw IllegalArgumentException("このアプリのバックアップではありません")
+    if (o.optString("app") != BACKUP_APP && o.optString("app") != BACKUP_APP_PC) throw IllegalArgumentException("OBB(PC 版・Android 版)のバックアップではありません")
     if (o.optInt("version") > BACKUP_VERSION) throw IllegalArgumentException("新しい版のアプリで書き出したファイルです。アプリを更新してください")
     fun rows(name: String): List<JSONObject> = o.optJSONArray(name)?.let { a -> List(a.length()) { a.getJSONObject(it) } } ?: emptyList()
-    val settings = o.optJSONObject("settings")
+    // PC 版の NG のファイルは、NG だけの設定として読む(今の NG に足す)
+    val settings = if (o.optString("kind") == "ng") JSONObject().put("ngRules", o.optJSONArray("rules") ?: JSONArray()) else o.optJSONObject("settings")
     // 読めない NG が 1 つでもあると、読むときに全部を捨てることになる
     settings?.optJSONArray("ngRules")?.let { a -> for (i in 0 until a.length()) NgRule.fromJson(a.getJSONObject(i)) }
     // 板・スレ・サイトの URL は、同期で受けるときと同じ検査を通す(ファイルは人の手で書き換えられる)

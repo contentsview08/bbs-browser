@@ -1,5 +1,6 @@
 // 設定画面の各分類で使う型と部品。
 
+import type { BackupExtras } from '../../utils/backup'
 import { useRef, createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { normalizeForSearch } from '../../utils/postBody'
 import type { Board, LoginResult, SiteConfig } from '@bbs-browser/connectors'
@@ -35,6 +36,10 @@ export interface SettingsProps {
   onLogin: (a: AccountRecord) => Promise<LoginResult>
   onSaveAccount: (a: AccountRecord) => void
   onDeleteAccount: (connectorId: string, accountId: string) => void
+  /** 設定のファイルに一緒に入れる、お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴 */
+  onExportExtras?: () => Promise<BackupExtras>
+  /** 設定のファイルから読んだお気に入りなどを、今あるものに足す。足した数の言い方を返す */
+  onImportExtras?: (extras: BackupExtras) => Promise<string>
   /** DB 全体(ログ・設定・NG・履歴)を書き出す。保存先を選ばなかったら false */
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */

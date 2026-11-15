@@ -73,6 +73,28 @@ class BackupFileTest {
         assertTrue("$text → $e", e is IllegalArgumentException || e is JSONException)
     }
 
+    @Test fun PC版の設定のファイルも読める() {
+        val pc = JSONObject("""{"app":"bbs-browser","kind":"settings","version":1,"exportedAt":"2026-01-01T00:00:00.000Z",
+            "settings":{"postName":"PC の名前","listTabs":["unread","count"],"fontPx":15},
+            "favoriteBoards":[{"url":"https://x.test/a/","name":"板 A"}],"sites":[{"url":"https://x.test/bbsmenu.json","name":"サイト"}]}""")
+        val b = parseBackup(pc.toString())
+        val restored = restoredSettings(b.settings!!, floats)
+        assertEquals("PC の名前", restored["postName"])
+        // 配列の項目は JSON の文字列として戻る(wordsPref が読む形)
+        assertEquals("[\"unread\",\"count\"]", restored["listTabs"])
+        assertEquals(listOf(Board("https://x.test/a/", "板 A")), b.boards)
+        assertEquals(listOf("https://x.test/bbsmenu.json" to "サイト"), b.sites)
+    }
+
+    @Test fun PC版のNGのファイルはNGだけの設定として読む() {
+        val pc = JSONObject("""{"app":"bbs-browser","kind":"ng","version":1,"rules":[{"id":"a","target":"content","pattern":"荒らし","isRegex":false,"enabled":true}]}""")
+        val b = parseBackup(pc.toString())
+        assertTrue(b.boards.isEmpty())
+        val list = org.json.JSONArray(restoredSettings(b.settings!!, floats)["ngRules"] as String)
+        assertEquals(1, list.length())
+        assertEquals("荒らし", NgRule.fromJson(list.getJSONObject(0)).pattern)
+    }
+
     @Test fun 別のファイルは戻さない() {
         assertRefused("""{"settings":{"mobileFontPx":2}}""")
         assertRefused("""{"app":"other","settings":{}}""")

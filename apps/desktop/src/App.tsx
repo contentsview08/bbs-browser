@@ -1039,7 +1039,8 @@ export default function App() {
       )
       if (added.length === 1) {
         const f = byId.get(added[0].id)!
-        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => latest.current.openThread(f.thread), keep: { thread: f.thread } })
+        // 押したら、最初の新着のレスへ飛ぶ(開く位置の設定が一番下などでも、新着の頭から読める)
+        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => latest.current.openPost(f.thread, f.readNo + 1), keep: { thread: f.thread, no: f.readNo + 1 } })
       } else if (added.length > 1) {
         notify({
           icon: 'bookmark',
@@ -2490,6 +2491,29 @@ export default function App() {
   const deferredPane = useDeferredValue(activeId)
   const paneId = activeTab && !activeTab.log ? activeId : deferredPane
   const switchingPane = paneId !== activeId
+  /**
+   * 見ているスレ(2 画面ならいつも開いているタブ、1 画面ならスレ表示を出しているとき)の通知は、通知センターから消す。
+   * 知らせの元のスレを開いたら、その知らせは用済み(溜まり続けて、数の印がいつまでも消えないのを防ぐ)。
+   * ウィンドウが裏にあるときは消さない(見ていないのに消えてしまう)ので、表に戻ったときにもう一度見る
+   */
+  const shownThreadId = activeId !== undefined && (!single || threadShown) ? activeId : undefined
+  const [windowFocused, setWindowFocused] = useState(() => document.hasFocus())
+  useEffect(() => {
+    const on = () => setWindowFocused(true)
+    const off = () => setWindowFocused(false)
+    window.addEventListener('focus', on)
+    window.addEventListener('blur', off)
+    return () => {
+      window.removeEventListener('focus', on)
+      window.removeEventListener('blur', off)
+    }
+  }, [])
+  useEffect(() => {
+    if (!shownThreadId || !windowFocused) return
+    const log = settingsRef.current.notificationLog
+    const rest = log.filter((n) => !n.link?.thread || threadId(n.link.thread) !== shownThreadId)
+    if (rest.length !== log.length) updateSetting('notificationLog', rest)
+  }, [shownThreadId, windowFocused, settings.notificationLog])
   useEffect(() => {
     if (!paneId) return
     setKeptIds((prev) => [paneId, ...prev.filter((x) => x !== paneId)].slice(0, KEEP_TABS))

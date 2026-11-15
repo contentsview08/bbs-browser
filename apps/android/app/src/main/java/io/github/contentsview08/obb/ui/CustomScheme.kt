@@ -48,10 +48,13 @@ import org.json.JSONObject
 data class CustomDef(
     val from: String, val base: Color, val surface: Color, val text: Color,
     val accent: Color, val unread: Color, val own: Color,
+    /** 一緒に選んでいた差し色(設定 accent のキー)。書き出し・取り込みのときだけ添える。設定の customScheme には入れない */
+    val accentPick: String = "",
 ) {
     fun toJson(): String = JSONObject().apply {
         put("from", from)
         for ((k, c) in colors()) put(k, hex(c))
+        if (accentPick.isNotEmpty()) put("accentPick", accentPick)
     }.toString()
 
     fun colors() = listOf("base" to base, "surface" to surface, "text" to text, "accent" to accent, "unread" to unread, "own" to own)
@@ -65,7 +68,8 @@ data class CustomDef(
         fun parse(json: String): CustomDef? = runCatching {
             val o = JSONObject(json)
             fun c(k: String) = Color(android.graphics.Color.parseColor(o.getString(k)))
-            CustomDef(o.optString("from", "light-gray"), c("base"), c("surface"), c("text"), c("accent"), c("unread"), c("own"))
+            // 知らない差し色は「テーマの色」に
+            CustomDef(o.optString("from", "light-gray"), c("base"), c("surface"), c("text"), c("accent"), c("unread"), c("own"), o.optString("accentPick", "").takeIf { k -> ACCENTS.any { it.key == k } } ?: "")
         }.getOrNull()
 
         /** 今ある配色から 6 色を写して始める */
@@ -205,7 +209,7 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
         Text(
             "JSON をコピー",
             Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                .clickable { copyText(context, def.toJson()); notice = "JSON をコピーしました" }.padding(horizontal = 16.dp, vertical = 10.dp),
+                .clickable { copyText(context, def.copy(accentPick = prefs.accent).toJson()); notice = "JSON をコピーしました" }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = Palette.textStrong, fontSize = 14.sp,
         )
         // 別の端末・PC 版で「JSON をコピー」したものを取り込む
@@ -217,8 +221,8 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
                         context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
                     }.getOrNull()
                     val got = clip?.let { CustomDef.parse(it) }
-                    // 差し色を選んだままだと、取り込んだ「強調」の色が差し色に隠れて見えない
-                    if (got != null) { save(got); prefs.accent = "" }
+                    // 一緒に書き出した差し色も戻す(なければテーマの色。差し色が残ると、取り込んだ「強調」の色が隠れる)
+                    if (got != null) { save(got.copy(accentPick = "")); prefs.accent = got.accentPick }
                     notice = if (got != null) "配色を取り込みました" else "クリップボードに配色の JSON がありません"
                 }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = Palette.textStrong, fontSize = 14.sp,

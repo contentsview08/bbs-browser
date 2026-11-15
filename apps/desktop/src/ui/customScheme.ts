@@ -12,6 +12,8 @@ export interface CustomDef {
   accent: string
   unread: string
   own: string
+  /** 一緒に選んでいた差し色(設定 accent のキー)。書き出し・取り込みのときだけ添える。設定の customScheme には入れない */
+  accentPick?: string
 }
 
 export const CUSTOM_KEYS = ['base', 'surface', 'text', 'accent', 'unread', 'own'] as const
@@ -32,6 +34,7 @@ export function parseCustom(json: string): CustomDef | null {
   try {
     const o = JSON.parse(json) as Record<string, unknown>
     const d = { from: typeof o.from === 'string' ? o.from : 'light-gray' } as CustomDef
+    if (typeof o.accentPick === 'string' && o.accentPick) d.accentPick = o.accentPick
     for (const k of CUSTOM_KEYS) {
       const v = o[k]
       if (typeof v !== 'string' || !HEX.test(v.trim())) return null
@@ -43,9 +46,9 @@ export function parseCustom(json: string): CustomDef | null {
   }
 }
 
-/** アプリと同じ形(キーの並びと #RRGGBB の大文字) */
-export function customToJson(d: CustomDef): string {
-  return JSON.stringify({ from: d.from, ...Object.fromEntries(CUSTOM_KEYS.map((k) => [k, d[k].toUpperCase()])) })
+/** アプリと同じ形(キーの並びと #RRGGBB の大文字)。accentPick を渡したときだけ差し色を添える(書き出し用) */
+export function customToJson(d: CustomDef, accentPick?: string): string {
+  return JSON.stringify({ from: d.from, ...Object.fromEntries(CUSTOM_KEYS.map((k) => [k, d[k].toUpperCase()])), ...(accentPick ? { accentPick } : {}) })
 }
 
 // ---- 色の計算 ----

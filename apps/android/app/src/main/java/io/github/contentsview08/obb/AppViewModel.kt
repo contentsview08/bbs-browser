@@ -943,7 +943,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun exportScheme(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
-                val json = io.github.contentsview08.obb.ui.CustomDef.parse(prefs.customScheme)?.toJson() ?: throw IllegalStateException("まだ自分の配色を作っていません")
+                // 選んでいる差し色も添える(読み込んだ端末で同じ見た目になるように)
+                val json = io.github.contentsview08.obb.ui.CustomDef.parse(prefs.customScheme)?.copy(accentPick = prefs.accent)?.toJson() ?: throw IllegalStateException("まだ自分の配色を作っていません")
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                 }
@@ -960,11 +961,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
                 io.github.contentsview08.obb.ui.CustomDef.parse(text.trim())?.let { d ->
-                    prefs.customScheme = d.toJson()
+                    prefs.customScheme = d.copy(accentPick = "").toJson()
                     prefs.followOsTheme = false
                     prefs.scheme = "custom"
-                    // 差し色を選んだままだと、読み込んだ「強調」の色が差し色に隠れて見えない
-                    prefs.accent = ""
+                    // 一緒に書き出した差し色も戻す(なければテーマの色。差し色が残ると、読み込んだ「強調」の色が隠れる)
+                    prefs.accent = d.accentPick
                     toast = "自分の配色を読み込んで、使うようにしました"
                     return@launch
                 }

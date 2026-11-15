@@ -782,6 +782,11 @@ export function baseFontPx(s: AppSettings): number {
 /**
  * 差し色(スマホのアプリ・hono-bbs の web と同じ 8 色)。明るい配色と暗い配色で濃さを変える(どちらの地でも押せる所の字として読めるように)
  */
+/** 配色のファイルから読んだ差し色のキー。知らないものは「テーマの色」に */
+export function accentKeyOf(k?: string): string {
+  return k && ACCENTS.some((a) => a.key === k) ? k : ''
+}
+
 export const ACCENTS: { key: string; name: string; light: string; dark: string }[] = [
   { key: 'indigo', name: '藍', light: '#4757c9', dark: '#8f9bf5' },
   { key: 'blue', name: '青', light: '#1f6fd1', dark: '#6aa9f0' },

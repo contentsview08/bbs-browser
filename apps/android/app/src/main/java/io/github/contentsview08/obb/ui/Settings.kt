@@ -1196,7 +1196,7 @@ private fun BackupPage(vm: AppViewModel) {
         ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
         ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
-    Group("自分の配色", note = "自分の配色の 6 色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
+    Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
         ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }

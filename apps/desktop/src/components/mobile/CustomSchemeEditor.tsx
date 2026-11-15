@@ -1,7 +1,7 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
 // 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・JSON を貼り付け・もとにする配色を選び直す
 import { useMemo, useRef, useState } from 'react'
-import { COLOR_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
+import { COLOR_SCHEMES, accentKeyOf, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
 import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
 
 /** 色選びで動かし終えてから、設定に書くまで待つ時間 */
@@ -44,8 +44,8 @@ export default function CustomSchemeEditor(props: {
     const got = parseCustom((await navigator.clipboard.readText().catch(() => '')).trim())
     if (got) {
       save(got)
-      // 差し色を選んだままだと、取り込んだ「強調」の色が差し色に隠れて見えない
-      update('accent', '')
+      // 一緒に書き出した差し色も戻す(なければテーマの色。差し色が残ると、取り込んだ「強調」の色が隠れる)
+      update('accent', accentKeyOf(got.accentPick))
     }
     setNotice(got ? '配色を取り込みました' : 'クリップボードに配色の JSON がありません')
   }
@@ -158,7 +158,7 @@ export default function CustomSchemeEditor(props: {
         </button>
         <button
           type="button"
-          onClick={() => void navigator.clipboard.writeText(customToJson(def)).then(() => setNotice('JSON をコピーしました'))}
+          onClick={() => void navigator.clipboard.writeText(customToJson(def, s.accent)).then(() => setNotice('JSON をコピーしました'))}
           className={`${BTN} border border-c-border text-c-text-strong`}
         >
           JSON をコピー

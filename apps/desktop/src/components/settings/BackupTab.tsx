@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DEFAULT_SETTINGS, type AppSettings } from '../../ui/settings'
+import { DEFAULT_SETTINGS, accentKeyOf, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
 import { openJson, saveJson } from '../../host/backup'
@@ -41,8 +41,8 @@ export function BackupTab({
         update('customScheme', customToJson(scheme))
         update('followOsTheme', false)
         update('scheme', 'custom')
-        // 差し色を選んだままだと、読み込んだ「強調」の色が差し色に隠れて見えない
-        update('accent', '')
+        // 一緒に書き出した差し色も戻す(なければテーマの色。差し色が残ると、読み込んだ「強調」の色が隠れる)
+        update('accent', accentKeyOf(scheme.accentPick))
         return '自分の配色を読み込んで、使うようにしました'
       }
       if (expect === 'scheme') throw new Error('配色のファイルではありません')
@@ -90,14 +90,14 @@ export function BackupTab({
           </button>
         </div>
       </Section>
-      <Section title="自分の配色" note="表示 → 自分の配色で作った 6 色を JSON に書き出します。読み込むと、その配色に切り替えます(Android 版で書き出したものも読めます)">
+      <Section title="自分の配色" note="表示 → 自分の配色で作った 6 色と、選んでいる差し色を JSON に書き出します。読み込むと、その配色に切り替えます(Android 版で書き出したものも読めます)">
         <div className="flex gap-2">
           <button
             type="button"
             className={BTN_PRIMARY}
             disabled={busy || !parseCustom(s.customScheme)}
             title={parseCustom(s.customScheme) ? undefined : 'まだ自分の配色を作っていません'}
-            onClick={() => act(async () => ((await saveJson('scheme', JSON.parse(s.customScheme))) ? '書き出しました' : undefined))}
+            onClick={() => act(async () => ((await saveJson('scheme', JSON.parse(customToJson(parseCustom(s.customScheme)!, s.accent)))) ? '書き出しました' : undefined))}
           >
             書き出す
           </button>

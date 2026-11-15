@@ -2555,6 +2555,8 @@ export default function App() {
       vertical={settings.tabLayout === 'side'}
       sideWidth={settings.tabSideWidth}
       onResize={(w) => updateSetting('tabSideWidth', w)}
+      sideCollapsed={settings.tabSideCollapsed}
+      onToggleSideCollapsed={() => updateSetting('tabSideCollapsed', !settings.tabSideCollapsed)}
       onRefresh={(id) => {
         if (activeTab?.id === id) void refreshThread()
       }}

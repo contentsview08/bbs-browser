@@ -58,6 +58,9 @@ interface Props {
   /** 縦に並べるときの帯の幅(px)。右の端をつかんで変えられる */
   sideWidth?: number
   onResize?: (width: number) => void
+  /** 縦の帯をしまっている(アイコンだけ。マウスを乗せると一時的に広がる。Edge の垂直タブと同じ) */
+  sideCollapsed?: boolean
+  onToggleSideCollapsed?: () => void
   /** 固定する・解く。keepGroup はグループごとの固定(ids はそのグループの全部) */
   onPin: (ids: string[], on: boolean, keepGroup?: boolean) => void
   /** グループに入れる。groupId がなければ新しいグループを作って、その id を返す */
@@ -80,6 +83,10 @@ const MIN_WIDTH = 72
 export const SIDE_WIDTH = 240
 const SIDE_WIDTH_MIN = 160
 const SIDE_WIDTH_MAX = 480
+/** しまったときの幅(アイコンだけ) */
+const SIDE_COLLAPSED = 48
+/** しまった帯にマウスを乗せてから、一時的に広げるまでの待ち */
+const PEEK_DELAY_MS = 300
 
 type Menu = { kind: 'tab'; id: string; x: number; y: number } | { kind: 'group'; groupId: string; x: number; y: number }
 interface MenuItem {
@@ -154,6 +161,11 @@ export default function TabBar(props: Props) {
   const [drag, setDrag] = useState<{ id: string; from: number; over: number; delta: number; size: number; joinGroup?: string; onHeader?: boolean }>()
   /** 縦の帯の、つかんで変えている最中の幅 */
   const [sideDragWidth, setSideDragWidth] = useState<number>()
+  /** しまった縦の帯に、マウスを乗せて一時的に広げているか(広げている間はスレ表示の上に重ねる) */
+  const [peek, setPeek] = useState(false)
+  const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** 縦の帯がアイコンだけの状態か */
+  const narrow = vertical && !!props.sideCollapsed && !peek
   /** ドラッグの直後の click を無視するための印 */
   const justDragged = useRef(false)
   const onDragMouseDown = (e: React.MouseEvent, id: string) => {
@@ -404,6 +416,21 @@ export default function TabBar(props: Props) {
     // つかんだタブがこのグループに入る(見出しの上にいる・落とす位置がグループの中)ときは、見出しをグループの色で囲んで知らせる
     const joining = drag?.joinGroup === g.id && drag.joinGroup !== props.tabs.find((t) => t.id === drag.id)?.groupId
     const joinStyle = joining ? { boxShadow: `0 0 0 2px ${hex}`, background: `color-mix(in srgb, ${hex} 22%, transparent)` } : undefined
+    if (narrow)
+      return (
+        <div
+          key={`g:${g.id}`}
+          data-group-id={g.id}
+          onClick={() => props.onGroupChange({ ...g, collapsed: !g.collapsed })}
+          onContextMenu={open}
+          className="mx-1 h-7 flex items-center justify-center rounded-md cursor-pointer select-none hover:bg-c-surface2"
+          style={joinStyle}
+          title={`${groupLabel(g)}(${count} 個のタブ)`}
+        >
+          {/* 折りたたんだグループは輪、広げているグループは塗った丸 */}
+          <span className="w-3 h-3 rounded-full" style={g.collapsed ? { border: `2px solid ${hex}` } : { background: hex }} />
+        </div>
+      )
     if (vertical)
       return (
         <div
@@ -488,8 +515,8 @@ export default function TabBar(props: Props) {
           transform: `translate${vertical ? 'Y' : 'X'}(${shift}px)`,
           transition: dragging ? 'none' : 'transform 150ms ease-out, background-color 150ms',
         }}
-        className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 cursor-pointer select-none text-xs ${
-          vertical ? `rounded-md ${groupHexColor ? 'ml-1 mr-1.5' : 'mx-1.5'}` : 'rounded-t-lg'
+        className={`group relative flex-shrink-0 h-8 flex items-center cursor-pointer select-none text-xs ${
+          narrow ? 'justify-center mx-1 rounded-md' : `gap-1.5 pl-3 pr-1.5 ${vertical ? `rounded-md ${groupHexColor ? 'ml-1 mr-1.5' : 'mx-1.5'}` : 'rounded-t-lg'}`
         } ${active || selected ? 'text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'} ${
           active ? 'z-10' : ''
         } ${dragging ? 'z-30 shadow-lg' : ''}`}
@@ -532,8 +559,11 @@ export default function TabBar(props: Props) {
         ) : (
           <BoardIcon boardUrl={t.boardUrl} override={t.icon} size={14} />
         )}
-        <span className={`flex-1 min-w-0 truncate ${t.ended ? 'opacity-60' : ''}`}>{t.title || '(読み込み中)'}</span>
-        {t.unread > 0 && (
+        {/* しまった帯ではアイコンだけ。未読は右上の点、固定は左上の小さなピン */}
+        {narrow && t.unread > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: 'var(--c-unread)' }} />}
+        {narrow && t.pinned && <span className="material-symbols-outlined absolute top-0.5 left-0.5 text-[10px] leading-none text-c-text-muted">keep</span>}
+        {!narrow && <span className={`flex-1 min-w-0 truncate ${t.ended ? 'opacity-60' : ''}`}>{t.title || '(読み込み中)'}</span>}
+        {!narrow && t.unread > 0 && (
           <span
             className="flex-shrink-0 font-bold text-[9px] px-1 rounded"
             style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
@@ -542,6 +572,7 @@ export default function TabBar(props: Props) {
           </span>
         )}
         {/* 固定したタブはピンの印。マウスを乗せると × に替わる(固定していても自分で閉じるのはできる) */}
+        {!narrow && (
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
@@ -555,6 +586,7 @@ export default function TabBar(props: Props) {
           {t.pinned && <span className="material-symbols-outlined text-sm leading-none absolute inset-0 flex items-center justify-center group-hover:opacity-0 text-c-text-muted">keep</span>}
           <span className={`material-symbols-outlined text-sm leading-none absolute inset-0 flex items-center justify-center ${t.pinned ? 'opacity-0 group-hover:opacity-100' : ''}`}>close</span>
         </button>
+        )}
       </div>
     )
   }
@@ -583,7 +615,7 @@ export default function TabBar(props: Props) {
         renderGroupHeader(seg.group, seg.tabs.length),
         ...(inner.length > 0
           ? [
-              <div key={`gl:${seg.group.id}`} className="ml-4 flex flex-col gap-0.5" style={{ borderLeft: `2px solid ${hex}` }}>
+              <div key={`gl:${seg.group.id}`} className={`${narrow ? 'ml-1.5' : 'ml-4'} flex flex-col gap-0.5`} style={{ borderLeft: `2px solid ${hex}` }}>
                 {inner}
               </div>,
             ]
@@ -597,11 +629,11 @@ export default function TabBar(props: Props) {
       type="button"
       onClick={props.onRefreshAll}
       disabled={props.refreshingAll}
-      className={`flex-shrink-0 h-8 px-2.5 text-c-text-muted hover:text-c-text-strong ${vertical ? 'w-full flex items-center gap-2 text-xs' : 'mr-1 rounded-t-lg'}`}
+      className={`flex-shrink-0 h-8 px-2.5 text-c-text-muted hover:text-c-text-strong ${vertical ? 'flex-1 min-w-0 flex items-center gap-2 text-xs' : 'mr-1 rounded-t-lg'}`}
       title="すべてのタブを更新"
     >
       <span className={`material-symbols-outlined text-lg ${props.refreshingAll ? 'animate-spin' : ''}`}>sync</span>
-      {vertical && 'すべてのタブを更新'}
+      {vertical && !narrow && <span className="truncate">すべてのタブを更新</span>}
     </button>
   )
 
@@ -654,25 +686,61 @@ export default function TabBar(props: Props) {
     </>
   )
 
-  if (vertical)
+  if (vertical) {
+    const shown = narrow ? SIDE_COLLAPSED : sideWidth
     return (
-      <div ref={barRef} className="relative flex-shrink-0 flex flex-col bg-panel-tabbar border-r border-c-border" style={{ width: sideWidth }}>
-        <div className="flex-shrink-0 border-b border-c-border">{refreshAll}</div>
-        <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar py-1.5 flex flex-col gap-0.5" onMouseLeave={() => setFrozenWidth(undefined)}>
+      // 外枠の幅はしまう・広げるで切り替え、マウスを乗せて一時的に広げるときは中身だけをスレ表示の上に重ねる(押しのけない。サイドバーと同じ)
+      <div className="relative flex-shrink-0" style={{ width: props.sideCollapsed ? SIDE_COLLAPSED : sideWidth }}>
+      <div
+        ref={barRef}
+        className={`absolute inset-y-0 left-0 flex flex-col bg-panel-tabbar border-r border-c-border overflow-hidden ${sideDragWidth === undefined ? 'transition-[width] duration-150 ease-out' : ''} ${peek ? 'z-40 shadow-xl' : 'z-30'}`}
+        style={{ width: shown }}
+        onMouseEnter={() => {
+          if (!props.sideCollapsed) return
+          clearTimeout(peekTimer.current)
+          peekTimer.current = setTimeout(() => setPeek(true), PEEK_DELAY_MS)
+        }}
+        onMouseLeave={() => {
+          clearTimeout(peekTimer.current)
+          setPeek(false)
+        }}
+      >
+        {/* 一番上: すべて更新と、しまう・開いたままにする(ピン)のボタン */}
+        <div className="flex-shrink-0 h-8 flex items-center border-b border-c-border">
+          {!narrow && refreshAll}
+          <button
+            type="button"
+            onClick={() => {
+              // 一時的に広げているときに押したら、開いたままにする
+              clearTimeout(peekTimer.current)
+              setPeek(false)
+              props.onToggleSideCollapsed?.()
+            }}
+            className={`flex-shrink-0 h-8 flex items-center justify-center text-c-text-muted hover:text-c-text-strong ${narrow ? 'w-full' : 'w-9'}`}
+            title={props.sideCollapsed ? 'タブの帯を開いたままにする' : 'タブの帯をしまう(アイコンだけにし、マウスを乗せると広がります)'}
+          >
+            <span className="material-symbols-outlined text-lg">{props.sideCollapsed ? 'keep' : 'left_panel_close'}</span>
+          </button>
+        </div>
+        <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar py-1.5 flex flex-col gap-0.5" onMouseLeave={() => setFrozenWidth(undefined)}>
           {body}
         </div>
-        {/* 右の端をつかんで幅を変える(マウスを乗せると強調色の線が出る。ダブルクリックで既定の幅) */}
-        <div
-          className="absolute top-0 bottom-0 -right-1 w-2 z-20 cursor-col-resize group/edge"
-          onMouseDown={onSideResizeStart}
-          onDoubleClick={() => props.onResize?.(SIDE_WIDTH)}
-          title="ドラッグで幅を変える(ダブルクリックで元に戻す)"
-        >
-          <span className="absolute top-0 bottom-0 left-1/2 w-[2px] -translate-x-1/2 bg-c-accent opacity-0 group-hover/edge:opacity-60 transition-opacity" />
-        </div>
+        {/* 右の端をつかんで幅を変える(マウスを乗せると強調色の線が出る。ダブルクリックで既定の幅)。しまっているときはなし */}
+        {!props.sideCollapsed && (
+          <div
+            className="absolute top-0 bottom-0 right-0 w-2 z-20 cursor-col-resize group/edge"
+            onMouseDown={onSideResizeStart}
+            onDoubleClick={() => props.onResize?.(SIDE_WIDTH)}
+            title="ドラッグで幅を変える(ダブルクリックで元に戻す)"
+          >
+            <span className="absolute top-0 bottom-0 right-0 w-[2px] bg-c-accent opacity-0 group-hover/edge:opacity-60 transition-opacity" />
+          </div>
+        )}
         {popups}
       </div>
+      </div>
     )
+  }
 
   return (
     <div ref={barRef} className="flex-shrink-0 flex items-end pt-1.5 bg-panel-tabbar">

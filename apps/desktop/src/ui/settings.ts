@@ -365,6 +365,8 @@ export interface AppSettings {
   tabLayout: TabLayout
   /** PC: 縦に並べるときのタブの帯の幅(px。右の端をつかんで変える) */
   tabSideWidth: number
+  /** PC: 縦のタブの帯をしまっている(アイコンだけ。マウスを乗せると一時的に広がる) */
+  tabSideCollapsed: boolean
   // レス表示
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
@@ -621,6 +623,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabGroups: [],
   tabLayout: 'top',
   tabSideWidth: 240,
+  tabSideCollapsed: false,
   openPosition: 'unread',
   anchorPopup: 'click',
   postThumbSize: 80,

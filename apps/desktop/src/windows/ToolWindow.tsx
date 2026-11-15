@@ -69,11 +69,10 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
     () => ({
       loadBoards: (site: SiteConfig, refresh: boolean) => callMain<Board[]>('loadBoards', { site, refresh }),
       loadSiteUrls: () => callMain<string[]>('loadSiteUrls'),
-      onToggleFavorite: (b: Board) => void callMain('toggleFavorite', b).then(reloadFavorites).catch(backgroundError('お気に入り板')),
-      onOpenBoard: (b: Board) => {
-        void callMain('openBoard', b)
-        closeWindow()
-      },
+      onToggleFavorite: (b: Board, on?: boolean) =>
+        void callMain('toggleFavorite', { board: b, on }).then(reloadFavorites).catch(backgroundError('お気に入り板')),
+      // 頼みを送り終えてから閉じる(先に閉じると、頼みがメインに届かず板が開かない)
+      onOpenBoard: (b: Board) => void callMain('openBoard', b).finally(closeWindow),
       onAddFavoriteUrl: (url: string) => callMain<void>('addFavoriteUrl', url).then(reloadFavorites),
       onRemoveFavorite: (url: string) =>
         void new UserOps(store)

@@ -51,6 +51,7 @@ import { PostHistoryList } from './components/PostHistoryDialog'
 import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { setLightboxCloseClick } from './components/Lightbox'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
@@ -2313,12 +2314,13 @@ export default function App() {
   const reloadFavorites = async (s: LogStore) => setFavorites(await s.listFavorites())
 
   /** on は押した後の状態(板一覧の ☆ は見えている印の逆を渡す)。省くと今の状態を反転する */
-  const toggleFavorite = (b: Board, on = !isFavoriteIn(favorites ?? [], b.url)) => {
-    if (!store) return
+  /** 書き終わったら終わる Promise を返す(設定のウィンドウは、書き終えてから DB を読み直して ☆ を塗り替えるため) */
+  const toggleFavorite = (b: Board, on = !isFavoriteIn(favorites ?? [], b.url)): Promise<void> => {
+    if (!store) return Promise.resolve()
     const change = favoriteChange(favorites ?? [], b, on)
     // 先に画面を変えてから、DB は裏で書く
     setFavorites((list) => [...(list ?? []).filter((f) => !change.remove.includes(f.url)), ...(change.add ? [change.add] : [])])
-    void run(null, async () => {
+    return run(null, async () => {
       const ops = new UserOps(store)
       for (const url of change.remove) await ops.favoriteBoardRemove(url)
       if (change.add) await ops.favoriteBoardAdd(change.add)
@@ -2365,8 +2367,13 @@ export default function App() {
       serveMain({
         loadBoards: ({ site, refresh }: { site: SiteConfig; refresh: boolean }) => rpcRef.current.loadBoards(site, refresh),
         loadSiteUrls: () => rpcRef.current.loadSiteUrls(),
-        toggleFavorite: (b: Board) => rpcRef.current.toggleFavorite(b),
-        openBoard: (b: Board) => void rpcRef.current.openBoard(b),
+        // 入れるか外すかは、☆ を押した設定のウィンドウの見た目で決める(こちらで反転させると、見た目と逆になることがある)
+        toggleFavorite: ({ board, on }: { board: Board; on?: boolean }) => rpcRef.current.toggleFavorite(board, on),
+        openBoard: (b: Board) => {
+          void rpcRef.current.openBoard(b)
+          // 設定のウィンドウの後ろに隠れていても、開いた板が見えるよう前に出す
+          void getCurrentWindow().setFocus()
+        },
         addFavoriteUrl: (url: string) => rpcRef.current.addFavoriteUrl(url),
         addSite: ({ name, menuUrl }: { name: string; menuUrl: string }) => rpcRef.current.addSite(name, menuUrl),
         login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),

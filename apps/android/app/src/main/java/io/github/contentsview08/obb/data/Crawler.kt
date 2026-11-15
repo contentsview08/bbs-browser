@@ -92,15 +92,20 @@ object Crawler {
         // お気に入りのスレの新着
         if (prefs.notifyFav) {
             val hits = ArrayList<Pair<ThreadSummary, Int>>()
+            val favReadNo = HashMap<String, Int>()
             for (f in favs) {
                 val c = counts[f.thread.id] ?: continue
                 if (c <= 0) continue
                 val key = "f:${f.thread.id}"
                 val n = favIncrease(c, seen.getInt(key, -1).takeIf { it >= 0 }, f.thread.postCount, f.readNo)
-                if (n > 0) hits += f.thread to n
+                if (n > 0) {
+                    hits += f.thread to n
+                    favReadNo[f.thread.id] = f.readNo
+                }
                 edit.putInt(key, c)
             }
-            for ((t, n) in hits.take(MAX_NOTIFY)) Notifier.show(context, "お気に入りのスレに新着 +$n", t.title, TwoCh.webUrl(t))
+            // 押したら最初の新着のレスへ(開く位置の設定が一番下などでも、新着の頭から読める)
+            for ((t, n) in hits.take(MAX_NOTIFY)) Notifier.show(context, "お気に入りのスレに新着 +$n", t.title, TwoCh.postWebUrl(TwoCh.webUrl(t), favReadNo[t.id]?.plus(1) ?: 1))
             if (hits.size > MAX_NOTIFY) Notifier.show(context, "お気に入りのスレの新着がほかに ${hits.size - MAX_NOTIFY} スレ", null, null)
         }
         // あなた宛てのレス
@@ -121,7 +126,7 @@ object Crawler {
                 val from = maxOf(last, log?.readNo ?: 0)
                 val replies = res.posts.filter { p -> p.no > from && p.no !in own && anchorsOf(p.body).any { it in own } }
                 val title = log?.title?.ifEmpty { null } ?: t.title
-                for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.webUrl(t))
+                for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.postWebUrl(TwoCh.webUrl(t), p.no))
                 edit.putInt(key, c)
             }
         }
@@ -155,7 +160,7 @@ object Crawler {
         seen.edit().putInt("o:${t.id}", maxOf(lastNo, seen.getInt("o:${t.id}", -1))).apply()
         if (!prefs.osNotify || !prefs.notifyReply || own.isEmpty()) return
         val replies = posts.filter { p -> p.no !in own && p.body.trim() != justPosted && anchorsOf(p.body).any { it in own } }
-        for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.webUrl(t))
+        for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.postWebUrl(TwoCh.webUrl(t), p.no))
     }
 
     /**

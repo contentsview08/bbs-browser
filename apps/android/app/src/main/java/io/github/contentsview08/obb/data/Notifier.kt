@@ -6,11 +6,15 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import androidx.core.os.bundleOf
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.github.contentsview08.obb.MainActivity
 
-/** Android の通知を出す。押すと OPEN_URL の URL をアプリの中で開く(MainActivity。ACTION_OPEN_URL のときだけ読む) */
+/**
+ * Android の通知を出す。押すと OPEN_URL の URL をアプリの中で開く(MainActivity。ACTION_OPEN_URL のときだけ読む)。
+ * 通知の extras にも URL を持たせ、そのスレをアプリで開いたら cancelFor で消す(見たスレの知らせは用済み。PC 版の通知センターと同じ)
+ */
 object Notifier {
     const val OPEN_URL = "open_url"
     /** 通知から開く intent の action。MainActivity は exported なので、この action のない intent の extra は読まない */
@@ -35,7 +39,18 @@ object Notifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)
             .setAutoCancel(true)
+            .addExtras(bundleOf(OPEN_URL to url))
             .build()
         NotificationManagerCompat.from(context).notify(id, n)
+    }
+
+    /** そのスレ(threadUrl で始まる URL)を開く通知を消す。スレを開いたときに呼ぶ */
+    fun cancelFor(context: Context, threadUrl: String) {
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        val prefix = threadUrl.trimEnd('/')
+        for (sn in nm.activeNotifications) {
+            val url = sn.notification.extras?.getString(OPEN_URL) ?: continue
+            if (url == prefix || url.startsWith("$prefix/")) nm.cancel(sn.id)
+        }
     }
 }

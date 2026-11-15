@@ -1079,6 +1079,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         drawerOpen = false
         settingsOpen = false
         syncScheduler.activity()
+        // このスレの知らせ(新着・あなた宛てのレス)は、開いたら用済みなので通知の欄から消す
+        runCatching { io.github.contentsview08.obb.data.Notifier.cancelFor(getApplication(), TwoCh.webUrl(t)) }
         val page = Page.Thread(t)
         page.jumpNo = no
         forwardPage = null

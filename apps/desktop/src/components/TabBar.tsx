@@ -128,15 +128,19 @@ export default function TabBar(props: Props) {
     return () => observer.disconnect()
   }, [hasTabs, vertical])
 
-  // 幅が決まっているもの(グループの見出し・固定したタブ)を測る。描いたあとに測るので、ふつうのタブの幅が決まるまで 1 コマかかる
+  // 幅が決まっているもの(グループの見出し・固定したタブ)を測る。描いたあとに測るので、ふつうのタブの幅が決まるまで 1 コマかかる。
+  // タブ・グループが変わったときだけ測り、値が変わったときだけ状態に書く(描くたびに書くと、描き直しが止まらなくなる)
+  const fixedRef = useRef(0)
   useLayoutEffect(() => {
     if (vertical) return
     const el = stripRef.current
     if (!el) return
     let w = 0
     el.querySelectorAll<HTMLElement>('[data-fixed]').forEach((x) => (w += x.offsetWidth))
-    setFixedWidth((cur) => (cur === w ? cur : w))
-  })
+    if (w === fixedRef.current) return
+    fixedRef.current = w
+    setFixedWidth(w)
+  }, [props.tabs, props.groups, vertical])
 
   const fitWidth =
     stripWidth > 0 && normalCount > 0 ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor((stripWidth - fixedWidth) / normalCount))) : MAX_WIDTH

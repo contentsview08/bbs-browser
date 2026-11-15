@@ -363,6 +363,8 @@ export interface AppSettings {
   tabGroups: TabGroup[]
   /** PC: タブの置き場 */
   tabLayout: TabLayout
+  /** PC: 縦に並べるときのタブの帯の幅(px。右の端をつかんで変える) */
+  tabSideWidth: number
   // レス表示
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
@@ -618,6 +620,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   activeTab: '',
   tabGroups: [],
   tabLayout: 'top',
+  tabSideWidth: 240,
   openPosition: 'unread',
   anchorPopup: 'click',
   postThumbSize: 80,

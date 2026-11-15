@@ -2553,6 +2553,8 @@ export default function App() {
       onRefreshAll={() => void refreshAll()}
       wheelSwitch={settings.tabWheelSwitch}
       vertical={settings.tabLayout === 'side'}
+      sideWidth={settings.tabSideWidth}
+      onResize={(w) => updateSetting('tabSideWidth', w)}
       onRefresh={(id) => {
         if (activeTab?.id === id) void refreshThread()
       }}

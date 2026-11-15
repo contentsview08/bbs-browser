@@ -9,7 +9,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import BoardIcon from './BoardIcon'
 import { INPUT } from './DialogParts'
-import { TAB_GROUP_COLORS, TAB_GROUP_COLOR_KEYS, closable, segmentTabs, visibleTabs, type TabGroup, type TabGroupColor } from '../utils/tabs'
+import { TAB_GROUP_COLORS, TAB_GROUP_COLOR_KEYS, closable, moveTab, segmentTabs, visibleTabs, type TabGroup, type TabGroupColor } from '../utils/tabs'
 
 export interface TabItem {
   id: string
@@ -55,6 +55,9 @@ interface Props {
   wheelSwitch?: boolean
   /** スレ表示の左に縦に並べる */
   vertical?: boolean
+  /** 縦に並べるときの帯の幅(px)。右の端をつかんで変えられる */
+  sideWidth?: number
+  onResize?: (width: number) => void
   onPin: (ids: string[], on: boolean) => void
   /** グループに入れる。groupId がなければ新しいグループを作って、その id を返す */
   onGroup: (ids: string[], groupId?: string) => string
@@ -76,8 +79,10 @@ const MIN_WIDTH = 72
 const PIN_WIDTH = 40
 /** 縦に並べるときの 1 行の高さ(h-8) */
 const ROW_HEIGHT = 32
-/** 縦に並べるときの帯の幅 */
-const SIDE_WIDTH = 240
+/** 縦に並べるときの帯の幅(既定と、つかんで変えられる範囲) */
+export const SIDE_WIDTH = 240
+const SIDE_WIDTH_MIN = 160
+const SIDE_WIDTH_MAX = 480
 
 type Menu = { kind: 'tab'; id: string; x: number; y: number } | { kind: 'group'; groupId: string; x: number; y: number }
 interface MenuItem {
@@ -149,7 +154,9 @@ export default function TabBar(props: Props) {
   // ── つかんで動かす ──
   // 見えているタブの位置(rect)を押したときに測り、マウスの位置にいちばん近いタブの場所へ落とす
   // (固定したタブ・グループの見出しが混ざるので、同じ幅で割る計算では合わない)
-  const [drag, setDrag] = useState<{ id: string; from: number; over: number; delta: number; size: number }>()
+  const [drag, setDrag] = useState<{ id: string; from: number; over: number; delta: number; size: number; joinGroup?: string; onHeader?: boolean }>()
+  /** 縦の帯の、つかんで変えている最中の幅 */
+  const [sideDragWidth, setSideDragWidth] = useState<number>()
   /** ドラッグの直後の click を無視するための印 */
   const justDragged = useRef(false)
   const onDragMouseDown = (e: React.MouseEvent, id: string) => {
@@ -171,8 +178,11 @@ export default function TabBar(props: Props) {
     // 固定したタブは固定の列の中、ほかはその外だけに落とせる
     const zone = order.map((tid, i) => !!props.tabs.find((t) => t.id === tid)?.pinned === !!tab?.pinned && i)
     const allowed = zone.filter((x): x is number => x !== false)
+    // グループの見出しの場所。その上に落とすと、そのグループに入る(Edge と同じ)
+    const headers = [...strip.querySelectorAll<HTMLElement>('[data-group-id]')].map((x) => ({ id: x.dataset.groupId!, rect: x.getBoundingClientRect() }))
+    const visibleNow = visibleTabs(props.tabs, props.groups)
     let moved = false
-    let last = { id, from, over: from, delta: 0, size }
+    let last: NonNullable<typeof drag> = { id, from, over: from, delta: 0, size }
     const onMove = (ev: MouseEvent) => {
       const delta = (alongY ? ev.clientY : ev.clientX) - start
       if (!moved && Math.abs(delta) < DRAG_PX) return
@@ -187,7 +197,10 @@ export default function TabBar(props: Props) {
           over = i
         }
       }
-      last = { id, from, over, delta, size }
+      // 見出しの上にいるならそのグループ、そうでなければ落とした位置で入ることになるグループ(両隣が同じグループ)を知らせる
+      const onHeader = headers.find((h) => ev.clientX >= h.rect.left && ev.clientX <= h.rect.right && ev.clientY >= h.rect.top && ev.clientY <= h.rect.bottom)?.id
+      const byPlace = tab?.pinned ? undefined : moveTab(visibleNow, id, over).find((t) => t.id === id)?.groupId
+      last = { id, from, over, delta, size, joinGroup: onHeader ?? byPlace, onHeader: onHeader !== undefined }
       setDrag(last)
     }
     const onUp = () => {
@@ -196,6 +209,11 @@ export default function TabBar(props: Props) {
       setDrag(undefined)
       if (!moved) return
       justDragged.current = true
+      // 見出しの上で離した: 並びは変えず、そのグループの右端に入れる
+      if (last.onHeader && last.joinGroup !== undefined) {
+        if (last.joinGroup !== tab?.groupId) latest.current.onGroup([id], last.joinGroup)
+        return
+      }
       if (last.over === last.from) return
       // 見えている並びの位置を、状態の並びの位置に直す
       const targetId = order[last.over]
@@ -213,6 +231,28 @@ export default function TabBar(props: Props) {
     return 0
   }
   const visibleIndex = (id: string) => visible.findIndex((t) => t.id === id)
+
+  /** 縦の帯の右の端をつかんで幅を変える。離したときに onResize で知らせる(ダブルクリックで既定に戻す) */
+  const sideWidth = sideDragWidth ?? props.sideWidth ?? SIDE_WIDTH
+  const onSideResizeStart = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const startX = e.clientX
+    const base = props.sideWidth ?? SIDE_WIDTH
+    let w = base
+    const onMove = (ev: MouseEvent) => {
+      w = Math.max(SIDE_WIDTH_MIN, Math.min(SIDE_WIDTH_MAX, base + ev.clientX - startX))
+      setSideDragWidth(w)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setSideDragWidth(undefined)
+      if (w !== base) props.onResize?.(w)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   /** マウスで閉じるときは、いまの幅のまま固定する */
   const closeByPointer = (id: string) => {
@@ -410,13 +450,18 @@ export default function TabBar(props: Props) {
       e.preventDefault()
       setMenu({ kind: 'group', groupId: g.id, x: e.clientX, y: e.clientY })
     }
+    // つかんだタブがこのグループに入る(見出しの上にいる・落とす位置がグループの中)ときは、見出しをグループの色で囲んで知らせる
+    const joining = drag?.joinGroup === g.id && drag.joinGroup !== props.tabs.find((t) => t.id === drag.id)?.groupId
+    const joinStyle = joining ? { boxShadow: `0 0 0 2px ${hex}`, background: `color-mix(in srgb, ${hex} 22%, transparent)` } : undefined
     if (vertical)
       return (
         <div
           key={`g:${g.id}`}
+          data-group-id={g.id}
           onClick={() => props.onGroupChange({ ...g, collapsed: !g.collapsed })}
           onContextMenu={open}
           className="mx-1.5 h-7 flex items-center gap-1.5 px-1.5 rounded-md cursor-pointer select-none text-xs text-c-text-body hover:bg-c-surface2"
+          style={joinStyle}
           title={g.collapsed ? `広げる(${count} 個のタブ)` : '折りたたむ'}
         >
           <span className="material-symbols-outlined text-base leading-none text-c-text-muted">{g.collapsed ? 'chevron_right' : 'expand_more'}</span>
@@ -429,6 +474,7 @@ export default function TabBar(props: Props) {
       <div
         key={`g:${g.id}`}
         data-fixed=""
+        data-group-id={g.id}
         onClick={() => props.onGroupChange({ ...g, collapsed: !g.collapsed })}
         onContextMenu={open}
         className="relative flex-shrink-0 h-8 flex items-center pl-1.5 pr-1 cursor-pointer select-none"
@@ -436,7 +482,7 @@ export default function TabBar(props: Props) {
       >
         <span
           className={`h-5 flex items-center rounded-full text-[11px] font-bold leading-none text-white max-w-[9rem] ${g.name || g.collapsed ? 'px-2' : 'w-5 justify-center'}`}
-          style={{ background: hex }}
+          style={{ background: hex, boxShadow: joining ? `0 0 0 2px var(--c-text-strong)` : undefined }}
         >
           <span className="truncate">
             {g.name}
@@ -488,11 +534,9 @@ export default function TabBar(props: Props) {
           // つかんだタブはマウスについて動かし、ほかのタブはなめらかにずらして場所を空ける
           transform: `translate${vertical ? 'Y' : 'X'}(${shift}px)`,
           transition: dragging ? 'none' : 'transform 150ms ease-out, background-color 150ms',
-          // 縦: グループのタブは左に色の線
-          borderLeft: vertical && groupHexColor ? `3px solid ${groupHexColor}` : undefined,
         }}
         className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 cursor-pointer select-none text-xs ${
-          vertical ? `rounded-md ${groupHexColor ? 'ml-3 mr-1.5' : 'mx-1.5'}` : 'rounded-t-lg'
+          vertical ? `rounded-md ${groupHexColor ? 'ml-1 mr-1.5' : 'mx-1.5'}` : 'rounded-t-lg'
         } ${active || selected ? 'text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'} ${
           active ? 'z-10' : ''
         } ${dragging ? 'z-30 shadow-lg' : ''}`}
@@ -571,7 +615,20 @@ export default function TabBar(props: Props) {
       )
     if (seg.kind === 'tab') return renderTab(seg.tab)
     const hex = groupHex(seg.group)
-    return [renderGroupHeader(seg.group, seg.tabs.length), ...(seg.group.collapsed ? [] : seg.tabs.map((t) => renderTab(t, hex)))]
+    const inner = seg.group.collapsed ? [] : seg.tabs.map((t) => renderTab(t, hex))
+    // 縦: グループのタブは見出しの下に少し字下げし、左にまっすぐな色の線を 1 本(タブごとではなくまとめて引く。角が丸まらない)
+    if (vertical)
+      return [
+        renderGroupHeader(seg.group, seg.tabs.length),
+        ...(inner.length > 0
+          ? [
+              <div key={`gl:${seg.group.id}`} className="ml-4 flex flex-col gap-0.5" style={{ borderLeft: `2px solid ${hex}` }}>
+                {inner}
+              </div>,
+            ]
+          : []),
+      ]
+    return [renderGroupHeader(seg.group, seg.tabs.length), ...inner]
   })
 
   const refreshAll = (
@@ -633,11 +690,20 @@ export default function TabBar(props: Props) {
 
   if (vertical)
     return (
-      <div ref={barRef} className="flex-shrink-0 flex flex-col bg-panel-tabbar border-r border-c-border" style={{ width: SIDE_WIDTH }}>
+      <div ref={barRef} className="relative flex-shrink-0 flex flex-col bg-panel-tabbar border-r border-c-border" style={{ width: sideWidth }}>
+        <div className="flex-shrink-0 border-b border-c-border">{refreshAll}</div>
         <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar py-1.5 flex flex-col gap-0.5" onMouseLeave={() => setFrozenWidth(undefined)}>
           {body}
         </div>
-        <div className="flex-shrink-0 border-t border-c-border">{refreshAll}</div>
+        {/* 右の端をつかんで幅を変える(マウスを乗せると強調色の線が出る。ダブルクリックで既定の幅) */}
+        <div
+          className="absolute top-0 bottom-0 -right-1 w-2 z-20 cursor-col-resize group/edge"
+          onMouseDown={onSideResizeStart}
+          onDoubleClick={() => props.onResize?.(SIDE_WIDTH)}
+          title="ドラッグで幅を変える(ダブルクリックで元に戻す)"
+        >
+          <span className="absolute top-0 bottom-0 left-1/2 w-[2px] -translate-x-1/2 bg-c-accent opacity-0 group-hover/edge:opacity-60 transition-opacity" />
+        </div>
         {popups}
       </div>
     )

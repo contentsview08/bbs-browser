@@ -41,6 +41,8 @@ export function BackupTab({
         update('customScheme', customToJson(scheme))
         update('followOsTheme', false)
         update('scheme', 'custom')
+        // 差し色を選んだままだと、読み込んだ「強調」の色が差し色に隠れて見えない
+        update('accent', '')
         return '自分の配色を読み込んで、使うようにしました'
       }
       if (expect === 'scheme') throw new Error('配色のファイルではありません')

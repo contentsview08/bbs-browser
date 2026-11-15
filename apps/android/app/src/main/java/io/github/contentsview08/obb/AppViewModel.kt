@@ -963,6 +963,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     prefs.customScheme = d.toJson()
                     prefs.followOsTheme = false
                     prefs.scheme = "custom"
+                    // 差し色を選んだままだと、読み込んだ「強調」の色が差し色に隠れて見えない
+                    prefs.accent = ""
                     toast = "自分の配色を読み込んで、使うようにしました"
                     return@launch
                 }

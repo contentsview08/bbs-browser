@@ -198,7 +198,8 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
         Text(
             if (using) "使っています" else "この配色を使う",
             Modifier.clip(RoundedCornerShape(6.dp)).background(if (using) Palette.surface2 else Palette.accent)
-                .clickable(enabled = !using) { save(def); prefs.followOsTheme = false; prefs.scheme = "custom" }.padding(horizontal = 16.dp, vertical = 10.dp),
+                // 自分の配色の「強調」が差し色の役目をするので、別に選んだ差し色は外す
+                .clickable(enabled = !using) { save(def); prefs.followOsTheme = false; prefs.scheme = "custom"; prefs.accent = "" }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = if (using) Palette.textMuted else Palette.accentText, fontSize = 14.sp, fontWeight = FontWeight.Bold,
         )
         Text(
@@ -216,13 +217,18 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
                         context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
                     }.getOrNull()
                     val got = clip?.let { CustomDef.parse(it) }
-                    if (got != null) save(got)
+                    // 差し色を選んだままだと、取り込んだ「強調」の色が差し色に隠れて見えない
+                    if (got != null) { save(got); prefs.accent = "" }
                     notice = if (got != null) "配色を取り込みました" else "クリップボードに配色の JSON がありません"
                 }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = Palette.textStrong, fontSize = 14.sp,
         )
     }
     notice?.let { Text(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), color = Palette.textMuted, fontSize = 12.sp) }
+    if (prefs.accent.isNotEmpty()) Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("差し色を選んでいるので、アプリでは「強調」の代わりに差し色が使われます。", Modifier.weight(1f), color = Palette.markDanger, fontSize = 12.sp)
+        Text("テーマの色に戻す", Modifier.clickable { prefs.accent = "" }.padding(start = 8.dp), color = Palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
     Text("もとにする配色を選ぶと、6 色をその配色の色に戻します", Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
     Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (sc in SCHEMES) Column(Modifier.clickable { save(CustomDef.of(sc)) }, horizontalAlignment = Alignment.CenterHorizontally) {

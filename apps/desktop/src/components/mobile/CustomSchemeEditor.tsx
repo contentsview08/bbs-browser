@@ -42,7 +42,11 @@ export default function CustomSchemeEditor(props: {
   // 別の端末・別のアプリで「JSON をコピー」したものを取り込む
   const paste = async () => {
     const got = parseCustom((await navigator.clipboard.readText().catch(() => '')).trim())
-    if (got) save(got)
+    if (got) {
+      save(got)
+      // 差し色を選んだままだと、取り込んだ「強調」の色が差し色に隠れて見えない
+      update('accent', '')
+    }
     setNotice(got ? '配色を取り込みました' : 'クリップボードに配色の JSON がありません')
   }
   const vars = customVars(shown)
@@ -145,6 +149,8 @@ export default function CustomSchemeEditor(props: {
             save(def)
             update('followOsTheme', false)
             update('scheme', 'custom')
+            // 自分の配色の「強調」が差し色の役目をするので、別に選んだ差し色は外す
+            update('accent', '')
           }}
           className={`${BTN} font-bold ${using ? 'bg-c-surface2 text-c-text-muted' : 'bg-c-accent text-[var(--c-accent-text)]'}`}
         >
@@ -162,6 +168,14 @@ export default function CustomSchemeEditor(props: {
         </button>
       </div>
       {notice && <p className="px-4 pt-2 text-[12px] text-c-text-muted">{notice}</p>}
+      {s.accent && (
+        <p className="px-4 pt-2 text-[12px] text-c-heat-very-hot">
+          差し色を選んでいるので、アプリでは「強調」の代わりに差し色が使われます。
+          <button type="button" className="ml-1 underline" onClick={() => update('accent', '')}>
+            差し色をテーマの色に戻す
+          </button>
+        </p>
+      )}
 
       <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します</p>
       <div className="flex gap-2 px-4 overflow-x-auto no-scrollbar">

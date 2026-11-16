@@ -28,6 +28,7 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'openTabs',
   'activeTab',
   'tabGroups',
+  'keywordBandsCollapsed',
   'lastBoardUrl',
   'backgroundImage',
   'imageSaveDir',

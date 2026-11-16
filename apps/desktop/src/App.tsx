@@ -3172,6 +3172,8 @@ export default function App() {
           tabs={notifView ? [] : history ? (isMobile ? ['viewed', 'count', 'newest'] : HISTORY_LIST_TABS) : settings.listTabs}
           onResort={history ? () => void resortHistory() : undefined}
           keepTabsOnEsc={!!history}
+          collapsedKeywords={settings.keywordBandsCollapsed}
+          onToggleKeyword={(k) => updateSetting('keywordBandsCollapsed', settings.keywordBandsCollapsed.includes(k) ? settings.keywordBandsCollapsed.filter((x) => x !== k) : [...settings.keywordBandsCollapsed, k])}
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
           pageSize={history ? settings.listPageSize : 0}

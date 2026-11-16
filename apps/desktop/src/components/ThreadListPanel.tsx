@@ -46,15 +46,19 @@ function cycleSort(s: SortState, mode: SortMode): SortState {
 export const threadId = (t: ThreadSummary) => `${t.boardUrl}${t.key}`
 
 /** スレ一覧に差し込む帯(キーワードの見出しなど) */
-function Band(props: { icon: string; label: string; count: number; accent?: boolean }) {
+/** まとまりの見出しの帯。onToggle があれば押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */
+function Band(props: { icon: string; label: string; count: number; accent?: boolean; collapsed?: boolean; onToggle?: () => void }) {
   return (
     <div
-      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold ${props.accent ? 'text-c-accent' : 'text-c-text-muted'}`}
+      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold ${props.accent ? 'text-c-accent' : 'text-c-text-muted'} ${props.onToggle ? 'cursor-pointer select-none hover:brightness-110' : ''}`}
       style={{ background: props.accent ? 'var(--c-accent-wash)' : 'var(--c-surface2)' }}
+      onClick={props.onToggle}
+      title={props.onToggle ? (props.collapsed ? '開く' : '畳む') : undefined}
     >
       <span className="material-symbols-outlined text-sm leading-none">{props.icon}</span>
       <span className="flex-1 min-w-0 truncate">{props.label}</span>
       <span className="font-normal tabular-nums">{props.count}</span>
+      {props.onToggle && <span className="material-symbols-outlined text-sm leading-none">{props.collapsed ? 'expand_more' : 'expand_less'}</span>}
     </div>
   )
 }
@@ -140,6 +144,9 @@ interface Props {
   onFilterChange?: (f: ListFilter | null) => void
   /** Esc で絞り込み・並べ替えのタブを外さない(履歴。未読・お気に入りのタブは見る対象の切り替えで、外すものではない)。検索の言葉だけ消す */
   keepTabsOnEsc?: boolean
+  /** 畳んでいるキーワードの帯(設定 keywordBandsCollapsed)と、帯を押したとき */
+  collapsedKeywords?: string[]
+  onToggleKeyword?: (keyword: string) => void
   /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
   onResort?: () => void
   /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
@@ -600,9 +607,11 @@ export default function ThreadListPanel(props: Props) {
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
+  const collapsedSet = useMemo(() => new Set(props.collapsedKeywords ?? []), [props.collapsedKeywords])
+  // 畳んだまとまりのスレは、キー操作やページにも入れない(画面にないものを選ばない)
   const ordered = useMemo(
-    () => (keywordGroups ? [...keywordGroups.groups.flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
-    [keywordGroups, visible],
+    () => (keywordGroups ? [...keywordGroups.groups.filter((g) => !collapsedSet.has(g.keyword)).flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
+    [keywordGroups, visible, collapsedSet],
   )
   // ページ: 並び(ordered)を pageSize ごとに分ける。並び・絞り込み・検索が変わったら 1 ページ目へ
   const [page, setPage] = useState(0)
@@ -1197,8 +1206,8 @@ export default function ThreadListPanel(props: Props) {
                 <>
                   {keywordGroups.groups.map((g) => (
                     <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
-                      <Band icon="sell" label={g.keyword} count={g.threads.length} accent />
-                      {g.threads.map(renderLimited)}
+                      <Band icon="sell" label={g.keyword} count={g.threads.length} accent collapsed={collapsedSet.has(g.keyword)} onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined} />
+                      {!collapsedSet.has(g.keyword) && g.threads.map(renderLimited)}
                     </div>
                   ))}
                   {keywordGroups.rest.length > 0 && <Band icon="list" label="その他のスレ" count={keywordGroups.rest.length} />}

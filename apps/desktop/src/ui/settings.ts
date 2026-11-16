@@ -335,6 +335,8 @@ export interface AppSettings {
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
+  /** スレ一覧で畳んでいるキーワードの帯(帯を押すと畳む・開く。端末ごと) */
+  keywordBandsCollapsed: string[]
   /**
    * 立てた人のキーワード(ThreadSummary.authorId。エッヂ・hono-bbs の ID、subject.txt のスレタイの後ろの [ID]。前は数字に BE: を付けていた。照らし方は utils/authorId.ts)。
    * この人が立てたスレを、スレタイのキーワードと同じく帯の下にまとめ、通知もする。帯はスレタイのキーワードの後
@@ -612,6 +614,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boardMeta: {},
   keywords: [],
   keywordAuthors: [],
+  keywordBandsCollapsed: [],
   paneMode: 'auto',
   boardVisits: {},
   tabsEnabled: true,

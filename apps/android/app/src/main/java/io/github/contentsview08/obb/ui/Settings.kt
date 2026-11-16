@@ -102,7 +102,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
@@ -167,6 +167,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     val goBack = {
         sub = when (sub) {
             "licenses" -> "about"
+            "nglist" -> "ng"
             "custom" -> "theme"
             else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
@@ -175,6 +176,8 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     BackHandler(enabled = sub != null) { goBack() }
     // 横になぞる操作は受けない(スライダーなどとぶつかる)。閉じるのは ×・OS の戻る
     Column(Modifier.fillMaxSize().background(Palette.base)) {
+        // NG の一覧は、スレ一覧のような 1 つの画面(自分のヘッダーとタブ。一覧は自分でスクロール)
+        if (sub == "nglist") { NgListPage(vm, onBack = goBack); return@Column }
         val close: @Composable () -> Unit = { BarIcon(Icons.Filled.Close, "設定を閉じる") { vm.closeSettings() } }
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true }, actions = close)
         else HeaderBar(TITLES[sub] ?: sub.orEmpty().removePrefix(SITE_PAGE), onNav = { goBack() }, navIsBack = true, actions = close)
@@ -195,7 +198,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "gestures" -> GesturesPage(vm)
                 "behavior" -> BehaviorPage(vm)
                 "notify" -> NotifyPage(vm)
-                "ng" -> NgPage(vm)
+                "ng" -> NgPage(vm) { sub = it }
                 "sites" -> SitesPage(vm, menus = false)
                 "menus" -> SitesPage(vm, menus = true)
                 "accounts" -> AccountsPage(vm) { sub = it }
@@ -706,20 +709,9 @@ private fun NotifyPage(vm: AppViewModel) {
 }
 
 @Composable
-private fun NgPage(vm: AppViewModel) {
+private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
-    // 種類の切り替え(all か NG_TARGETS のキー)・検索・編集の板に出している NG
-    var filter by remember { mutableStateOf("all") }
-    var query by remember { mutableStateOf("") }
-    var editing by remember { mutableStateOf<NgRule?>(null) }
     var adding by remember { mutableStateOf(false) }
-    // 長押しで選んで、まとめて有効・無効・削除(PC の管理表と同じ)。消えた NG は選択に数えない
-    var picked by remember { mutableStateOf(setOf<String>()) }
-    val selected = remember(picked, p.ngRules) { val ids = p.ngRules.mapTo(HashSet()) { it.id }; picked.filterTo(HashSet()) { it in ids } }
-    val selecting = selected.isNotEmpty()
-    fun toggle(id: String) { picked = if (id in selected) selected - id else selected + id }
-    var confirmDelete by remember { mutableStateOf<List<NgRule>?>(null) }
-    androidx.activity.compose.BackHandler(enabled = selecting) { picked = emptySet() }
     val today = io.github.contentsview08.obb.data.today()
     Group("見せ方") {
         ChoiceRow("NG のレス", p.ngMode, listOf("aborn" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngMode = it }
@@ -728,115 +720,12 @@ private fun NgPage(vm: AppViewModel) {
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
         AiNgSettings(vm)
     }
-    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます。一覧の行を長押しすると選べて、まとめて有効・無効・削除ができます") {
-        // 種類の切り替え(件数付き)
-        Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for ((k, label) in listOf("all" to "すべて") + io.github.contentsview08.obb.data.NG_TARGETS) {
-                val on = k == filter
-                val n = if (k == "all") p.ngRules.size else p.ngRules.count { it.target == k }
-                Text(
-                    "$label $n",
-                    Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Palette.surface2).clickable { filter = k }.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                )
-            }
-        }
-        Row(
-            // 高さを決めておく(× が出ても行の高さを変えない)
-            Modifier.padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2).heightIn(min = 38.dp).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("文字・メモで探す", color = Palette.textMuted, fontSize = 14.sp)
-                androidx.compose.foundation.text.BasicTextField(
-                    query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 14.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
-                )
-            }
-            if (query.isNotEmpty()) ClearTextButton { query = "" }
-        }
-        val q = query.trim()
-        val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true) || (it.boardName ?: "").contains(q, true)) }
-            .asReversed().sortedByDescending { it.createdAt }
-        // 数百あると縦に長くなりすぎるので 50 件ずつ(種類・検索を変えたら 1 ページ目に戻る)
-        val perPage = 50
-        var pageNo by remember(filter, query) { mutableStateOf(0) }
-        val pageCount = (shown.size + perPage - 1) / perPage
-        val pageSafe = pageNo.coerceIn(0, maxOf(0, pageCount - 1))
-        val pageRules = shown.drop(pageSafe * perPage).take(perPage)
-        // 選んでいる間の帯: 件数・見えているものを全部選ぶ・有効・無効・削除・選択を外す
-        if (selecting) {
-            val pickedRules = p.ngRules.filter { it.id in selected }
-            val allShown = pageRules.isNotEmpty() && pageRules.all { it.id in selected }
-            Row(Modifier.fillMaxWidth().background(Palette.accentWash).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${selected.size} 件を選択中", Modifier.weight(1f), color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { picked = emptySet() }) { Icon(Icons.Filled.Close, "選択を外す", tint = Palette.textBody) }
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).background(Palette.accentWash).padding(horizontal = 8.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { picked = if (allShown) selected - pageRules.mapTo(HashSet()) { it.id } else selected + pageRules.map { it.id } }) { Text(if (allShown) "このページを外す" else "このページを全部選ぶ", color = Palette.textBody) }
-                TextButton(onClick = { vm.setNgEnabledAll(pickedRules, true) }) { Text("有効にする", color = Palette.textBody) }
-                TextButton(onClick = { vm.setNgEnabledAll(pickedRules, false) }) { Text("無効にする", color = Palette.textBody) }
-                TextButton(onClick = { confirmDelete = pickedRules }) {
-                    Icon(Icons.Filled.Delete, null, tint = Palette.heatVeryHot, modifier = Modifier.size(18.dp))
-                    Text("削除", color = Palette.heatVeryHot, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        if (shown.isEmpty()) Text(if (p.ngRules.isEmpty()) "NG はまだありません" else "当てはまる NG はありません", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 14.sp)
-        for (r in pageRules) {
-            val expired = r.expiresOnDate != null && r.expiresOnDate < today
-            val marks = listOfNotNull(
-                if (r.isRegex) "正規表現" else null, r.boardUrl?.let { "${r.boardName ?: "この板"}だけ" },
-                r.expiresOnDate?.let { if (expired) "期限切れ" else "${it}まで" }, r.note,
-            )
-            HorizontalDivider(color = Palette.border)
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(if (r.id in selected) Palette.accentWash else Color.Transparent)
-                    // 長押しで選ぶ。選んでいる間は押しても選ぶ(編集は選ぶのをやめてから)
-                    .combinedClickable(onLongClick = { toggle(r.id) }) { if (selecting) toggle(r.id) else editing = r }
-                    .graphicsLayer { alpha = if (r.active(today)) 1f else 0.6f }.padding(start = if (selecting) 4.dp else 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (selecting) androidx.compose.material3.Checkbox(r.id in selected, null, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            io.github.contentsview08.obb.data.ngTargetName(r.target),
-                            Modifier.background(Palette.surface2, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 11.sp,
-                        )
-                        Text(
-                            r.pattern, Modifier.padding(start = 8.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            fontFamily = if (r.isRegex) androidx.compose.ui.text.font.FontFamily.Monospace else null,
-                        )
-                    }
-                    if (marks.isNotEmpty()) Text(marks.joinToString(" ・ "), Modifier.padding(top = 2.dp), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Switch(r.enabled, { vm.saveNg(r.copy(enabled = it)) }, colors = accentSwitchColors())
-            }
-        }
-        HorizontalDivider(color = Palette.border)
-        if (pageCount > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { pageNo = pageSafe - 1 }, enabled = pageSafe > 0) { Text("前へ") }
-            Text("${pageSafe + 1} / $pageCount ページ(${shown.size} 件)", Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            TextButton(onClick = { pageNo = pageSafe + 1 }, enabled = pageSafe < pageCount - 1) { Text("次へ") }
-        }
+    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
+        // 一覧は長くなるので、設定の中に埋め込まず 1 つの画面で(種類のタブ・検索・長押しとなぞりで選んでまとめて操作)
+        NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG の一覧", desc = "種類ごとのタブと検索。行を長押しして選び、なぞって範囲を選べます", value = "${p.ngRules.size} 件") { open("nglist") }
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
         val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
         if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }
-        if (p.ngRules.isNotEmpty()) ActionRow("NG をすべて削除…", Icons.Filled.Delete, danger = true) { confirmDelete = p.ngRules }
-        Text("全部で ${p.ngRules.size} 件(効いているもの ${p.ngRules.count { it.active(today) }} 件)", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
-    }
-    confirmDelete?.let { rules ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text(if (rules.size == p.ngRules.size) "NG をすべて削除" else "NG を ${rules.size} 件削除") },
-            text = { Text(if (rules.size == p.ngRules.size) "NG を ${rules.size} 件すべて消します。元には戻せません。同期している端末からも消えます。" else "選んだ NG を ${rules.size} 件消します。元には戻せません。同期している端末からも消えます。") },
-            confirmButton = { TextButton(onClick = { vm.removeNgAll(rules); picked = emptySet(); confirmDelete = null }) { Text("削除", color = Palette.heatVeryHot) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("やめる") } },
-        )
     }
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {
@@ -844,8 +733,7 @@ private fun NgPage(vm: AppViewModel) {
         is io.github.contentsview08.obb.Page.Threads -> pg.board.url to pg.board.name
         else -> null
     }
-    if (adding) NgEditSheet(NgRule(if (filter == "all") "content" else filter, ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
-    editing?.let { r -> NgEditSheet(r, board, isNew = false, onDismiss = { editing = null }, onDelete = { vm.removeNg(r); editing = null }) { vm.saveNg(it); editing = null } }
+    if (adding) NgEditSheet(NgRule("content", ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
 }
 
 /**

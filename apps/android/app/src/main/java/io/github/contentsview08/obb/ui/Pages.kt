@@ -274,7 +274,7 @@ private fun PastTabBar(vm: AppViewModel, current: String, footer: Boolean) {
     }
 }
 
-private const val PAST_TAB_HEIGHT = 44
+internal const val PAST_TAB_HEIGHT = 44
 
 /** 過去のスレの 1 行(どのタブでも同じ形): スレタイ、下に板と時間、右に レス数と未読。書き込みのタブは、書いた本文を下に */
 @Composable

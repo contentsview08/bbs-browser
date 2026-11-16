@@ -54,7 +54,7 @@ object FullBackup {
     }
 
     /**
-     * DB の写し(dbFile)・設定(settings.json。古い版でも読めるように)・SharedPreferences のファイル(shared_prefs/*.xml。
+     * DB の写し(dbFile)・設定(settings.json。古い版でも読めるように)・SharedPreferences のファイル(shared_prefs の中の .xml。
      * 書き込みの Cookie や認証の状態、読んだ位置もここにある)を 1 つの ZIP に書く
      */
     fun writeZip(context: Context, dbFile: File, settings: JSONObject, out: OutputStream) {

@@ -113,6 +113,8 @@ export default function NewThreadDialog(props: Props) {
         media.clearUploaded()
         setTitle('')
         setBody('')
+        // 控えもその場で消す(親がすぐ閉じると、空にした値が控えに書かれる前に消えることがあり、次に開くと前の文章が残っていた)
+        if (props.draftKey) stashSet(props.draftKey, '')
       }
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })

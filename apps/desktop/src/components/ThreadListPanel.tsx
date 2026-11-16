@@ -153,6 +153,8 @@ interface Props {
   keepTabsOnEsc?: boolean
   /** 畳んでいるキーワードの帯(設定 keywordBandsCollapsed)と、帯を押したとき */
   collapsedKeywords?: string[]
+  /** キーワードに当たるスレを帯で上にまとめるか(設定 keywordBands。なければまとめる)。タブ「キーワード」の中はいつもまとめる */
+  keywordBands?: boolean
   onToggleKeyword?: (keyword: string) => void
   /** キーワードの帯の右クリック(スマホ版は長押し): そのキーワードを直す・外す・キーワードの設定を開く */
   onEditKeyword?: (keyword: string) => void
@@ -532,6 +534,12 @@ export default function ThreadListPanel(props: Props) {
   const shownUnreadTop = useDeferredValue(unreadTop)
   /** 既読が進むたびに一覧を作り直さないよう、「見たスレ」の絞り込みのときだけ stateOf を見る */
   const visitedStateOf = visitedOnly ? stateOf : undefined
+  // タブ「キーワード」: スレタイのキーワードか立てた人のキーワードに当たるスレだけ
+  const keywordHit = useMemo(() => {
+    const ks = (props.keywords ?? []).map((k) => normalizeForSearch(k.trim())).filter(Boolean)
+    const as = new Set((props.keywordAuthors ?? []).map((k) => legacyAuthorId(k.trim())).filter(Boolean))
+    return (t: ThreadSummary) => ks.some((k) => normalizedOf(t).title.includes(k)) || (t.authorId !== undefined && as.has(t.authorId))
+  }, [props.keywords, props.keywordAuthors])
   const visible = useMemo(() => {
     // 検索: 全角・半角・大文字・小文字・カナを同一視し、空白で区切った言葉はすべて含むもの(AND)。立てた人の ID も探す
     const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
@@ -545,6 +553,7 @@ export default function ThreadListPanel(props: Props) {
       if (visitedStateOf && visitedStateOf(t) === undefined) return false
       if (filter === 'posted' && !props.postedIds?.has(threadId(t))) return false
       if (filter === 'fav' && !props.favoriteIds?.has(threadId(t))) return false
+      if (filter === 'keyword' && !keywordHit(t)) return false
       return true
     })
     const so = shownServerOrder
@@ -565,7 +574,7 @@ export default function ThreadListPanel(props: Props) {
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, keywordHit])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる
@@ -598,6 +607,8 @@ export default function ThreadListPanel(props: Props) {
     const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
     const authors = (props.keywordAuthors ?? []).map((k) => legacyAuthorId(k.trim())).filter(Boolean)
     if (keywords.length === 0 && authors.length === 0) return undefined
+    // 帯でまとめるのは、設定で入れているとき(タブ「キーワード」の中はいつも)
+    if (props.keywordBands === false && filter !== 'keyword') return undefined
     const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
     // 帯に出す新着: 見たことのあるスレの未読の合計(見ていないスレは数えない)
@@ -616,7 +627,7 @@ export default function ThreadListPanel(props: Props) {
     }
     if (groups.length === 0) return undefined
     return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
-  }, [visible, props.keywords, props.keywordAuthors, stateOf])
+  }, [visible, props.keywords, props.keywordAuthors, stateOf, props.keywordBands, filter])
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */

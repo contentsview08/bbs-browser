@@ -32,8 +32,14 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
       </Section>
       <Section
         title="キーワード"
-        note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます"
+        note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます。帯を右クリックすると直せます"
       >
+        <Toggle
+          checked={s.keywordBands}
+          onChange={(v) => update('keywordBands', v)}
+          label="キーワードに当たるスレを帯で上にまとめる"
+          note="切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します"
+        />
         <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
       </Section>
       <Section

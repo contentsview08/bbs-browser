@@ -3195,6 +3195,7 @@ export default function App() {
           onResort={history ? () => void resortHistory() : undefined}
           keepTabsOnEsc={!!history}
           collapsedKeywords={settings.keywordBandsCollapsed}
+          keywordBands={settings.keywordBands}
           onToggleKeyword={(k) => updateSetting('keywordBandsCollapsed', settings.keywordBandsCollapsed.includes(k) ? settings.keywordBandsCollapsed.filter((x) => x !== k) : [...settings.keywordBandsCollapsed, k])}
           onEditKeyword={setKeywordEdit}
           onRemoveKeyword={(k) => replaceKeyword(k, null)}

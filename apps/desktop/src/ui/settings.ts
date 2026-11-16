@@ -144,10 +144,10 @@ export const FONT_FAMILY_KEYS = [
 /** 板を開いたときの並び。subject は「スレ順(標準)」= 掲示板が返した順のまま(キーは前からの名前のまま) */
 export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
 /** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
-export type ListTabKey = 'unread' | 'visited' | 'order' | 'momentum' | 'newest' | 'count' | 'viewed' | 'posted' | 'fav'
+export type ListTabKey = 'unread' | 'visited' | 'order' | 'momentum' | 'newest' | 'count' | 'keyword' | 'viewed' | 'posted' | 'fav'
 /** スレ一覧の絞り込み(タブのうち、並べ替えではないもの) */
-export type ListFilter = 'unread' | 'visited' | 'posted' | 'fav'
-export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited', 'posted', 'fav'])
+export type ListFilter = 'unread' | 'visited' | 'keyword' | 'posted' | 'fav'
+export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited', 'keyword', 'posted', 'fav'])
 /** そのタブを選んでいるか。絞り込み中の sort は既定の値のままなので、絞り込みがあれば並べ替えのタブは選んでいない */
 export function isListTabActive(key: ListTabKey, filter: ListFilter | null, sort: { mode: string } | null): boolean {
   if (LIST_FILTERS.has(key)) return filter === key
@@ -164,6 +164,7 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
   { key: 'momentum', name: '勢い順', icon: 'local_fire_department', note: '勢い(1 日あたりのレス数)の多い順に並べる' },
   { key: 'newest', name: '新しい順', icon: 'schedule', note: '立った時刻の新しい順に並べる' },
   { key: 'count', name: 'レス数順', icon: 'format_list_numbered', note: 'レス数の多い順に並べる' },
+  { key: 'keyword', name: 'キーワード', icon: 'sell', note: 'キーワード(スレタイ・立てた人)に当たるスレだけを出す。帯でまとめるのを切っていても、ここでは帯でまとめる' },
 ]
 /** 「履歴」だけのタブ(設定のタブの並びには出さない): 見た順(最近見たものが上。押すたびに上下を入れ替える)・書き込んだ・お気に入り */
 export const HISTORY_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
@@ -337,6 +338,8 @@ export interface AppSettings {
   keywords: string[]
   /** スレ一覧で畳んでいるキーワードの帯(帯を押すと畳む・開く。端末ごと) */
   keywordBandsCollapsed: string[]
+  /** キーワードに当たるスレを帯で上にまとめるか。切るとふだんの並びのまま(キーワードのスレはタブ「キーワード」で見る) */
+  keywordBands: boolean
   /**
    * 立てた人のキーワード(ThreadSummary.authorId。エッヂ・hono-bbs の ID、subject.txt のスレタイの後ろの [ID]。前は数字に BE: を付けていた。照らし方は utils/authorId.ts)。
    * この人が立てたスレを、スレタイのキーワードと同じく帯の下にまとめ、通知もする。帯はスレタイのキーワードの後
@@ -615,6 +618,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keywords: [],
   keywordAuthors: [],
   keywordBandsCollapsed: [],
+  keywordBands: true,
   paneMode: 'auto',
   boardVisits: {},
   tabsEnabled: true,

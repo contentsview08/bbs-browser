@@ -13,9 +13,9 @@ export interface ChmateRaw {
   texts: Record<string, string>
   /** dat(Shift_JIS から直した本文)と、同じ名前の idx */
   dats: { name: string; text: string; idx?: string | null }[]
-  /** bookmarks 表(見たスレ。flag の 1 のビットが ★ = お気に入り) */
+  /** bookmarks 表(見たスレ。flag は ★ の数(1〜5)。0 なら履歴の行) */
   bookmarks: { name: string; created: number; title: string; res_count: number; read_count: number; read_state: string; access: number; posted: number; flag?: number }[]
-  /** boards 表(板一覧。ディレクトリ名 → サーバー。flag の 1 のビットがお気に入りの板) */
+  /** boards 表(板一覧。ディレクトリ名 → サーバー。flag は ★ の数。0 ならお気に入りでない) */
   boards: { name: string; server: string; title: string; flag?: number }[]
   skipped?: string[]
 }
@@ -67,9 +67,8 @@ const NG_FILES: Record<string, NgTarget | undefined> = {
 }
 /** ChMate の NG の旗: 32 が正規表現 */
 const NG_FLAG_REGEX = 32
-/** bookmarks・boards の flag: 1 のビットが ★(お気に入り) */
-const FLAG_FAVORITE = 1
-const isFavoriteFlag = (flag: number | undefined) => ((flag ?? 0) & FLAG_FAVORITE) !== 0
+/** bookmarks・boards の flag は ★ の数(1〜5)。1 以上ならお気に入り(前は 1 のビットで見ていて、★ 2 と 4 を落としていた) */
+const isFavoriteFlag = (flag: number | undefined) => (flag ?? 0) > 0
 
 /**
  * ChMate の板の名前を板の URL にする。`host%2Fboard`(外部の板)はそのまま、ディレクトリ名だけ(5ch の板)は boards 表のサーバーを引く。

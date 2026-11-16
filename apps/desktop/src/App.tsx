@@ -3170,6 +3170,7 @@ export default function App() {
           // 閲覧履歴は 見た順・レス数順・新しい順(未読は上の「履歴」の帯で)
           tabs={notifView ? [] : history ? (isMobile ? ['viewed', 'count', 'newest'] : HISTORY_LIST_TABS) : settings.listTabs}
           onResort={history ? () => void resortHistory() : undefined}
+          keepTabsOnEsc={!!history}
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
           pageSize={history ? settings.listPageSize : 0}

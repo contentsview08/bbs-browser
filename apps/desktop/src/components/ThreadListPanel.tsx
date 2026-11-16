@@ -138,6 +138,8 @@ interface Props {
   tabRequest?: { key: ListTabKey | 'next' | 'prev'; seq: number }
   /** 絞り込みが変わった(履歴の画面で、どの絞り込みを見ているかを App が覚える) */
   onFilterChange?: (f: ListFilter | null) => void
+  /** Esc で絞り込み・並べ替えのタブを外さない(履歴。未読・お気に入りのタブは見る対象の切り替えで、外すものではない)。検索の言葉だけ消す */
+  keepTabsOnEsc?: boolean
   /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
   onResort?: () => void
   /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
@@ -306,6 +308,12 @@ export default function ThreadListPanel(props: Props) {
     // スマホ: 選んでいる途中なら、まず選ぶのをやめる(戻るで)
     if (selected.size > 0) {
       setSelected(new Set())
+      return true
+    }
+    if (props.keepTabsOnEsc) {
+      if (!query && !searchActive) return false
+      setQuery('')
+      setSearchActive(false)
       return true
     }
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)

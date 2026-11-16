@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chmateBoardUrl, parseChmate, parseIdx, splitDatName, splitThreadUrl, type ChmateRaw } from '../src/utils/chmate'
+import { chmateBoardUrl, looksLikeDat, parseChmate, parseIdx, splitDatName, splitThreadUrl, type ChmateRaw } from '../src/utils/chmate'
 
 // 実物のバックアップ(2026-11)の形に合わせた小さな見本
 const DAT = ['名無し<>sage<>2026/11/01(日) 09:50:14 ID:aaaa<> 1 つ目 <>てすとスレ', '名無し<><>2026/11/01(日) 09:51:42 ID:bbbb<> 2 つ目 <>', '名無し<><>2026/11/01(日) 09:52:00 ID:aaaa<> 3 つ目 <>'].join('\n') + '\n'
@@ -20,6 +20,8 @@ const raw = (over: Partial<ChmateRaw> = {}): ChmateRaw => ({
     { name: 'bbs.eddibb.cc%2Fliveedge_1791503299.dat', text: DAT, idx: '1791504300000\tW/"x"\n2:1,3:1\n' },
     { name: 'livejupiter_1618048117.dat', text: DAT, idx: '0\tnull\n\n' },
     { name: 'mystery_1.dat', text: DAT, idx: null },
+    { name: 'bbs.eddibb.cc%2Fliveedge_1752974175.dat', text: '\u0000'.repeat(64), idx: null },
+    { name: 'bbs.p-hotair.com%2Fnews4vip_1171778428.dat', text: 'Code = 404\n', idx: null },
   ],
   bookmarks: [
     { name: 'livejupiter', created: 1618048117, title: '橋下', res_count: 3, read_count: 2, read_state: '{"o":69,"n":"26","r":2,"p":1.0}', access: 1785551620400, posted: 0, flag: 1 },
@@ -104,6 +106,19 @@ describe('ChMate のバックアップの読み替え', () => {
   })
   it('キーワードは空を除いて重ねない', () => {
     expect(parseChmate(raw()).keywords).toEqual(['宮崎駿'])
+  })
+  it('壊れた dat(全部 NUL・404 の返事)はスレにしない', () => {
+    expect(looksLikeDat(DAT)).toBe(true)
+    expect(looksLikeDat('\u0000\u0000')).toBe(false)
+    expect(looksLikeDat('Code = 404\n')).toBe(false)
+    expect(looksLikeDat('')).toBe(false)
+    const r = parseChmate(raw())
+    expect(r.threads.some((t) => t.key === '1752974175' || t.key === '1171778428')).toBe(false)
+    expect(r.notes.some((n) => n.includes('壊れていて') && n.includes('2 本'))).toBe(true)
+  })
+  it('書き込みの履歴のスレタイが空なら、ログのスレタイで埋める', () => {
+    const r = parseChmate(raw({ texts: { ...raw().texts, 'files/postDataList.json': JSON.stringify([{ url: 'http://bbs.eddibb.cc/test/read.cgi/liveedge/1791503299/', name: '', mail: '', body: 'x', posted: 5, confirmed: null, targetTitle: '' }]) } }))
+    expect(r.posts[0].title).toBe('てすとスレ')
   })
   it('ファイルが欠けていても落ちない', () => {
     const r = parseChmate({ texts: {}, dats: [], bookmarks: [], boards: [], skipped: ['x'] })

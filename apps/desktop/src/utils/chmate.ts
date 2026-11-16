@@ -86,6 +86,15 @@ export function chmateBoardUrl(name: string, servers: Map<string, string>): stri
   return server ? to5chIo(`https://${server}/${name}/`) : undefined
 }
 
+/**
+ * dat として読めるか。ChMate のバックアップには、中身が全部 NUL(書きかけのまま壊れた)・「Code = 404」だけ(dat 落ちの返事)の
+ * ファイルが混ざる。そういうものはレスにならないので、スレとして入れない(入れると、スレタイがキーのままの空のスレが履歴に並ぶ)
+ */
+export function looksLikeDat(text: string): boolean {
+  const first = text.split('\n').find((l) => l.trim() !== '')
+  return first !== undefined && !first.startsWith('\u0000') && first.includes('<>')
+}
+
 /** dat のファイル名 `<板>_<キー>.dat` → 板とキー */
 export function splitDatName(name: string): { board: string; key: string } | undefined {
   const m = /^(.+)_(\d+)\.(?:dat|idx)$/.exec(name)
@@ -140,10 +149,15 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
   // スレのログ
   const threads: ChmateThread[] = []
   const seen = new Set<string>()
+  let broken = 0
   for (const d of raw.dats) {
     const parts = splitDatName(d.name)
     if (!parts) {
       notes.push(`${d.name}: 名前から板とキーが分かりません`)
+      continue
+    }
+    if (!looksLikeDat(d.text)) {
+      broken++
       continue
     }
     const boardUrl = boardUrlOf(parts.board)
@@ -168,6 +182,7 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
       viewedAt: lastModified > 0 ? lastModified : fav?.access && fav.access > 0 ? fav.access : now,
     })
   }
+  if (broken > 0) notes.push(`壊れていてレスの読めないログ ${broken} 本は入れません(中身が空か、dat 落ちの返事だけ)`)
   // dat のない ★ のスレ(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
   for (const b of raw.bookmarks) {
     if (!isFavoriteFlag(b.flag)) continue
@@ -218,10 +233,12 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
     const t = splitThreadUrl(url)
     if (!t || at <= 0) continue
     const confirmed = typeof r.confirmed === 'string' ? /\/(\d+)\/?$/.exec(r.confirmed)?.[1] : undefined
+    const ownTitle = typeof r.targetTitle === 'string' ? r.targetTitle : ''
     posts.push({
       boardUrl: t.boardUrl,
       key: t.key,
-      title: typeof r.targetTitle === 'string' ? r.targetTitle : '',
+      // ChMate の履歴にスレタイがなければ、ログのスレタイで埋める
+      title: ownTitle || threads.find((x) => x.key === t.key && x.boardUrl === t.boardUrl)?.title || '',
       ...(confirmed ? { no: Number(confirmed) } : {}),
       name: typeof r.name === 'string' ? r.name : '',
       mail: typeof r.mail === 'string' ? r.mail : '',

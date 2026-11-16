@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.io.File
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.bbs.DatCursor
 import io.github.contentsview08.obb.bbs.FetchResult
@@ -152,9 +153,28 @@ internal object FavoriteThreadSql {
  * ログの保存(PC 版の packages/logstore にあたる)。テーブルは PC 版と同じ packages/logstore/migrations の SQL で作る
  * (ビルドで assets の migrations/ に入る)。版の番号 = 流したマイグレーションの数
  */
-class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", null, migrationNames(context).size) {
+class LogDb(private val context: Context) : SQLiteOpenHelper(context, FullBackup.DB_NAME, null, migrationNames(context).size) {
+    init {
+        // まるごとバックアップから戻す控えがあれば、DB を開く前に入れ替える
+        FullBackup.applyPending(context)
+    }
 
     override fun onCreate(db: SQLiteDatabase) = migrate(db, 0)
+
+    /**
+     * DB の写しを path に作る(まるごとバックアップ)。使っている最中でも壊れない写しになるよう、WAL を本体に書き戻してから
+     * VACUUM INTO(古い Android の SQLite にはないので、だめならファイルをそのまま写す)
+     */
+    suspend fun exportDatabase(path: String) = io {
+        val db = writableDatabase
+        db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).close()
+        File(path).delete()
+        try {
+            db.execSQL("VACUUM INTO ?", arrayOf(path))
+        } catch (_: Exception) {
+            File(db.path).copyTo(File(path), overwrite = true)
+        }
+    }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = migrate(db, oldVersion)
 

@@ -940,6 +940,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** まるごとバックアップ(DB と設定を 1 つの ZIP に)。PC 版の「まるごとバックアップ」に当たる */
+    fun exportFullBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val app = getApplication<Application>()
+                val tmp = java.io.File(app.cacheDir, "full-backup.db")
+                db.exportDatabase(tmp.path)
+                val settings = prefs.export()
+                withContext(Dispatchers.IO) {
+                    app.contentResolver.openOutputStream(uri, "wt")?.use { io.github.contentsview08.obb.data.FullBackup.writeZip(tmp, settings, it) } ?: throw IllegalStateException("書けませんでした")
+                    tmp.delete()
+                }
+                toast = "まるごとバックアップを保存しました"
+            } catch (e: Exception) {
+                toast = "保存できませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
+    /**
+     * まるごとバックアップから戻す。設定はその場で置き換え、DB は次の起動の控えに置いてアプリを閉じる(開いている DB はその場では替えられない)。
+     * いまの DB は obb.before-restore-時刻.db として残る
+     */
+    fun importFullBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val app = getApplication<Application>()
+                val settings = withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.use { io.github.contentsview08.obb.data.FullBackup.stageRestore(app, it) } ?: throw IllegalStateException("読めませんでした")
+                }
+                if (settings != null) {
+                    prefs.import(settings)
+                    prefs.reloadNg()
+                }
+                toast = "戻す準備ができました。アプリを閉じます。開き直すとバックアップの状態になります"
+                kotlinx.coroutines.delay(1500)
+                // DB を差し替えるには一度終わるしかない(次に LogDb が作られるときに入れ替わる)
+                kotlin.system.exitProcess(0)
+            } catch (e: Exception) {
+                toast = "戻せませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
     /** 自分の配色を JSON のファイルに書き出す(「JSON をコピー」と同じ形。PC 版の配色の書き出しとも同じ) */
     fun exportScheme(uri: android.net.Uri) {
         viewModelScope.launch {

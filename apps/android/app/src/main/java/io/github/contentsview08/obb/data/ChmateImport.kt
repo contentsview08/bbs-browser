@@ -42,7 +42,7 @@ class ChmateThread(
     val key: String,
     val title: String,
     val posts: List<Post>,
-    /** 既読の番号(お気に入りなら ChMate の既読、そうでなければ全部読んだことにする) */
+    /** 既読の番号。ChMate の読んだ位置は使わず、持ってきたレスは全部読んだことにする(何百スレもの未読が一度に出ないように) */
     val readNo: Int,
     /** 自分の書き込みのレス番号(idx の 2 行目) */
     val ownNos: List<Int>,
@@ -121,13 +121,8 @@ object Chmate {
             val (posts, title) = parseDat(d.text)
             val fav = favorites["${board}_$key"]
             val (lastModified, ownNos) = parseIdx(d.idx)
-            var readNo = posts.size
-            if (fav != null) {
-                val r = runCatching { JSONObject(fav.readState.ifEmpty { "{}" }).optInt("r", -1) }.getOrDefault(-1)
-                if (r >= 0) readNo = minOf(r, posts.size)
-            }
             threads += ChmateThread(
-                boardUrl, key, title ?: fav?.title ?: "", posts, readNo, ownNos.filter { it <= posts.size }, isFavorite(fav?.flag),
+                boardUrl, key, title ?: fav?.title ?: "", posts, posts.size, ownNos.filter { it <= posts.size }, isFavorite(fav?.flag),
                 if (lastModified > 0) lastModified else if ((fav?.access ?: 0L) > 0) fav!!.access else now,
             )
         }

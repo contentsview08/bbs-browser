@@ -1205,6 +1205,14 @@ private fun BackupPage(vm: AppViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Group("ほかのアプリから取り込む", note = "ChMate の「バックアップ」で書き出した ZIP から、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・スレタイのキーワードを取り込みます。今あるものに足し、同じものは重ねません。見た目などの設定は取り込みません。板のサーバーが分からないスレや、OBB が対応していない掲示板のスレは読みません") {
         ActionRow("ChMate のバックアップ(ZIP)を読み込む") { loadChmate.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) }
+        vm.chmateProgress?.let { (stage, done, total) ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(if (total > 0) "$stage $done / $total(${done * 100 / total}%)" else stage, fontSize = 12.sp, color = Palette.textBody)
+                Spacer(Modifier.height(6.dp))
+                if (total > 0) androidx.compose.material3.LinearProgressIndicator({ done.toFloat() / total }, Modifier.fillMaxWidth(), color = Palette.accent, trackColor = Palette.border)
+                else androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth(), color = Palette.accent, trackColor = Palette.border)
+            }
+        }
     }
     Group("はじめの状態に戻す", note = "ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態に戻します(アプリは閉じます)。戻す前に「バックアップを書き出す」で控えを取れます") {
         ActionRow("はじめの状態に戻す…") { confirmReset = true }

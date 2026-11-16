@@ -54,7 +54,7 @@ class ChmateImportTest {
         val servers = mapOf("livejupiter" to "eagle.5ch.net")
         assertEquals("https://bbs.eddibb.cc/liveedge/", Chmate.boardUrl("bbs.eddibb.cc%2Fliveedge", servers))
         assertEquals("https://jbbs.livedoor.jp/sports/40235/", Chmate.boardUrl("jbbs.livedoor.jp%2Fsports%2F40235", servers))
-        assertEquals("https://eagle.5ch.net/livejupiter/", Chmate.boardUrl("livejupiter", servers))
+        assertEquals("https://eagle.5ch.net/livejupiter/", Chmate.boardUrl("livejupiter", servers)) // 5ch.io への置き換えは UrlRoute.parse で行う
         assertNull(Chmate.boardUrl("poverty", servers))
     }
 
@@ -82,7 +82,7 @@ class ChmateImportTest {
         val jup = r.threads.first { it.key == "1618048117" }
         assertEquals("https://eagle.5ch.net/livejupiter/", jup.boardUrl)
         assertTrue(jup.favorite)
-        assertEquals(2, jup.readNo)
+        assertEquals(3, jup.readNo) // ChMate の読んだ位置は使わず、全部読んだことにする
         assertEquals(1785551620400L, jup.viewedAt)
         val noLog = r.threads.first { it.key == "1700000000" }
         assertTrue(noLog.favorite)

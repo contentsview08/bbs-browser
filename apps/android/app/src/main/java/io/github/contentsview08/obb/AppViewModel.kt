@@ -998,8 +998,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・キーワードを足す
      * (PC 版の importChmate と同じ決まり)。ログは、手元にないか ChMate の方が長いときだけ入れ替える
      */
+    /** ChMate の取り込みの進み具合(段階・済み・全部)。null なら取り込んでいない */
+    var chmateProgress by mutableStateOf<Triple<String, Int, Int>?>(null)
+        private set
+
     fun importChmate(uri: android.net.Uri) {
         viewModelScope.launch {
+            chmateProgress = Triple("ZIP を読んでいます", 0, 0)
             try {
                 val app = getApplication<Application>()
                 val now = System.currentTimeMillis()
@@ -1025,7 +1030,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     favBoards++
                 }
                 val untitled = ArrayList<ThreadSummary>()
+                var seenThreads = 0
                 for (t in parsed.threads) {
+                    if (++seenThreads % 5 == 0) chmateProgress = Triple("スレのログを入れています", seenThreads, parsed.threads.size)
                     val s = summaryOf(t.boardUrl, t.key, t.title) ?: run { skippedBoards++; continue }
                     if (t.posts.isNotEmpty()) {
                         val existing = db.loadThread(s)
@@ -1043,6 +1050,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         favCount++
                     }
                 }
+                chmateProgress = Triple("書き込みの履歴を入れています", 0, parsed.posts.size)
                 // 書き込みの履歴は、同じスレ・同じ時刻のものがあれば重ねない(2 回読み込んでも増えない)
                 val havePosts = db.postHistory(100000).mapTo(HashSet()) { "${it.thread.id}\t${it.postedAt}" }
                 var posts = 0
@@ -1083,6 +1091,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) {
                 toast = "取り込めませんでした: ${e.message ?: e}"
+            } finally {
+                chmateProgress = null
             }
         }
     }

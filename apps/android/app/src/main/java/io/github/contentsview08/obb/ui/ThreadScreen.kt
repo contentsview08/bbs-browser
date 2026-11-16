@@ -217,15 +217,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         listOf(
             MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule) { vm.addNg(NgRule("posterId", id, expiresOnDate = io.github.contentsview08.obb.data.today())) },
             MenuItem("この ID を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterId", id)) },
-            MenuItem("この ID を詳しく設定して NG に…(期限・この板だけ・メモ)", Icons.Filled.EditNote) { ngAdding = NgRule("posterId", id) },
+            MenuItem("この ID を詳しく設定して NG に…", Icons.Filled.EditNote) { ngAdding = NgRule("posterId", id) },
         )
     }.orEmpty()
+    // 名前と本文は、そのままの文字で足すことがまずないので(ワッチョイの一部・言葉の一部)、いつも編集の板を開いて直してから足す。ID だけはその場で足せる
     fun nameNgItems(p: Post) = listOf(
-        MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterName", p.name)) },
-        MenuItem("この名前を詳しく設定して NG に…(正規表現・期限・この板だけ)", Icons.Filled.EditNote) { ngAdding = NgRule("posterName", p.name) },
+        MenuItem("この名前を NG に…", Icons.Filled.Block) { ngAdding = NgRule("posterName", p.name) },
     )
     /** 本文の言葉の NG: 1 行目を入れた下書きを開き、言葉を直して(正規表現・期限・板も決めて)足す */
-    fun wordNgItem(p: Post) = MenuItem("本文の言葉を NG に…(直して足す)", Icons.Filled.Block) {
+    fun wordNgItem(p: Post) = MenuItem("本文の言葉を NG に…", Icons.Filled.Block) {
         ngAdding = NgRule("content", p.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(30) ?: "")
     }
     val own = page.ownNos

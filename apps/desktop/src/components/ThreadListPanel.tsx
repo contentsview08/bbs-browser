@@ -19,6 +19,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum, sortByOrder } from '../utils/thread'
 import { threadUnread, unreadFirstOrder } from '../utils/unread'
 import { isMobile } from '../utils/platform'
+import { FloatingMenu, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { LIST_FILTERS, isListTabActive, tabDefOf, type AppSettings, type ListFilter, type ListTabKey, type ThreadSort, type UpdateSetting } from '../ui/settings'
@@ -47,12 +48,13 @@ export const threadId = (t: ThreadSummary) => `${t.boardUrl}${t.key}`
 
 /** スレ一覧に差し込む帯(キーワードの見出しなど) */
 /** まとまりの見出しの帯。onToggle があれば押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */
-function Band(props: { icon: string; label: string; count: number; accent?: boolean; collapsed?: boolean; onToggle?: () => void }) {
+function Band(props: { icon: string; label: string; count: number; accent?: boolean; collapsed?: boolean; onToggle?: () => void; onContextMenu?: (e: React.MouseEvent) => void }) {
   return (
     <div
       className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold ${props.accent ? 'text-c-accent' : 'text-c-text-muted'} ${props.onToggle ? 'cursor-pointer select-none hover:brightness-110' : ''}`}
       style={{ background: props.accent ? 'var(--c-accent-wash)' : 'var(--c-surface2)' }}
       onClick={props.onToggle}
+      onContextMenu={props.onContextMenu}
       title={props.onToggle ? (props.collapsed ? '開く' : '畳む') : undefined}
     >
       <span className="material-symbols-outlined text-sm leading-none">{props.icon}</span>
@@ -147,6 +149,10 @@ interface Props {
   /** 畳んでいるキーワードの帯(設定 keywordBandsCollapsed)と、帯を押したとき */
   collapsedKeywords?: string[]
   onToggleKeyword?: (keyword: string) => void
+  /** キーワードの帯の右クリック(スマホ版は長押し): そのキーワードを直す・外す・キーワードの設定を開く */
+  onEditKeyword?: (keyword: string) => void
+  onRemoveKeyword?: (keyword: string) => void
+  onOpenKeywordSettings?: () => void
   /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
   onResort?: () => void
   /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
@@ -608,6 +614,28 @@ export default function ThreadListPanel(props: Props) {
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
   const collapsedSet = useMemo(() => new Set(props.collapsedKeywords ?? []), [props.collapsedKeywords])
+  // キーワードの帯の右クリックメニュー(畳む / 開く・直す・外す・設定)
+  const [bandMenu, setBandMenu] = useState<{ pos: MenuPos; keyword: string }>()
+  const bandContextMenu = (keyword: string) =>
+    isMobile || !(props.onEditKeyword || props.onRemoveKeyword || props.onOpenKeywordSettings)
+      ? undefined
+      : (e: React.MouseEvent) => {
+          if (wantsNativeMenu(e)) return
+          e.preventDefault()
+          setBandMenu({ pos: menuPosAt(e.clientX, e.clientY), keyword })
+        }
+  const bandMenuItems = (keyword: string): MenuItem[] => {
+    const run = (f: () => void) => () => {
+      setBandMenu(undefined)
+      f()
+    }
+    const items: MenuItem[] = []
+    if (props.onToggleKeyword) items.push({ label: collapsedSet.has(keyword) ? '開く' : '畳む', icon: collapsedSet.has(keyword) ? 'expand_more' : 'expand_less', onClick: run(() => props.onToggleKeyword?.(keyword)) })
+    if (props.onEditKeyword) items.push({ label: 'キーワードを直す…', icon: 'edit', onClick: run(() => props.onEditKeyword?.(keyword)) })
+    if (props.onRemoveKeyword) items.push({ label: 'このキーワードを外す', icon: 'delete', iconColor: 'var(--c-heat-very-hot)', onClick: run(() => props.onRemoveKeyword?.(keyword)) })
+    if (props.onOpenKeywordSettings) items.push({ label: 'キーワードの設定を開く', icon: 'settings', onClick: run(() => props.onOpenKeywordSettings?.()) })
+    return items
+  }
   // 畳んだまとまりのスレは、キー操作やページにも入れない(画面にないものを選ばない)
   const ordered = useMemo(
     () => (keywordGroups ? [...keywordGroups.groups.filter((g) => !collapsedSet.has(g.keyword)).flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
@@ -1206,12 +1234,21 @@ export default function ThreadListPanel(props: Props) {
                 <>
                   {keywordGroups.groups.map((g) => (
                     <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
-                      <Band icon="sell" label={g.keyword} count={g.threads.length} accent collapsed={collapsedSet.has(g.keyword)} onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined} />
+                      <Band
+                        icon="sell"
+                        label={g.keyword}
+                        count={g.threads.length}
+                        accent
+                        collapsed={collapsedSet.has(g.keyword)}
+                        onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined}
+                        onContextMenu={bandContextMenu(g.keyword)}
+                      />
                       {!collapsedSet.has(g.keyword) && g.threads.map(renderLimited)}
                     </div>
                   ))}
                   {keywordGroups.rest.length > 0 && <Band icon="list" label="その他のスレ" count={keywordGroups.rest.length} />}
                   {keywordGroups.rest.map(renderLimited)}
+                  {bandMenu && <FloatingMenu pos={bandMenu.pos} items={bandMenuItems(bandMenu.keyword)} onClose={() => setBandMenu(undefined)} />}
                 </>
               ) : (
                 visible.map(renderLimited)

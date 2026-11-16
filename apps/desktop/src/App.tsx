@@ -45,6 +45,8 @@ import Notifications from './components/Notifications'
 import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toImageUrl } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import KeywordDialog, { type KeywordDraft } from './components/KeywordDialog'
+import KeywordEditDialog from './components/KeywordEditDialog'
+import { legacyAuthorId } from './utils/authorId'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
@@ -398,6 +400,26 @@ export default function App() {
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   const [keywordDraft, setKeywordDraft] = useState<KeywordDraft>()
+  /** 帯の右クリック「キーワードを直す」で開いている帯の名前 */
+  const [keywordEdit, setKeywordEdit] = useState<string>()
+  /** 帯の名前(キーワードか「立てた人 ID」)から、設定のどの行かを探す(スマホ版の KeywordEditDialog と同じ) */
+  const keywordEntryOf = (label: string): { kind: 'title' | 'author'; original: string } | undefined => {
+    const t = settings.keywords.find((k) => k.trim() === label.trim())
+    if (t !== undefined) return { kind: 'title', original: t }
+    if (!label.startsWith('立てた人 ')) return undefined
+    const id = label.slice('立てた人 '.length)
+    const a = settings.keywordAuthors.find((k) => legacyAuthorId(k.trim()) === id)
+    return a === undefined ? undefined : { kind: 'author', original: a }
+  }
+  /** 帯のキーワードを next に直す(null なら外す) */
+  const replaceKeyword = (label: string, next: string | null) => {
+    const e = keywordEntryOf(label)
+    if (!e) return
+    const swap = (list: string[]) => list.flatMap((k) => (k === e.original ? (next === null ? [] : [next]) : [k]))
+    if (e.kind === 'title') updateSetting('keywords', swap(settings.keywords), settings.keywords)
+    else updateSetting('keywordAuthors', swap(settings.keywordAuthors), settings.keywordAuthors)
+  }
+  const keywordEditEntry = keywordEdit !== undefined ? keywordEntryOf(keywordEdit) : undefined
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
@@ -3174,6 +3196,9 @@ export default function App() {
           keepTabsOnEsc={!!history}
           collapsedKeywords={settings.keywordBandsCollapsed}
           onToggleKeyword={(k) => updateSetting('keywordBandsCollapsed', settings.keywordBandsCollapsed.includes(k) ? settings.keywordBandsCollapsed.filter((x) => x !== k) : [...settings.keywordBandsCollapsed, k])}
+          onEditKeyword={setKeywordEdit}
+          onRemoveKeyword={(k) => replaceKeyword(k, null)}
+          onOpenKeywordSettings={() => openSettings('threads')}
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
           pageSize={history ? settings.listPageSize : 0}
@@ -3432,6 +3457,15 @@ export default function App() {
       )}
       {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
+      {keywordEdit !== undefined && keywordEditEntry && (
+        <KeywordEditDialog
+          kind={keywordEditEntry.kind}
+          original={keywordEditEntry.original}
+          others={(keywordEditEntry.kind === 'title' ? settings.keywords : settings.keywordAuthors).filter((k) => k !== keywordEditEntry.original)}
+          onSubmit={(next) => replaceKeyword(keywordEdit, next)}
+          onClose={() => setKeywordEdit(undefined)}
+        />
+      )}
       {keywordDraft && (
         <KeywordDialog
           draft={keywordDraft}

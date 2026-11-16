@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_SETTINGS, accentKeyOf, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
-import { describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
+import { describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup } from '../../utils/backup'
 import { factoryReset, openJson, saveJson } from '../../host/backup'
 import { onBroadcast } from '../../host/crossWindow'
 import { customToJson, parseCustom } from '../../ui/customScheme'
 import { type SettingsProps, Section } from './common'
 
-/** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
+/** まるごとバックアップ(DB 全体と認証の状態)と復元、NG・配色の書き出しと読み込み。
+ * 設定だけの JSON の書き出しは、まるごとバックアップと取り違えるので画面から外した(読む側は「NG」「配色」の読み込みから、前の版のファイルも読める) */
 export function BackupTab({
   settings: s,
   update,
   onBackupDb,
   onRestoreDb,
-  onExportExtras,
   onImportExtras,
   onImportChmate,
-}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onExportExtras' | 'onImportExtras' | 'onImportChmate'>) {
+}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onImportExtras' | 'onImportChmate'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -80,19 +80,6 @@ export function BackupTab({
           {message.text}
         </p>
       )}
-      <Section
-        title="設定"
-        note="表示・スレ一覧・キー操作などの設定と、お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません。読み込むと設定は置き換え、お気に入りなどは今あるものに足します。Android 版のバックアップも読めます"
-      >
-        <div className="flex gap-2">
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(async () => ((await saveJson('settings', settingsFile(s, await onExportExtras?.()))) ? '書き出しました' : undefined))}>
-            書き出す
-          </button>
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => importFile('settings')}>
-            読み込む
-          </button>
-        </div>
-      </Section>
       <Section title="NG" note={`NG(いま ${s.ngRules.length} 件)を JSON に書き出します。読み込むと、いまの NG に足します(同じものは重ねません)`}>
         <div className="flex gap-2">
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(async () => ((await saveJson('ng', ngFile(s.ngRules))) ? '書き出しました' : undefined))}>

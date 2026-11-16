@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DEFAULT_SETTINGS, accentKeyOf, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
 import { describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
-import { openJson, saveJson } from '../../host/backup'
+import { factoryReset, openJson, saveJson } from '../../host/backup'
 import { customToJson, parseCustom } from '../../ui/customScheme'
 import { type SettingsProps, Section } from './common'
 
@@ -19,6 +19,7 @@ export function BackupTab({
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   const act = async (fn: () => Promise<string | undefined>) => {
     setBusy(true)
@@ -158,6 +159,30 @@ export function BackupTab({
                 ファイルを選んで戻す
               </button>
               <button type="button" onClick={() => setConfirmRestore(false)} className="text-xs text-c-text-muted hover:text-c-text-strong underline">
+                やめる
+              </button>
+            </span>
+          )}
+        </div>
+      </Section>
+      <Section title="はじめの状態に戻す" note="ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態でアプリを起動し直します。いまの DB は消さずに「bbs-browser.before-reset-時刻.db」として設定のフォルダに残すので、まるごとバックアップの「バックアップから戻す」で戻せます">
+        <div className="flex flex-wrap items-center gap-2">
+          {!confirmReset ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmReset(true)}
+              className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong"
+            >
+              はじめの状態に戻す…
+            </button>
+          ) : (
+            <span className="flex flex-wrap items-center gap-2 text-sm text-c-text-body">
+              本当に戻しますか。開いているタブも閉じ、同期の設定も消えます。
+              <button type="button" disabled={busy} onClick={() => act(async () => (await factoryReset(), undefined))} className={`${BTN_PRIMARY} !bg-c-heat-very-hot !text-white`}>
+                戻して起動し直す
+              </button>
+              <button type="button" disabled={busy} onClick={() => setConfirmReset(false)} className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body">
                 やめる
               </button>
             </span>

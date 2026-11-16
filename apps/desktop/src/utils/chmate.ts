@@ -1,6 +1,7 @@
 // ChMate(Android の専ブラ)のバックアップ(ZIP)の中身を、OBB に取り込める形に読み替える。
 // ZIP をほどく・Shift_JIS を直す・SQLite を読むのはホスト(PC は src-tauri/src/chmate.rs)。ここは文字になったものの意味づけだけ。
-// 取り込むもの: スレのログ(dat)と既読・自分の書き込みの印、お気に入りのスレ、NG、書き込みの履歴、スレタイのキーワード。
+// 取り込むもの: スレのログ(dat)と既読・自分の書き込みの印、お気に入りの板とスレ(★ の付いたもの。bookmarks 表は見たスレ全部なので flag で見分ける)、
+// NG、書き込みの履歴、スレタイのキーワード。
 // 取り込まないもの: アプリの設定(prefs。見た目の好みは別のアプリなので)、BE の NG(OBB に BE の NG はない)
 
 import { parseDat, type Post } from '@bbs-browser/connectors'
@@ -12,10 +13,10 @@ export interface ChmateRaw {
   texts: Record<string, string>
   /** dat(Shift_JIS から直した本文)と、同じ名前の idx */
   dats: { name: string; text: string; idx?: string | null }[]
-  /** bookmarks 表(お気に入りのスレ) */
-  bookmarks: { name: string; created: number; title: string; res_count: number; read_count: number; read_state: string; access: number; posted: number }[]
-  /** boards 表(板一覧。ディレクトリ名 → サーバー) */
-  boards: { name: string; server: string; title: string }[]
+  /** bookmarks 表(見たスレ。flag の 1 のビットが ★ = お気に入り) */
+  bookmarks: { name: string; created: number; title: string; res_count: number; read_count: number; read_state: string; access: number; posted: number; flag?: number }[]
+  /** boards 表(板一覧。ディレクトリ名 → サーバー。flag の 1 のビットがお気に入りの板) */
+  boards: { name: string; server: string; title: string; flag?: number }[]
   skipped?: string[]
 }
 
@@ -47,6 +48,8 @@ export interface ChmatePost {
 
 export interface ChmateImport {
   threads: ChmateThread[]
+  /** お気に入りの板(boards 表の flag) */
+  favoriteBoards: { url: string; name: string }[]
   ngRules: Omit<NgRule, 'id'>[]
   posts: ChmatePost[]
   keywords: string[]
@@ -64,6 +67,9 @@ const NG_FILES: Record<string, NgTarget | undefined> = {
 }
 /** ChMate の NG の旗: 32 が正規表現 */
 const NG_FLAG_REGEX = 32
+/** bookmarks・boards の flag: 1 のビットが ★(お気に入り) */
+const FLAG_FAVORITE = 1
+const isFavoriteFlag = (flag: number | undefined) => ((flag ?? 0) & FLAG_FAVORITE) !== 0
 
 /**
  * ChMate の板の名前を板の URL にする。`host%2Fboard`(外部の板)はそのまま、ディレクトリ名だけ(5ch の板)は boards 表のサーバーを引く。
@@ -119,9 +125,16 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
   const boardUrlOf = (name: string) => chmateBoardUrl(name, servers)
   const unknownBoards = new Set<string>()
 
-  // お気に入り(板名 + キー → 行)
+  // 見たスレの行(板名 + キー → 行)。★ かどうかは flag
   const favorites = new Map<string, ChmateRaw['bookmarks'][number]>()
   for (const b of raw.bookmarks) favorites.set(`${b.name}_${b.created}`, b)
+  // お気に入りの板。5ch の板は boards 表の自分の行にサーバーがある
+  const favoriteBoards: { url: string; name: string }[] = []
+  for (const b of raw.boards) {
+    if (!isFavoriteFlag(b.flag)) continue
+    const url = b.name.includes('%2F') ? boardUrlOf(b.name) : b.server ? `https://${b.server}/${b.name}/` : undefined
+    if (url) favoriteBoards.push({ url, name: b.title || b.name })
+  }
 
   // スレのログ
   const threads: ChmateThread[] = []
@@ -159,12 +172,13 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
       posts,
       readNo,
       ownNos: ownNos.filter((n) => n <= posts.length),
-      favorite: !!fav,
+      favorite: isFavoriteFlag(fav?.flag),
       viewedAt: lastModified > 0 ? lastModified : fav?.access && fav.access > 0 ? fav.access : now,
     })
   }
-  // dat のないお気に入り(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
+  // dat のない ★ のスレ(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
   for (const b of raw.bookmarks) {
+    if (!isFavoriteFlag(b.flag)) continue
     const boardUrl = boardUrlOf(b.name)
     if (!boardUrl) {
       unknownBoards.add(b.name)
@@ -237,13 +251,14 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
   }
 
   if (unknownBoards.size > 0) notes.push(`板のサーバーが分からず読まなかった板: ${[...unknownBoards].slice(0, 5).join('・')}${unknownBoards.size > 5 ? ` ほか ${unknownBoards.size - 5}` : ''}`)
-  return { threads, ngRules, posts, keywords, notes }
+  return { threads, favoriteBoards, ngRules, posts, keywords, notes }
 }
 
 /** 取り込んだ数の言い方 */
-export function describeChmate(r: { threads: number; favorites: number; posts: number; ngAdded: number; keywords: number; skippedBoards: number }): string {
+export function describeChmate(r: { threads: number; favoriteBoards?: number; favorites: number; posts: number; ngAdded: number; keywords: number; skippedBoards: number }): string {
   return [
     r.threads > 0 && `スレのログ ${r.threads}`,
+    (r.favoriteBoards ?? 0) > 0 && `お気に入り板 ${r.favoriteBoards}`,
     r.favorites > 0 && `お気に入りのスレ ${r.favorites}`,
     r.posts > 0 && `書き込みの履歴 ${r.posts}`,
     r.ngAdded > 0 && `NG ${r.ngAdded}`,

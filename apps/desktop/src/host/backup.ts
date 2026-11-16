@@ -28,6 +28,17 @@ export async function backupDatabase(): Promise<boolean> {
   return true
 }
 
+/** はじめの状態に戻す。画像のキャッシュを消し、次の起動で DB(ログ・既読・お気に入り・設定・NG)をどけてまっさらで開く(戻ってこない) */
+export async function factoryReset(): Promise<void> {
+  await invoke('media_cache_clear').catch(() => undefined)
+  try {
+    localStorage.clear()
+  } catch {
+    // 使えない環境では何もしない
+  }
+  await invoke('schedule_factory_reset')
+}
+
 /** 書き出しておいた DB を選び、アプリを起動し直して入れ替える。選ばなかったら false(選べば戻ってこない) */
 export async function restoreDatabase(): Promise<boolean> {
   const source = await pickOpenPath('SQLite', ['db', 'sqlite', 'sqlite3'])

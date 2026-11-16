@@ -5,7 +5,8 @@
 //! - `dat/<板>_<キー>.dat`: スレのログ(Shift_JIS の dat。板は `host%2Fboard` か、5ch の板ならディレクトリ名だけ)
 //! - `dat/<板>_<キー>.idx`: 1 行目 `最終更新(ms)\tETag`、2 行目 自分の書き込みのレス番号 `no:1,no:1,…`
 //! - `archive/<板>/<スレタイ>/<板>_<キー>.dat|.idx`: 保存したスレ(dat と同じ形)
-//! - `databases/roidon.sqlite`: `bookmarks`(お気に入りのスレ。read_state の JSON の r が既読の番号)、`boards`(板一覧。ディレクトリ名 → サーバー)
+//! - `databases/roidon.sqlite`: `bookmarks`(見たスレ。flag の 1 のビットが ★(お気に入り)。read_state の JSON の r が既読の番号)、
+//!   `boards`(板一覧。ディレクトリ名 → サーバー。flag の 1 のビットがお気に入りの板)
 //! - `ng/_id.json` `_word.json` `_name.json` `_title.json` `_be.json`: NG(`w` 言葉、`f` 旗(32 なら正規表現)、`ct` 作った時刻、`b` 板)
 //! - `files/postDataList.json`: 書き込みの履歴、`files/keyword_group_list.json`: スレタイのキーワード
 //! - `prefs/*.xml`: アプリの設定(画面の好みなので読まない)
@@ -48,6 +49,8 @@ pub struct ChmateBookmark {
     pub read_state: String,
     pub access: i64,
     pub posted: i64,
+    /// 1 のビットが立っていればお気に入り(★)。立っていなければ履歴の行
+    pub flag: i64,
 }
 
 #[derive(Serialize)]
@@ -55,6 +58,8 @@ pub struct ChmateBoard {
     pub name: String,
     pub server: String,
     pub title: String,
+    /// 1 のビットが立っていればお気に入りの板
+    pub flag: i64,
 }
 
 #[derive(Serialize, Default)]
@@ -167,7 +172,7 @@ async fn read_sqlite_tables(path: &std::path::Path, out: &mut ChmateRaw) -> Resu
         .connect_with(opts)
         .await
         .map_err(|e| format!("roidon.sqlite を開けません: {e}"))?;
-    let rows = sqlx::query("SELECT name, created, title, res_count, read_count, read_state, access, posted FROM bookmarks")
+    let rows = sqlx::query("SELECT name, created, title, res_count, read_count, read_state, access, posted, flag FROM bookmarks")
         .fetch_all(&pool)
         .await;
     match rows {
@@ -182,12 +187,13 @@ async fn read_sqlite_tables(path: &std::path::Path, out: &mut ChmateRaw) -> Resu
                     read_state: r.try_get::<String, _>(5).unwrap_or_default(),
                     access: r.try_get::<i64, _>(6).unwrap_or_default(),
                     posted: r.try_get::<i64, _>(7).unwrap_or_default(),
+                    flag: r.try_get::<i64, _>(8).unwrap_or_default(),
                 });
             }
         }
         Err(e) => out.skipped.push(format!("お気に入りのスレ(bookmarks)を読めません: {e}")),
     }
-    let rows = sqlx::query("SELECT name, server, title FROM boards").fetch_all(&pool).await;
+    let rows = sqlx::query("SELECT name, server, title, flag FROM boards").fetch_all(&pool).await;
     match rows {
         Ok(rows) => {
             for r in rows {
@@ -195,6 +201,7 @@ async fn read_sqlite_tables(path: &std::path::Path, out: &mut ChmateRaw) -> Resu
                     name: r.try_get::<String, _>(0).unwrap_or_default(),
                     server: r.try_get::<String, _>(1).unwrap_or_default(),
                     title: r.try_get::<String, _>(2).unwrap_or_default(),
+                    flag: r.try_get::<i64, _>(3).unwrap_or_default(),
                 });
             }
         }

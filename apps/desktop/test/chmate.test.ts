@@ -22,13 +22,15 @@ const raw = (over: Partial<ChmateRaw> = {}): ChmateRaw => ({
     { name: 'mystery_1.dat', text: DAT, idx: null },
   ],
   bookmarks: [
-    { name: 'livejupiter', created: 1618048117, title: '橋下', res_count: 3, read_count: 2, read_state: '{"o":69,"n":"26","r":2,"p":1.0}', access: 1785551620400, posted: 0 },
-    { name: 'bbs.eddibb.cc%2Fliveedge', created: 1700000000, title: 'ログのないお気に入り', res_count: 10, read_count: 10, read_state: '{"r":10}', access: 5, posted: 0 },
+    { name: 'livejupiter', created: 1618048117, title: '橋下', res_count: 3, read_count: 2, read_state: '{"o":69,"n":"26","r":2,"p":1.0}', access: 1785551620400, posted: 0, flag: 1 },
+    { name: 'bbs.eddibb.cc%2Fliveedge', created: 1700000000, title: 'ログのないお気に入り', res_count: 10, read_count: 10, read_state: '{"r":10}', access: 5, posted: 0, flag: 3 },
+    { name: 'bbs.eddibb.cc%2Fliveedge', created: 1700000001, title: '見ただけ(★なし)', res_count: 10, read_count: 10, read_state: '{"r":10}', access: 5, posted: 123, flag: 0 },
   ],
   boards: [
-    { name: 'livejupiter', server: 'eagle.5ch.net', title: 'なんでも実況(ジュピター)' },
-    { name: 'news4vip', server: 'mi.5ch.net', title: 'ニュー速VIP' },
-    { name: 'poverty', server: 'greta.5ch.net', title: 'ニュー速(嫌儲)' },
+    { name: 'livejupiter', server: 'eagle.5ch.net', title: 'なんでも実況(ジュピター)', flag: 1 },
+    { name: 'news4vip', server: 'mi.5ch.net', title: 'ニュー速VIP', flag: 5 },
+    { name: 'poverty', server: 'greta.5ch.net', title: 'ニュー速(嫌儲)', flag: 2 },
+    { name: 'bbs.eddibb.cc%2Fliveedge', server: 'bbs.eddibb.cc', title: 'エッヂ', flag: 1 },
   ],
   ...over,
 })
@@ -69,7 +71,18 @@ describe('ChMate のバックアップの読み替え', () => {
     expect(noLog.favorite).toBe(true)
     expect(noLog.posts.length).toBe(0)
     expect(noLog.title).toBe('ログのないお気に入り')
-    // サーバーの分からない板は読まず、理由に出す
+    // ★ のない行(見ただけ・書き込んだだけ)は、ログがなければ入れない。ログがあっても favorite にしない
+    expect(r.threads.some((t) => t.key === '1700000001')).toBe(false)
+  })
+  it('お気に入りの板は boards 表の flag の 1 のビット', () => {
+    expect(parseChmate(raw()).favoriteBoards).toEqual([
+      { url: 'https://eagle.5ch.net/livejupiter/', name: 'なんでも実況(ジュピター)' },
+      { url: 'https://mi.5ch.net/news4vip/', name: 'ニュー速VIP' },
+      { url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' },
+    ])
+  })
+  it('サーバーの分からない板は読まず、理由に出す', () => {
+    const r = parseChmate(raw())
     expect(r.threads.some((t) => t.key === '1')).toBe(false)
     expect(r.notes.some((n) => n.includes('mystery'))).toBe(true)
   })

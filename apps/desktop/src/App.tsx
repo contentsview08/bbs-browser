@@ -2459,10 +2459,25 @@ export default function App() {
     const keywords = [...new Set([...cur.keywords, ...parsed.keywords])]
     const keywordsAdded = keywords.length - cur.keywords.length
     if (keywordsAdded > 0) updateSetting('keywords', keywords)
+    // お気に入りの板は、設定のファイルのお気に入り板と同じ道(板を確かめてから足す)
+    const boardsText = parsed.favoriteBoards.length > 0 ? await importBackupExtras({ favoriteBoards: parsed.favoriteBoards }) : ''
     await Promise.all([reloadFavThreads(store), reloadRecent(store)])
     if (history) setHistory(await loadHistory(store))
+    // スレタイの分からないスレ(ChMate の dat の 1 行目にない)は、あとから間をあけて 1 つずつ取りに行って埋める(掲示板に負担をかけない)
+    const untitled = parsed.threads.filter((t) => !t.title && t.posts.length > 0).map((t) => summaryOf(t.boardUrl, t.key, '')).filter((s): s is ThreadSummary => !!s)
+    if (untitled.length > 0) void fillTitlesSlowly(store, untitled)
     const text = describeChmate({ threads, favorites, posts, ngAdded: merged.added, keywords: keywordsAdded, skippedBoards })
-    return [text ? `取り込みました(${text})` : '取り込むものがありませんでした', ...parsed.notes].join('\n')
+    return [text ? `取り込みました(${text}${boardsText ? `・${boardsText}` : ''})` : '取り込むものがありませんでした', ...(untitled.length > 0 ? [`スレタイの分からないスレ ${untitled.length} 件は、裏で少しずつ取りに行って埋めます`] : []), ...parsed.notes].join('\n')
+  }
+
+  /** スレタイのないスレを、2 秒おきに 1 つずつ取りに行って埋める(取り込みのあと。失敗したものは飛ばす) */
+  const fillTitlesSlowly = async (s: LogStore, list: ThreadSummary[]) => {
+    for (const t of list) {
+      await fetchThread(s, t, { auto: true, keepUnread: true }).catch(() => undefined)
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    await reloadRecent(s)
+    if (history) setHistory(await loadHistory(s))
   }
 
   const importBackupExtras = async (e: BackupExtras): Promise<string> => {

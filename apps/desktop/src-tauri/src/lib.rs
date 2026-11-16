@@ -408,6 +408,8 @@ fn current_background_image(app: tauri::AppHandle, saved: String) -> Result<Stri
 const DB_FILE: &str = "bbs-browser.db";
 /// 復元を頼まれた DB の置き場。次に起動したとき、DB を開く前に入れ替える
 const RESTORE_FILE: &str = "restore-pending.db";
+/// 「はじめの状態に戻す」を頼まれた印。次の起動のはじめに DB をどけて、まっさらで開く
+const RESET_MARK: &str = "reset-pending";
 
 fn has_extension(path: &Path, exts: &[&str]) -> bool {
     path.extension()
@@ -488,20 +490,39 @@ fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPat
     app.restart();
 }
 
-/// 復元を頼まれていたら、DB を開く前に入れ替える。
-/// いまの DB は消さずに「bbs-browser.before-restore-時刻.db」として残す(-wal / -shm も一緒に)
+/// はじめの状態に戻すのを頼む(設定 → バックアップ)。DB(ログ・既読・お気に入り・設定・NG)は次の起動のはじめにどけて、まっさらで開く。
+/// いまの DB は消さずに「bbs-browser.before-reset-時刻.db」として残す。画像のキャッシュは呼ぶ前に画面側で消す
+#[tauri::command]
+fn schedule_factory_reset(app: tauri::AppHandle) -> Result<(), String> {
+    let dir = db_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(RESET_MARK), b"1").map_err(|e| e.to_string())?;
+    app.restart();
+}
+
+/// 復元・はじめの状態に戻すを頼まれていたら、DB を開く前に入れ替える。
+/// いまの DB は消さずに「bbs-browser.before-restore-時刻.db」(戻すときは before-reset)として残す(-wal / -shm も一緒に)
 fn apply_pending_restore(app: &tauri::AppHandle) {
     let Ok(dir) = db_dir(app) else { return };
     let pending = dir.join(RESTORE_FILE);
-    if !pending.exists() {
+    let reset = dir.join(RESET_MARK);
+    let resetting = reset.exists();
+    if !pending.exists() && !resetting {
         return;
     }
     let stamp = since_epoch().as_secs();
+    let kind = if resetting { "reset" } else { "restore" };
     for suffix in ["", "-wal", "-shm"] {
         let current = dir.join(format!("{DB_FILE}{suffix}"));
         if current.exists() {
-            let _ = std::fs::rename(&current, dir.join(format!("bbs-browser.before-restore-{stamp}.db{suffix}")));
+            let _ = std::fs::rename(&current, dir.join(format!("bbs-browser.before-{kind}-{stamp}.db{suffix}")));
         }
+    }
+    if resetting {
+        let _ = std::fs::remove_file(&reset);
+        // DB の形の覚え書きも消す(新しい DB は最初から今の形で作る)
+        let _ = std::fs::remove_file(dir.join(SCHEMA_MARK));
+        return;
     }
     let _ = std::fs::rename(&pending, dir.join(DB_FILE));
 }
@@ -682,6 +703,7 @@ pub fn run() {
             chmate::read_chmate_backup,
             backup_db,
             schedule_db_restore,
+            schedule_factory_reset,
             post_http::http_post,
             sql_batch::sql_batch,
             sql_batch::sql_execute,

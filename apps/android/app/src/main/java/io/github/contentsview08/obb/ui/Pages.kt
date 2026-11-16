@@ -341,11 +341,11 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     androidx.compose.runtime.LaunchedEffect(tab, entries.size) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
-    // 閲覧のタブのスレタイ検索。ふだんの一覧は 300 件までなので、探すあいだは全部から探す
+    // スレタイ検索(未読・閲覧・お気に入りのどのタブでも)。閲覧のふだんの一覧は 300 件までなので、探すあいだは全部から探す
     var searching by remember(tab) { mutableStateOf(false) }
     var query by remember(tab) { mutableStateOf("") }
     var pool by remember(tab) { mutableStateOf<List<HistoryEntry>?>(null) }
-    androidx.compose.runtime.LaunchedEffect(searching, entries) { if (searching) pool = vm.allHistory() }
+    androidx.compose.runtime.LaunchedEffect(searching, entries) { if (searching) pool = if (tab == "history") vm.allHistory() else entries }
     val shown = remember(entries, pool, searching, query) {
         val terms = io.github.contentsview08.obb.data.searchTerms(query)
         if (!searching) entries else (pool ?: entries).filter { io.github.contentsview08.obb.data.matchesTerms(it.thread.title, terms) }
@@ -363,10 +363,8 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     PastFrame(
         vm, tab, refresh,
         actions = {
-            if (tab == "history") {
-                BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
-                if (entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
-            }
+            BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
+            if (tab == "history" && entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
         },
         // 選んでいる間の帯はヘッダーに重ねる(差し込むと、一覧が下にずれて押す所が動く)
         headerOverlay = {
@@ -429,11 +427,24 @@ fun PostHistoryScreen(vm: AppViewModel) {
             MenuAt.Center,
         ) { menuFor = null }
     }
+    // 書いた本文・スレタイで探す
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val shownPosts = remember(vm.postHistory, searching, query) {
+        val terms = io.github.contentsview08.obb.data.searchTerms(query)
+        if (!searching || terms.isEmpty()) vm.postHistory else vm.postHistory.filter { io.github.contentsview08.obb.data.matchesTerms("${it.thread.title} ${it.body}", terms) }
+    }
+    androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
-    PastFrame(vm, "posts", null) {
+    PastFrame(
+        vm, "posts", null,
+        actions = { BarIcon(Icons.Filled.Search, "書き込みを探す") { searching = true } },
+        belowHeader = { if (searching) SearchBar(query, { query = it }, "書き込みを探す(本文・スレタイ)") { searching = false; query = "" } },
+    ) {
         if (vm.postHistory.isEmpty()) Hint("まだ書き込んでいません")
+        else if (shownPosts.isEmpty()) Hint("見つかりませんでした")
         else LazyColumn(Modifier.fillMaxSize(), state = listState) {
-            items(vm.postHistory) { e ->
+            items(shownPosts) { e ->
                 PastRow(
                     vm, e.thread, "${boardName(vm, e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた", null, 0,
                     own = postedHeadLine(e.body) ?: e.body.trim(), ownNo = e.no,

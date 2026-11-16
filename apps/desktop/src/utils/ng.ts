@@ -218,9 +218,21 @@ function compile(rules: NgRule[], target: NgTarget): Matcher[] {
 /** ID の NG: 正規表現でなければ完全一致(部分一致だと別の ID まで巻き込む) */
 function idMatcher(rules: NgRule[]): (id: string | undefined, boardUrl?: string) => boolean {
   const today = todayDateString()
-  const exact = rules.filter((r) => r.target === 'posterId' && !r.isRegex && r.pattern !== '' && isActive(r, today))
+  // 完全一致は集合で引く(ChMate から来た数百の ID を、レスやスレの数だけなめない)。BE の形は legacyAuthorId でそろえておく
+  const everywhere = new Set<string>()
+  const byBoard = new Map<string, Set<string>>()
+  for (const r of rules) {
+    if (r.target !== 'posterId' || r.isRegex || r.pattern === '' || !isActive(r, today)) continue
+    const id = legacyAuthorId(r.pattern)
+    if (!r.boardUrl) everywhere.add(id)
+    else {
+      const set = byBoard.get(r.boardUrl) ?? new Set<string>()
+      set.add(id)
+      byBoard.set(r.boardUrl, set)
+    }
+  }
   const regex = compile(rules.filter((r) => r.isRegex), 'posterId')
-  return (id, b) => id !== undefined && (exact.some((r) => legacyAuthorId(r.pattern) === id && (!r.boardUrl || r.boardUrl === b)) || regex.some((m) => m(id, b)))
+  return (id, b) => id !== undefined && (everywhere.has(id) || (b !== undefined && byBoard.get(b)?.has(id) === true) || regex.some((m) => m(id, b)))
 }
 
 /** レスの NG。boardUrl はそのレスのスレの板(「この板だけ」の NG を当てるため) */

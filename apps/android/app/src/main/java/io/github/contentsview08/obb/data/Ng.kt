@@ -196,35 +196,55 @@ fun ngRuns(nos: List<Int>, unreadFrom: Int, kindOf: (Int) -> NgRunKind?): NgRuns
     return NgRuns(runs, firstOf)
 }
 
-/** ルールを判定関数にしておく(レスの数だけ正規表現を作り直さないため) */
+/**
+ * ルールを判定関数にしておく(レスの数だけ正規表現を作り直さないため)。
+ * ID の完全一致は集合で引く(ChMate から来た数百の ID を、レスやスレの数だけなめると画面が止まる)。
+ * 板限定のルールはその板のときだけ見る。PC 版・Web の utils/ng.ts の idMatcher と同じ当て方
+ */
 class NgMatcher(rules: List<NgRule>) {
     private class M(val r: NgRule, val re: Regex?)
-    private val byTarget: Map<String, List<M>>
+    /** 全部の板に効くルールと、板 URL → その板だけのルール */
+    private class Bucket(val everywhere: List<M>, val byBoard: Map<String, List<M>>)
+    /** 種類 → ルール(ID の完全一致は含まない) */
+    private val byTarget: Map<String, Bucket>
+    /** ID の完全一致: 板 URL(null は全部の板)→ 当てる ID の集合。BE の形は legacyAuthorId でそろえてある */
+    private val exactIds: Map<String?, Set<String>>
+    /** ID の完全一致のルール(そろえた ID と組。メニューで外すときに、当たったルールを返す用) */
+    private val exactIdRules: List<Pair<String, NgRule>>
 
     init {
         val t = today()
         // 空の文字はどの文字列にも当たる。すべてのレスを消さないように外す
-        byTarget = rules.filter { it.active(t) && it.pattern.isNotEmpty() }.mapNotNull { r ->
+        val active = rules.filter { it.active(t) && it.pattern.isNotEmpty() }
+        // ID は部分一致だと別の ID まで巻き込むので、完全一致
+        val (exact, rest) = active.partition { it.target == "posterId" && !it.isRegex }
+        exactIdRules = exact.map { legacyAuthorId(it.pattern) to it }
+        exactIds = exactIdRules.groupBy({ it.second.boardUrl }, { it.first }).mapValues { it.value.toHashSet() }
+        byTarget = rest.mapNotNull { r ->
             if (r.isRegex) runCatching { M(r, ngRegex(r.pattern)) }.getOrNull() else M(r, null)
-        }.groupBy { it.r.target }
+        }.groupBy { it.r.target }.mapValues { (_, ms) ->
+            Bucket(ms.filter { it.r.boardUrl == null }, ms.filter { it.r.boardUrl != null }.groupBy { it.r.boardUrl!! })
+        }
     }
 
-    private fun matches(m: M, target: String, text: String, boardUrl: String?) =
-        (m.r.boardUrl == null || m.r.boardUrl == boardUrl) && when {
-            m.re != null -> m.re.containsMatchIn(text)
-            // ID は部分一致だと別の ID まで巻き込むので、完全一致
-            target == "posterId" -> text == legacyAuthorId(m.r.pattern)
-            else -> text.contains(m.r.pattern, ignoreCase = true)
-        }
+    private fun matches(m: M, text: String) = if (m.re != null) m.re.containsMatchIn(text) else text.contains(m.r.pattern, ignoreCase = true)
+
+    private fun exactHit(text: String, boardUrl: String?) =
+        exactIds[null]?.contains(text) == true || (boardUrl != null && exactIds[boardUrl]?.contains(text) == true)
 
     private fun hit(target: String, text: String?, boardUrl: String?): Boolean {
         if (text == null) return false
-        return byTarget[target]?.any { matches(it, target, text, boardUrl) } == true
+        if (target == "posterId" && exactHit(text, boardUrl)) return true
+        val b = byTarget[target] ?: return false
+        return b.everywhere.any { matches(it, text) } || (boardUrl != null && b.byBoard[boardUrl]?.any { matches(it, text) } == true)
     }
 
     private fun hits(target: String, text: String?, boardUrl: String?): List<NgRule> {
         if (text == null) return emptyList()
-        return byTarget[target].orEmpty().filter { matches(it, target, text, boardUrl) }.map { it.r }
+        val exact = if (target == "posterId") exactIdRules.filter { (id, r) -> id == text && (r.boardUrl == null || r.boardUrl == boardUrl) }.map { it.second } else emptyList()
+        val b = byTarget[target] ?: return exact
+        val own = if (boardUrl != null) b.byBoard[boardUrl].orEmpty() else emptyList()
+        return exact + (b.everywhere + own).filter { matches(it, text) }.map { it.r }
     }
 
     fun post(p: Post, boardUrl: String?) = hit("content", p.body, boardUrl) || hit("posterName", p.name, boardUrl) || hit("posterId", p.id, boardUrl)
@@ -235,5 +255,5 @@ class NgMatcher(rules: List<NgRule>) {
     /** スレ一覧: スレタイの NG と、立てた人の ID の NG */
     fun thread(t: ThreadSummary) = hit("threadTitle", t.title, t.boardUrl) || hit("posterId", t.authorId, t.boardUrl)
 
-    val isEmpty get() = byTarget.isEmpty()
+    val isEmpty get() = byTarget.isEmpty() && exactIds.isEmpty()
 }

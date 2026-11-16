@@ -60,4 +60,15 @@ class NgTest {
         // 飛ばすものだけでは、まとめて出す行がない
         assertEquals(emptyMap<Int, NgRun>(), ngRuns(nos, 0) { if (it in 2..5) NgRunKind.SKIP else null }.runs)
     }
+
+    @Test fun IDの完全一致は板ごとに引ける() {
+        val everywhere = NgRule("posterId", "abc")
+        val onlyA = NgRule("posterId", "xyz", boardUrl = "https://a/")
+        val m = NgMatcher(listOf(everywhere, onlyA))
+        assertEquals(true, m.post(post(1, id = "abc"), "https://b/"))
+        assertEquals(true, m.post(post(1, id = "xyz"), "https://a/"))
+        assertEquals(false, m.post(post(1, id = "xyz"), "https://b/"))
+        assertEquals(listOf(onlyA), m.postHits(post(1, id = "xyz"), "https://a/").id)
+        assertEquals(false, m.isEmpty)
+    }
 }

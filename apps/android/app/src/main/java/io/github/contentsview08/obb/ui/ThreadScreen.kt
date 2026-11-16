@@ -199,8 +199,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     val swipe = rememberSwipeState()
     var ngEditing by remember { mutableStateOf<NgRule?>(null) }
-    // NG のレスだけ調べる。レスの数だけ毎回は調べない
-    fun ngHitsOf(p: Post) = if (p.no in page.ngNos) io.github.contentsview08.obb.data.NgMatcher(vm.prefs.ngRules).postHits(p, page.summary.boardUrl) else null
+    // NG のレスだけ調べる。レスの数だけ毎回は調べない。判定の道具はルールが変わったときだけ作る(数百の正規表現を押すたびに作り直さない)
+    val ngHitMatcher = remember(vm.prefs.ngRules) { io.github.contentsview08.obb.data.NgMatcher(vm.prefs.ngRules) }
+    fun ngHitsOf(p: Post) = if (p.no in page.ngNos) ngHitMatcher.postHits(p, page.summary.boardUrl) else null
     // その文字ちょうどの NG は押すだけで外す。正規表現・部分一致は別のレスにも効いているので編集を開く
     fun ngOffItems(rules: List<NgRule>, what: String, value: String?): List<MenuItem> {
         val (exact, others) = io.github.contentsview08.obb.data.splitNgHits(rules, value)

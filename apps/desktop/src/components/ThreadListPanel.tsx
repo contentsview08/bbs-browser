@@ -48,7 +48,7 @@ export const threadId = (t: ThreadSummary) => `${t.boardUrl}${t.key}`
 
 /** スレ一覧に差し込む帯(キーワードの見出しなど) */
 /** まとまりの見出しの帯。onToggle があれば押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */
-function Band(props: { icon: string; label: string; count: number; accent?: boolean; collapsed?: boolean; onToggle?: () => void; onContextMenu?: (e: React.MouseEvent) => void }) {
+function Band(props: { icon: string; label: string; count: number; /** まとまりの中の、見たことのあるスレの新着の合計(畳んでいても新着が分かるように「+N」) */ unread?: number; accent?: boolean; collapsed?: boolean; onToggle?: () => void; onContextMenu?: (e: React.MouseEvent) => void }) {
   return (
     <div
       className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold ${props.accent ? 'text-c-accent' : 'text-c-text-muted'} ${props.onToggle ? 'cursor-pointer select-none hover:brightness-110' : ''}`}
@@ -59,6 +59,11 @@ function Band(props: { icon: string; label: string; count: number; accent?: bool
     >
       <span className="material-symbols-outlined text-sm leading-none">{props.icon}</span>
       <span className="flex-1 min-w-0 truncate">{props.label}</span>
+      {!!props.unread && (
+        <span className="flex-shrink-0 font-bold text-[0.625rem] px-1.5 py-px rounded tabular-nums" style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }} title="見たことのあるスレの新着">
+          +{props.unread > 999 ? '999+' : props.unread}
+        </span>
+      )}
       <span className="font-normal tabular-nums">{props.count}</span>
       {props.onToggle && <span className="material-symbols-outlined text-sm leading-none">{props.collapsed ? 'expand_more' : 'expand_less'}</span>}
     </div>
@@ -595,21 +600,23 @@ export default function ThreadListPanel(props: Props) {
     if (keywords.length === 0 && authors.length === 0) return undefined
     const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
-    const groups: { keyword: string; threads: ThreadSummary[] }[] = []
+    // 帯に出す新着: 見たことのあるスレの未読の合計(見ていないスレは数えない)
+    const unreadIn = (ts: ThreadSummary[]) => ts.reduce((sum, t) => sum + threadUnread(stateOf(t), t.postCount), 0)
+    const groups: { keyword: string; threads: ThreadSummary[]; unread: number }[] = []
     for (const keyword of keywords) {
       const k = normalizeForSearch(keyword)
       const hits = normal.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
       hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword, threads: hits })
+      if (hits.length > 0) groups.push({ keyword, threads: hits, unread: unreadIn(hits) })
     }
     for (const a of authors) {
       const hits = normal.filter((t) => !taken.has(threadId(t)) && t.authorId === a)
       hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits })
+      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits, unread: unreadIn(hits) })
     }
     if (groups.length === 0) return undefined
     return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
-  }, [visible, props.keywords, props.keywordAuthors])
+  }, [visible, props.keywords, props.keywordAuthors, stateOf])
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
@@ -1238,6 +1245,7 @@ export default function ThreadListPanel(props: Props) {
                         icon="sell"
                         label={g.keyword}
                         count={g.threads.length}
+                        unread={g.unread}
                         accent
                         collapsed={collapsedSet.has(g.keyword)}
                         onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined}

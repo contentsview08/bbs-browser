@@ -55,7 +55,7 @@ import TabBar from './components/TabBar'
 import { assignGroup, closable, dissolveGroup, insertTab, moveTab, newGroupId, nextGroupColor, pruneGroups, removeFromGroup, setPinned, type TabGroup } from './utils/tabs'
 import { describeExtras, mergeNgRules, type BackupExtras } from './utils/backup'
 import { describeChmate, parseChmate } from './utils/chmate'
-import { openChmateBackup } from './host/chmate'
+import { pickChmateBackup, readChmateBackup } from './host/chmate'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { setLightboxCloseClick } from './components/Lightbox'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -2404,11 +2404,12 @@ export default function App() {
    * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・キーワードを足す。
    * ログは、手元にそのスレのログがないか ChMate の方が長いときだけ入れ替える(手元の方が進んでいれば触らない)
    */
-  const importChmate = async (): Promise<string | undefined> => {
+  const importChmate = async (path?: string): Promise<string | undefined> => {
     if (!store) return undefined
-    const raw = await openChmateBackup()
-    if (!raw) return undefined
-    const parsed = parseChmate(raw)
+    // 設定のウィンドウから頼まれたときは、そちらで選んだパスが来る
+    const chosen = path ?? (await pickChmateBackup())
+    if (!chosen) return undefined
+    const parsed = parseChmate(await readChmateBackup(chosen))
     const ops = new UserOps(store)
     const summaryOf = (boardUrl: string, key: string, title: string): ThreadSummary | undefined => {
       const c = allConnectors().find((x) => x.canHandle(boardUrl))
@@ -2537,8 +2538,8 @@ export default function App() {
     const [boards, favBoards, favThreads] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavorites(), store.listFavoriteThreads()])
     return [...boards.flat().map((b) => b.url), ...favBoards.map((b) => b.url), ...favThreads.map((f) => f.thread.boardUrl)]
   }
-  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras })
-  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras }
+  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate })
+  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate }
   useEffect(() => {
     if (!store || !canOpenToolWindow) return
     const offs = [
@@ -2555,6 +2556,7 @@ export default function App() {
         addFavoriteUrl: (url: string) => rpcRef.current.addFavoriteUrl(url),
         exportBackupExtras: () => rpcRef.current.exportBackupExtras(),
         importBackupExtras: (e: BackupExtras) => rpcRef.current.importBackupExtras(e),
+        importChmate: (path: string) => rpcRef.current.importChmate(path),
         addSite: ({ name, menuUrl }: { name: string; menuUrl: string }) => rpcRef.current.addSite(name, menuUrl),
         login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),
         pruneLogs: () => rpcRef.current.pruneLogs(),
@@ -2905,7 +2907,7 @@ export default function App() {
     onDeleteAccount: (c: Parameters<typeof deleteAccount>[0], a: Parameters<typeof deleteAccount>[1]) => void run(null, () => deleteAccount(c, a)),
     onExportExtras: exportBackupExtras,
     onImportExtras: importBackupExtras,
-    onImportChmate: importChmate,
+    onImportChmate: () => importChmate(),
     onBackupDb: () => (store ? backupDatabase() : Promise.resolve(false)),
     onRestoreDb: restoreDatabase,
     onPruneLogs: pruneLogs,

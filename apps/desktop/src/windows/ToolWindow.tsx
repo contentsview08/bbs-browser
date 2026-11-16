@@ -11,6 +11,7 @@ import { mirrorAiModelStatus } from '../hooks/useAiNg'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { BackupExtras } from '../utils/backup'
 import { backupDatabase, restoreDatabase } from '../host/backup'
+import { pickChmateBackup } from '../host/chmate'
 import SettingsDialog, { type SettingsTab } from '../components/SettingsDialog'
 import NgManager from '../components/NgManager'
 import { backgroundError } from '../utils/backgroundError'
@@ -109,6 +110,11 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
           .catch(backgroundError('アカウントの削除')),
       onExportExtras: () => callMain<BackupExtras>('exportBackupExtras'),
       onImportExtras: (e: BackupExtras) => callMain<string>('importBackupExtras', e).then((r) => reloadFavorites().then(() => reloadSites()).then(() => r)),
+      // ZIP はこのウィンドウで選び、読んで DB に入れるのはメイン(選んだパスは Rust が覚えている)
+      onImportChmate: async () => {
+        const path = await pickChmateBackup()
+        return path ? callMain<string | undefined>('importChmate', path) : undefined
+      },
       onBackupDb: () => backupDatabase(),
       onRestoreDb: restoreDatabase,
       onPruneLogs: () => callMain<number>('pruneLogs'),

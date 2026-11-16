@@ -40,6 +40,8 @@ export interface SettingsProps {
   onExportExtras?: () => Promise<BackupExtras>
   /** 設定のファイルから読んだお気に入りなどを、今あるものに足す。足した数の言い方を返す */
   onImportExtras?: (extras: BackupExtras) => Promise<string>
+  /** ChMate のバックアップ(ZIP)を選んで取り込む。取り込んだ数の言い方(選ばなかったら undefined)。PC 版だけ */
+  onImportChmate?: () => Promise<string | undefined>
   /** DB 全体(ログ・設定・NG・履歴)を書き出す。保存先を選ばなかったら false */
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */

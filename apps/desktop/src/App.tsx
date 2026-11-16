@@ -9,6 +9,7 @@ import { getVersion, onBackButtonPress } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
+  createdAtOfKey,
   demoConnector,
   postNoInUrl,
   registerConnector,
@@ -52,7 +53,9 @@ import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import { assignGroup, closable, dissolveGroup, insertTab, moveTab, newGroupId, nextGroupColor, pruneGroups, removeFromGroup, setPinned, type TabGroup } from './utils/tabs'
-import { describeExtras, type BackupExtras } from './utils/backup'
+import { describeExtras, mergeNgRules, type BackupExtras } from './utils/backup'
+import { describeChmate, parseChmate } from './utils/chmate'
+import { openChmateBackup } from './host/chmate'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { setLightboxCloseClick } from './components/Lightbox'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -2397,6 +2400,70 @@ export default function App() {
    * 設定のファイルから読んだお気に入りなどを、今あるものに足す(同じものは重ねない。読めない URL は飛ばす)。
    * 板・スレの URL はコネクタで確かめ、この端末で扱えないもの(家の中のアドレスなど)は入れない。足した数の言い方を返す
    */
+  /**
+   * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・キーワードを足す。
+   * ログは、手元にそのスレのログがないか ChMate の方が長いときだけ入れ替える(手元の方が進んでいれば触らない)
+   */
+  const importChmate = async (): Promise<string | undefined> => {
+    if (!store) return undefined
+    const raw = await openChmateBackup()
+    if (!raw) return undefined
+    const parsed = parseChmate(raw)
+    const ops = new UserOps(store)
+    const summaryOf = (boardUrl: string, key: string, title: string): ThreadSummary | undefined => {
+      const c = allConnectors().find((x) => x.canHandle(boardUrl))
+      return c && { connectorId: c.id, boardUrl, key, title, postCount: 0, order: 0, createdAt: createdAtOfKey(key) }
+    }
+    const haveFav = new Set((await store.listFavoriteThreads()).map((f) => threadId(f.thread)))
+    let threads = 0
+    let favorites = 0
+    let skippedBoards = 0
+    for (const t of parsed.threads) {
+      const s = summaryOf(t.boardUrl, t.key, t.title)
+      if (!s) {
+        skippedBoards++
+        continue
+      }
+      if (t.posts.length > 0) {
+        const existing = await store.loadThread(s)
+        if (!existing || existing.posts.length < t.posts.length) {
+          await store.saveFetch({ ...s, postCount: t.posts.length }, { status: 'reset', posts: t.posts, cursor: null, title: t.title || undefined }, t.viewedAt)
+          threads++
+        }
+        if (t.readNo > 0) await ops.markRead(s, t.readNo, t.viewedAt)
+        await ops.threadView(s, t.viewedAt)
+        for (const no of t.ownNos) await ops.ownAdd(s, no, t.viewedAt)
+      }
+      if (t.favorite && !haveFav.has(threadId(s))) {
+        await ops.favoriteThreadAdd(s, t.viewedAt)
+        haveFav.add(threadId(s))
+        favorites++
+      }
+    }
+    // 書き込みの履歴は、同じスレ・同じ時刻のものがあれば重ねない(2 回読み込んでも増えない)
+    const havePosts = new Set((await store.listPostHistory(100000)).map((e) => `${threadId(e.thread)}\t${e.postedAt}`))
+    let posts = 0
+    for (const p of parsed.posts) {
+      const s = summaryOf(p.boardUrl, p.key, p.title)
+      if (!s || havePosts.has(`${threadId(s)}\t${p.at}`)) continue
+      await ops.postAdd(s, { no: p.no, name: p.name, mail: p.mail, body: p.body }, p.at)
+      if (p.no) await ops.ownAdd(s, p.no, p.at)
+      havePosts.add(`${threadId(s)}\t${p.at}`)
+      posts++
+    }
+    const cur = settingsRef.current
+    const rules = cur.ngRules
+    const merged = mergeNgRules(rules, parsed.ngRules.map((r) => ({ ...r, id: '' })), () => crypto.randomUUID())
+    if (merged.added > 0) updateSetting('ngRules', merged.rules, rules)
+    const keywords = [...new Set([...cur.keywords, ...parsed.keywords])]
+    const keywordsAdded = keywords.length - cur.keywords.length
+    if (keywordsAdded > 0) updateSetting('keywords', keywords)
+    await Promise.all([reloadFavThreads(store), reloadRecent(store)])
+    if (history) setHistory(await loadHistory(store))
+    const text = describeChmate({ threads, favorites, posts, ngAdded: merged.added, keywords: keywordsAdded, skippedBoards })
+    return [text ? `取り込みました(${text})` : '取り込むものがありませんでした', ...parsed.notes].join('\n')
+  }
+
   const importBackupExtras = async (e: BackupExtras): Promise<string> => {
     if (!store) return ''
     const ops = new UserOps(store)
@@ -2838,6 +2905,7 @@ export default function App() {
     onDeleteAccount: (c: Parameters<typeof deleteAccount>[0], a: Parameters<typeof deleteAccount>[1]) => void run(null, () => deleteAccount(c, a)),
     onExportExtras: exportBackupExtras,
     onImportExtras: importBackupExtras,
+    onImportChmate: importChmate,
     onBackupDb: () => (store ? backupDatabase() : Promise.resolve(false)),
     onRestoreDb: restoreDatabase,
     onPruneLogs: pruneLogs,

@@ -6,6 +6,7 @@ use tauri::Manager;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod chmate;
 mod chosen_paths;
 mod fonts;
 mod google_auth;
@@ -678,6 +679,7 @@ pub fn run() {
             write_json_file,
             write_text_file,
             read_json_file,
+            chmate::read_chmate_backup,
             backup_db,
             schedule_db_restore,
             post_http::http_post,

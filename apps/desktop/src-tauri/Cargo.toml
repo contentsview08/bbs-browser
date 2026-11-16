@@ -39,6 +39,9 @@ reqwest = "0.12"
 keyring-core = "1"
 # 画像のキャッシュのファイル名(URL のハッシュ)と同期の鍵の名前(置き場のハッシュ)。tauri が使っているものと同じ版
 sha2 = "0.10"
+# ChMate のバックアップ(ZIP)の読み込み(chmate.rs)。zip は updater が使っているものと同じ版、encoding_rs は Cargo.lock にあるもの(dat の Shift_JIS)
+zip = { version = "9", default-features = false, features = ["deflate"] }
+encoding_rs = "0.8"
 # 画像のキャッシュの同時数・取り消し・名前を引いた先の確かめ(net)・Google のログインのループバックの口(io-util)。tauri が使っているものと同じ版
 tokio = { version = "1", features = ["sync", "macros", "time", "net", "io-util"] }
 # Google のログイン(google_auth.rs)の PKCE と state の乱数・Base64URL。Cargo.lock にあるものと同じ版

@@ -14,7 +14,8 @@ export function BackupTab({
   onRestoreDb,
   onExportExtras,
   onImportExtras,
-}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onExportExtras' | 'onImportExtras'>) {
+  onImportChmate,
+}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onExportExtras' | 'onImportExtras' | 'onImportChmate'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -110,6 +111,18 @@ export function BackupTab({
           </button>
         </div>
       </Section>
+      {onImportChmate && (
+        <Section
+          title="ほかのアプリから取り込む"
+          note="ChMate(Android の専ブラ)の「バックアップ」で書き出した ZIP から、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・スレタイのキーワードを取り込みます。今あるものに足し、同じものは重ねません。見た目などの設定は取り込みません。板のサーバーが分からないスレや、OBB が対応していない掲示板のスレは読みません"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(onImportChmate)}>
+              ChMate のバックアップ(ZIP)を読み込む
+            </button>
+          </div>
+        </Section>
+      )}
       <Section
         title="まるごとバックアップ"
         note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体を 1 つのファイルに書き出します。使っている最中でもそのまま書き出せます。アカウントのパスワードも入るので、ファイルの置き場所に気をつけてください"

@@ -8,7 +8,9 @@ import type { Connector } from './types'
 
 export * from './types'
 export { declaredCharset, detectEncoding, looksLikeUtf8 } from './encoding'
-export { postNoInUrl } from './common'
+export { postNoInUrl, createdAtOfKey } from './common'
+// ほかの専ブラ(ChMate)のログの取り込みで、dat をそのまま読むのに使う
+export { parseDat } from './twoch/parse'
 export { siteDomain, uniqueSiteDomains } from './siteDomain'
 export { twoChConnector, shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, demoConnector }
 

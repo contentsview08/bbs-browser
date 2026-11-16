@@ -213,7 +213,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         buildList<ListRow> {
             for ((k, ts) in groups) {
                 val collapsed = k != null && k in collapsedBands
-                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null), keyword = k, collapsed = collapsed))
+                // 見ていないスレは数えない(unreadOf は読んだ記録のないスレで 0)
+                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null, unread = ts.sumOf { unreadOf(it, page.states[it.key]) }), keyword = k, collapsed = collapsed))
                 if (!collapsed) for (t in ts) add(ListRow.Thread(t))
             }
         }
@@ -752,7 +753,7 @@ private fun KeywordEditDialog(vm: AppViewModel, label: String, onDismiss: () -> 
 }
 
 /** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
-class ListBand(val label: String, val count: Int, val accent: Boolean)
+class ListBand(val label: String, val count: Int, val accent: Boolean, /** まとまりの中の、見たことのあるスレの新着の合計(畳んでいても新着が分かるように「+N」) */ val unread: Int = 0)
 
 /** スレ一覧の 1 行: キーワードの帯か、スレ */
 sealed class ListRow {
@@ -801,6 +802,7 @@ private fun KeywordBand(b: ListBand, collapsed: Boolean? = null, onClick: (() ->
         Icon(if (b.accent) Icons.Filled.Sell else Icons.AutoMirrored.Filled.List, null, Modifier.size(16.dp), tint = color)
         Spacer(Modifier.width(6.dp))
         Text(b.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (b.unread > 0) { Badge("+${badgeCount(b.unread)}", Palette.unread, Palette.unreadText); Spacer(Modifier.width(6.dp)) }
         Text(b.count.toString(), color = color, fontSize = 12.sp)
         if (collapsed != null) Icon(if (collapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp, if (collapsed) "開く" else "畳む", Modifier.size(18.dp), tint = color)
     }

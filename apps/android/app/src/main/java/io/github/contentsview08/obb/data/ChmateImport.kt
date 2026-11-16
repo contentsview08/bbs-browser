@@ -200,31 +200,41 @@ object Chmate {
     ).joinToString("・")
 
     /**
-     * ZIP をほどく。dat は Shift_JIS から直し、roidon.sqlite はキャッシュの一時ファイルに写して bookmarks・boards を読む(読み終えたら消す)
+     * ZIP をほどく。dat は Shift_JIS から直し、roidon.sqlite はキャッシュの一時ファイルに写して bookmarks・boards を読む(読み終えたら消す)。
+     * ZIP は一度キャッシュに写してから ZipFile で読む(ZipInputStream は、書き方によっては途中の項目を読めない)
      */
     fun readZip(input: InputStream, cacheDir: File): ChmateRaw {
+        val zipFile = File(cacheDir, "chmate-import.zip")
+        try {
+            zipFile.outputStream().use { input.copyTo(it) }
+            java.util.zip.ZipFile(zipFile).use { zip -> return readEntries(zip, cacheDir) }
+        } finally {
+            zipFile.delete()
+        }
+    }
+
+    private fun readEntries(zip: java.util.zip.ZipFile, cacheDir: File): ChmateRaw {
         val texts = HashMap<String, String>()
         val dats = HashMap<String, String>()
         val idxs = HashMap<String, String>()
         val skipped = ArrayList<String>()
         var sqlite: ByteArray? = null
-        ZipInputStream(input.buffered()).use { zip ->
-            while (true) {
-                val e = zip.nextEntry ?: break
-                if (e.isDirectory) continue
-                val name = e.name.replace('\\', '/')
-                val base = name.substringAfterLast('/')
-                val inLogs = name.startsWith("dat/") || name.startsWith("archive/")
-                val wanted = (inLogs && (base.endsWith(".dat") || base.endsWith(".idx"))) ||
-                    ((name.startsWith("ng/") || name.startsWith("files/")) && name.endsWith(".json")) || name.endsWith("databases/roidon.sqlite")
-                if (!wanted) continue
-                val bytes = readLimited(zip, MAX_ENTRY_BYTES) ?: run { skipped += "$name: 大きすぎるので読みません"; continue }
-                when {
-                    inLogs && base.endsWith(".dat") -> if (dats.size < MAX_DATS) dats[base] = String(bytes, SJIS) else skipped += "$name: ログが多すぎるので読みません"
-                    inLogs && base.endsWith(".idx") -> idxs[base] = String(bytes, Charsets.UTF_8)
-                    name.endsWith("roidon.sqlite") -> sqlite = bytes
-                    else -> texts[name] = String(bytes, Charsets.UTF_8)
-                }
+        for (e in zip.entries()) {
+            if (e.isDirectory) continue
+            val name = e.name.replace('\\', '/')
+            val base = name.substringAfterLast('/')
+            val inLogs = name.startsWith("dat/") || name.startsWith("archive/")
+            val isSqlite = name.endsWith("databases/roidon.sqlite") || base == "roidon.sqlite"
+            val wanted = (inLogs && (base.endsWith(".dat") || base.endsWith(".idx"))) ||
+                ((name.startsWith("ng/") || name.startsWith("files/")) && name.endsWith(".json")) || isSqlite
+            if (!wanted) continue
+            if (e.size > MAX_ENTRY_BYTES) { skipped += "$name: 大きすぎるので読みません"; continue }
+            val bytes = zip.getInputStream(e).use { it.readBytes() }
+            when {
+                isSqlite -> sqlite = bytes
+                inLogs && base.endsWith(".dat") -> if (dats.size < MAX_DATS) dats[base] = String(bytes, SJIS) else skipped += "$name: ログが多すぎるので読みません"
+                inLogs && base.endsWith(".idx") -> idxs[base] = String(bytes, Charsets.UTF_8)
+                else -> texts[name] = String(bytes, Charsets.UTF_8)
             }
         }
         val datList = dats.keys.sorted().map { ChmateDat(it, dats.getValue(it), idxs[it.removeSuffix(".dat") + ".idx"]) }
@@ -232,13 +242,15 @@ object Chmate {
         val boards = HashMap<String, String>()
         val favoriteBoards = ArrayList<ChmateBoardRow>()
         val db = sqlite
-        if (db == null) skipped += "databases/roidon.sqlite がないので、お気に入りのスレは読めません"
+        if (db == null) skipped += "databases/roidon.sqlite がないので、お気に入りのスレは読めません(ZIP の中: ${zip.size()} 項目)"
         else if (!db.copyOfRange(0, minOf(16, db.size)).contentEquals("SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1))) skipped += "roidon.sqlite が SQLite のファイルではありません"
         else {
             val tmp = File(cacheDir, "chmate-import.sqlite")
             try {
                 tmp.writeBytes(db)
-                android.database.sqlite.SQLiteDatabase.openDatabase(tmp.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { sdb ->
+                // NO_LOCALIZED_COLLATORS: 読むだけの DB に Android が locale を書こうとして失敗しないように
+                val flags = android.database.sqlite.SQLiteDatabase.OPEN_READONLY or android.database.sqlite.SQLiteDatabase.NO_LOCALIZED_COLLATORS
+                android.database.sqlite.SQLiteDatabase.openDatabase(tmp.path, null, flags).use { sdb ->
                     runCatching {
                         sdb.rawQuery("SELECT name, created, title, read_state, access, flag FROM bookmarks", null).use { c ->
                             while (c.moveToNext()) bookmarks += ChmateBookmark(c.getString(0) ?: "", c.getLong(1), c.getString(2) ?: "", c.getString(3) ?: "", c.getLong(4), c.getLong(5))
@@ -264,18 +276,4 @@ object Chmate {
         return ChmateRaw(texts, datList, bookmarks, boards, skipped, favoriteBoards)
     }
 
-    /** 上限までを読む。超えていたら null */
-    private fun readLimited(zip: ZipInputStream, limit: Long): ByteArray? {
-        val out = java.io.ByteArrayOutputStream()
-        val buf = ByteArray(64 * 1024)
-        var total = 0L
-        while (true) {
-            val n = zip.read(buf)
-            if (n < 0) break
-            total += n
-            if (total > limit) return null
-            out.write(buf, 0, n)
-        }
-        return out.toByteArray()
-    }
 }

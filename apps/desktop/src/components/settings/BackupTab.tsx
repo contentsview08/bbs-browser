@@ -147,7 +147,7 @@ export function BackupTab({
       )}
       <Section
         title="まるごとバックアップ"
-        note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体を 1 つのファイルに書き出します。使っている最中でもそのまま書き出せます。アカウントのパスワードも入るので、ファイルの置き場所に気をつけてください"
+        note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体と、書き込みの認証の状態(Cookie)を 1 つの ZIP に書き出します。使っている最中でもそのまま書き出せます。アカウントのパスワードや認証の状態も入るので、ファイルの置き場所に気をつけてください。戻すときは、前の版で書き出した .db も選べます"
       >
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => act(async () => ((await onBackupDb()) ? 'バックアップを書き出しました' : undefined))}>

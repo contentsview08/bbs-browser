@@ -408,6 +408,10 @@ fn current_background_image(app: tauri::AppHandle, saved: String) -> Result<Stri
 const DB_FILE: &str = "bbs-browser.db";
 /// 復元を頼まれた DB の置き場。次に起動したとき、DB を開く前に入れ替える
 const RESTORE_FILE: &str = "restore-pending.db";
+/// 次の起動で入れ替える書き込みの Cookie(まるごとバックアップの ZIP に入っていたとき)
+const RESTORE_COOKIES: &str = "restore-pending-cookies.json";
+/// まるごとバックアップの ZIP の中の名前
+const BACKUP_DB_ENTRY: &str = "bbs-browser.db";
 /// 「はじめの状態に戻す」を頼まれた印。次の起動のはじめに DB をどけて、まっさらで開く
 const RESET_MARK: &str = "reset-pending";
 
@@ -457,17 +461,47 @@ fn read_json_file(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result
 #[tauri::command]
 async fn backup_db(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result<(), String> {
     let path = chosen.take(&path)?;
-    if !has_extension(&path, &["db", "sqlite", "sqlite3"]) {
-        return Err("バックアップの名前は .db で終わるようにしてください".into());
+    let as_zip = has_extension(&path, &["zip"]);
+    if !as_zip && !has_extension(&path, &["db", "sqlite", "sqlite3"]) {
+        return Err("バックアップの名前は .zip か .db で終わるようにしてください".into());
     }
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
-    let target = path.to_string_lossy().into_owned();
+    // .zip: DB の写しを一時ファイルに作り、書き込みの Cookie(post-cookies.json。認証の状態)と一緒に 1 つの ZIP にする。
+    // .db: 今までどおり DB だけ
+    let db_target = if as_zip { db_dir(&app)?.join("backup-tmp.db") } else { path.clone() };
+    if db_target.exists() {
+        let _ = std::fs::remove_file(&db_target);
+    }
+    let target = db_target.to_string_lossy().into_owned();
     sql_batch::with_pool(&app, async |pool| {
         sqlx::query("VACUUM INTO $1").bind(target).execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
     })
-    .await
+    .await?;
+    if !as_zip {
+        return Ok(());
+    }
+    let result = write_backup_zip(&app, &db_target, &path);
+    let _ = std::fs::remove_file(&db_target);
+    result
+}
+
+/// まるごとバックアップの ZIP を書く(bbs-browser.db と post-cookies.json)
+fn write_backup_zip(app: &tauri::AppHandle, db_file: &Path, zip_path: &Path) -> Result<(), String> {
+    use std::io::Write;
+    let file = std::fs::File::create(zip_path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(BACKUP_DB_ENTRY, opts).map_err(|e| e.to_string())?;
+    zip.write_all(&std::fs::read(db_file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let cookies = data_dir(app)?.join(post_http::COOKIE_FILE);
+    if let Ok(bytes) = std::fs::read(&cookies) {
+        zip.start_file(post_http::COOKIE_FILE, opts).map_err(|e| e.to_string())?;
+        zip.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
+    zip.finish().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// DB の復元を頼む。選んだファイルが SQLite かを確かめてから置き場にコピーし、アプリを起動し直す
@@ -475,6 +509,37 @@ async fn backup_db(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>,
 #[tauri::command]
 fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, source: String) -> Result<(), String> {
     let source = chosen.take(&source)?;
+    let dir = db_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if has_extension(&source, &["zip"]) {
+        // まるごとバックアップの ZIP: DB と Cookie を次の起動の控えに置く
+        let file = std::fs::File::open(&source).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|_| "ZIP として読めません".to_string())?;
+        let mut db_bytes: Option<Vec<u8>> = None;
+        let mut cookie_bytes: Option<Vec<u8>> = None;
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+            let name = entry.name().map_err(|e| e.to_string())?.rsplit('/').next().unwrap_or("").to_string();
+            let mut buf = Vec::new();
+            use std::io::Read;
+            if name == BACKUP_DB_ENTRY || name.ends_with(".db") {
+                entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+                db_bytes = Some(buf);
+            } else if name == post_http::COOKIE_FILE {
+                entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+                cookie_bytes = Some(buf);
+            }
+        }
+        let Some(db) = db_bytes else { return Err("ZIP の中に DB(bbs-browser.db)がありません".into()) };
+        if !db.starts_with(b"SQLite format 3\0") {
+            return Err("ZIP の中の DB が SQLite のファイルではありません".into());
+        }
+        std::fs::write(dir.join(RESTORE_FILE), db).map_err(|e| e.to_string())?;
+        if let Some(c) = cookie_bytes {
+            std::fs::write(dir.join(RESTORE_COOKIES), c).map_err(|e| e.to_string())?;
+        }
+        app.restart();
+    }
     let mut head = [0u8; 16];
     {
         use std::io::Read;
@@ -484,8 +549,6 @@ fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPat
     if &head != b"SQLite format 3\0" {
         return Err("SQLite のファイルではありません".into());
     }
-    let dir = db_dir(&app)?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::copy(&source, dir.join(RESTORE_FILE)).map_err(|e| e.to_string())?;
     app.restart();
 }
@@ -522,9 +585,21 @@ fn apply_pending_restore(app: &tauri::AppHandle) {
         let _ = std::fs::remove_file(&reset);
         // DB の形の覚え書きも消す(新しい DB は最初から今の形で作る)
         let _ = std::fs::remove_file(dir.join(SCHEMA_MARK));
+        // 書き込みの Cookie(認証の状態)も、はじめの状態では持っていない
+        if let Ok(data) = data_dir(app) {
+            let _ = std::fs::remove_file(data.join(post_http::COOKIE_FILE));
+        }
         return;
     }
     let _ = std::fs::rename(&pending, dir.join(DB_FILE));
+    // ZIP に入っていた書き込みの Cookie も戻す(PostCookies::load はこのあと)
+    let cookies = dir.join(RESTORE_COOKIES);
+    if cookies.exists() {
+        if let Ok(data) = data_dir(app) {
+            let _ = std::fs::create_dir_all(&data);
+            let _ = std::fs::rename(&cookies, data.join(post_http::COOKIE_FILE));
+        }
+    }
 }
 
 /// DB の形(migration の数)を覚えておくファイル。前の起動と違えば、DB を開く前に写しを取る

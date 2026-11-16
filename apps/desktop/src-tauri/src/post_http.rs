@@ -15,7 +15,7 @@ use cookie_store::CookieStore;
 use tauri::Url;
 use tauri_plugin_http::reqwest;
 
-const COOKIE_FILE: &str = "post-cookies.json";
+pub(crate) const COOKIE_FILE: &str = "post-cookies.json";
 const MAX_REDIRECTS: usize = 5;
 
 pub struct PostCookies {

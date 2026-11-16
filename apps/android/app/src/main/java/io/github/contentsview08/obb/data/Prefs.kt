@@ -126,6 +126,10 @@ private class WordsPref(private val inner: ReadWriteProperty<Any?, String>, priv
  * 端末をまたいで意味のある項目は、保存の名前・単位・JSON を apps/desktop/src/ui/settings.ts の AppSettings と同じにする
  */
 class Prefs(context: Context) {
+    init {
+        // まるごとバックアップから戻す控えがあれば、設定を読む前に入れ替える(LogDb より先に Prefs が作られることもある)
+        FullBackup.applyPending(context)
+    }
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     /** 小数の設定の名前。バックアップの 1.0 は JSON で 1 になるので、戻すときの型をこれで決める */
     private val floatKeys = HashSet<String>()

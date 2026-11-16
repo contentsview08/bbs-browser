@@ -949,7 +949,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 db.exportDatabase(tmp.path)
                 val settings = prefs.export()
                 withContext(Dispatchers.IO) {
-                    app.contentResolver.openOutputStream(uri, "wt")?.use { io.github.contentsview08.obb.data.FullBackup.writeZip(tmp, settings, it) } ?: throw IllegalStateException("書けませんでした")
+                    app.contentResolver.openOutputStream(uri, "wt")?.use { io.github.contentsview08.obb.data.FullBackup.writeZip(app, tmp, settings, it) } ?: throw IllegalStateException("書けませんでした")
                     tmp.delete()
                 }
                 toast = "まるごとバックアップを保存しました"

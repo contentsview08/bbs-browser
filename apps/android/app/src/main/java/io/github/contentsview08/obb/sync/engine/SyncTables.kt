@@ -23,14 +23,24 @@ interface SyncSql {
 }
 
 class AndroidSyncSql(private val db: () -> SQLiteDatabase) : SyncSql {
-    override fun exec(sql: String, args: List<Any?>) = db().execSQL(sql, args.toTypedArray())
+    private inline fun <T> timed(what: String, sql: String, block: () -> T): T {
+        val started = android.os.SystemClock.elapsedRealtime()
+        try {
+            return block()
+        } finally {
+            io.github.contentsview08.obb.data.SlowLog.note(what, started, sql.take(70).replace('\n', ' '))
+        }
+    }
 
-    override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> =
+    override fun exec(sql: String, args: List<Any?>) = timed("sync.exec", sql) { db().execSQL(sql, args.toTypedArray()) }
+
+    override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> = timed("sync.query", sql) {
         db().rawQuery(sql, args.map { it?.toString() }.toTypedArray()).use { c ->
             buildList {
                 while (c.moveToNext()) add((0 until c.columnCount).associate { i -> c.getColumnName(i) to c.valueAt(i) })
             }
         }
+    }
 
     private fun Cursor.valueAt(i: Int): Any? = when (getType(i)) {
         Cursor.FIELD_TYPE_NULL -> null
@@ -39,7 +49,7 @@ class AndroidSyncSql(private val db: () -> SQLiteDatabase) : SyncSql {
         else -> getString(i)
     }
 
-    override fun batch(statements: List<SqlStatement>) {
+    override fun batch(statements: List<SqlStatement>) = timed("sync.batch(${statements.size})", statements.firstOrNull()?.sql ?: "") {
         val d = db()
         d.beginTransaction()
         try {

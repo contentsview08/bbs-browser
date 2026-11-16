@@ -589,7 +589,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch { f() }
         }
         override suspend fun enabled() = withContext(Dispatchers.IO) { syncCtl.autoEnabled() }
-        override suspend fun cycle(reason: String) = withContext(Dispatchers.IO) { syncCtl.autoCycle(reason) }
+        override suspend fun cycle(reason: String) = withContext(Dispatchers.IO) {
+            val started = android.os.SystemClock.elapsedRealtime()
+            try {
+                syncCtl.autoCycle(reason)
+            } finally {
+                io.github.contentsview08.obb.data.SlowLog.note("sync.cycle", started, reason, threshold = 0)
+            }
+        }
         override suspend fun check() = withContext(Dispatchers.IO) { syncCtl.autoCheck() }
         override suspend fun hasChanges() = withContext(Dispatchers.IO) { syncCtl.hasChanges() }
         override fun pace() = syncCtl.pace()

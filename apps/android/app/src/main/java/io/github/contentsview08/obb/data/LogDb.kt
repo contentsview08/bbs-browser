@@ -153,6 +153,15 @@ internal object FavoriteThreadSql {
  * ログの保存(PC 版の packages/logstore にあたる)。テーブルは PC 版と同じ packages/logstore/migrations の SQL で作る
  * (ビルドで assets の migrations/ に入る)。版の番号 = 流したマイグレーションの数
  */
+/** 遅い処理を logcat に出す(重さの原因を探すため。しきい値より速いものは出さない)。adb logcat -s ObbSlow で読む */
+object SlowLog {
+    private const val TAG = "ObbSlow"
+    fun note(what: String, startedAt: Long, label: String, threshold: Long = 60) {
+        val ms = android.os.SystemClock.elapsedRealtime() - startedAt
+        if (ms >= threshold) android.util.Log.w(TAG, "$what ${ms}ms $label [${Thread.currentThread().name}]")
+    }
+}
+
 class LogDb(private val context: Context) : SQLiteOpenHelper(context, FullBackup.DB_NAME, null, migrationNames(context).size) {
     init {
         // まるごとバックアップから戻す控えがあれば、DB を開く前に入れ替える
@@ -519,7 +528,14 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, FullBackup
      */
     private val lane = Dispatchers.IO.limitedParallelism(1)
 
-    private suspend fun <T> io(block: () -> T): T = withContext(lane) { block() }
+    private suspend fun <T> io(block: () -> T): T = withContext(lane) {
+        val started = android.os.SystemClock.elapsedRealtime()
+        try {
+            block()
+        } finally {
+            SlowLog.note("db", started, block.javaClass.name.substringAfterLast('.'))
+        }
+    }
 }
 
 

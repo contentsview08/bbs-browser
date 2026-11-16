@@ -80,6 +80,15 @@ object Chmate {
         return "https://$server/$name/"
     }
 
+    /**
+     * dat として読めるか。ChMate のバックアップには、中身が全部 NUL(書きかけのまま壊れた)・「Code = 404」だけ(dat 落ちの返事)の
+     * ファイルが混ざる。そういうものはレスにならないので、スレとして入れない(入れると、スレタイがキーのままの空のスレが履歴に並ぶ)
+     */
+    fun looksLikeDat(text: String): Boolean {
+        val first = text.lineSequence().firstOrNull { it.isNotBlank() } ?: return false
+        return !first.startsWith('\u0000') && first.contains("<>")
+    }
+
     /** dat のファイル名 `<板>_<キー>.dat` → 板とキー */
     fun splitDatName(name: String): Pair<String, String>? = DAT_NAME.find(name)?.let { it.groupValues[1] to it.groupValues[2] }
 
@@ -114,8 +123,10 @@ object Chmate {
 
         val threads = ArrayList<ChmateThread>()
         val seen = HashSet<String>()
+        var broken = 0
         for (d in raw.dats) {
             val (board, key) = splitDatName(d.name) ?: run { notes += "${d.name}: 名前から板とキーが分かりません"; continue }
+            if (!looksLikeDat(d.text)) { broken++; continue }
             val boardUrl = boardUrlOf(board) ?: continue
             if (!seen.add("$boardUrl$key")) continue
             val (posts, title) = parseDat(d.text)
@@ -126,6 +137,7 @@ object Chmate {
                 if (lastModified > 0) lastModified else if ((fav?.access ?: 0L) > 0) fav!!.access else now,
             )
         }
+        if (broken > 0) notes += "壊れていてレスの読めないログ $broken 本は入れません(中身が空か、dat 落ちの返事だけ)"
         // dat のない ★ のスレ(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
         for (b in raw.bookmarks) {
             if (!isFavorite(b.flag)) continue
@@ -160,7 +172,9 @@ object Chmate {
             val at = r.optLong("posted", 0L)
             if (at <= 0) continue
             val no = CONFIRMED_NO.find(r.optString("confirmed", ""))?.groupValues?.get(1)?.toIntOrNull()
-            posts += ChmatePost(boardUrl, key, r.optString("targetTitle", ""), no, r.optString("name", ""), r.optString("mail", ""), r.optString("body", ""), at)
+            // ChMate の履歴にスレタイがなければ、ログのスレタイで埋める
+            val title = r.optString("targetTitle", "").ifEmpty { threads.firstOrNull { it.key == key && it.boardUrl == boardUrl }?.title ?: "" }
+            posts += ChmatePost(boardUrl, key, title, no, r.optString("name", ""), r.optString("mail", ""), r.optString("body", ""), at)
         }
 
         val keywords = ArrayList<String>()

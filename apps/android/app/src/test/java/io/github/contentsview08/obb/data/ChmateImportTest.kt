@@ -32,6 +32,8 @@ class ChmateImportTest {
             ChmateDat("bbs.eddibb.cc%2Fliveedge_1791503299.dat", dat, "1791504300000\tW/\"x\"\n2:1,3:1\n"),
             ChmateDat("livejupiter_1618048117.dat", dat, "0\tnull\n\n"),
             ChmateDat("mystery_1.dat", dat, null),
+            ChmateDat("bbs.eddibb.cc%2Fliveedge_1752974175.dat", "\u0000".repeat(64), null),
+            ChmateDat("bbs.p-hotair.com%2Fnews4vip_1171778428.dat", "Code = 404\n", null),
         ),
         bookmarks = listOf(
             ChmateBookmark("livejupiter", 1618048117, "橋下", """{"o":69,"n":"26","r":2,"p":1.0}""", 1785551620400, 1),
@@ -126,6 +128,17 @@ class ChmateImportTest {
         val p = r.posts[0]
         assertEquals(listOf("https://bbs.eddibb.cc/liveedge/", "1791503299", "ワイ", 47, "", "sage", "そういや", 1791504254856L), listOf(p.boardUrl, p.key, p.title, p.no, p.name, p.mail, p.body, p.at))
         assertEquals(listOf("宮崎駿"), r.keywords)
+    }
+
+    @Test
+    fun brokenDats() {
+        assertTrue(Chmate.looksLikeDat(dat))
+        assertFalse(Chmate.looksLikeDat("\u0000\u0000"))
+        assertFalse(Chmate.looksLikeDat("Code = 404\n"))
+        assertFalse(Chmate.looksLikeDat(""))
+        val r = parse()
+        assertFalse(r.threads.any { it.key == "1752974175" || it.key == "1171778428" })
+        assertTrue(r.notes.any { it.contains("壊れていて") && it.contains("2 本") })
     }
 
     @Test

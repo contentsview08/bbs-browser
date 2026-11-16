@@ -1,6 +1,8 @@
 package io.github.contentsview08.obb.ui
 
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.ui.focus.onFocusChanged
@@ -177,7 +179,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val unreadFirst = vm.prefs.unreadFirst
     // 既読が進むたびに並べ直さないよう、中身で絞るタブのときだけ既読の変化をきっかけにする
     val statesKey = if (tab == ListTab.UNREAD || tab == ListTab.VISITED) page.states else null
-    val shown = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst) {
+    // 畳んでいるキーワードの帯(帯を押すと畳む・開く)
+    val collapsedBands = remember(vm.prefs.keywordBandsCollapsed) { vm.prefs.keywordBandsCollapsed.split('\n').filter { it.isNotBlank() }.toSet() }
+    /** 画面の行: キーワードのまとまりの帯と、見せるスレ。畳んだまとまりは帯だけ */
+    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -200,16 +205,22 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
-        if (hasKeywords) keywordGroups(list, keywords, keywordAuthors).flatMap { it.second }
-        else list.filterNot { it.announcement } + list.filter { it.announcement }
-    }
-    // キーワードのまとまりの頭に出す帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)
-    val bandBefore = remember(shown, keywords, keywordAuthors) {
-        if (!hasKeywords) emptyMap() else keywordGroups(shown, keywords, keywordAuthors).filter { it.second.isNotEmpty() }.let { groups ->
-            if (groups.none { it.first != null }) emptyMap()
-            else groups.associate { (k, ts) -> ts.first().key to ListBand(k ?: "その他のスレ", ts.size, accent = k != null) }
+        if (!hasKeywords) return@remember (list.filterNot { it.announcement } + list.filter { it.announcement }).map<ThreadSummary, ListRow> { ListRow.Thread(it) }
+        // キーワードのまとまりの頭に帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)。
+        // キーワードに当たるスレが 1 つもなければ帯は出さない
+        val groups = keywordGroups(list, keywords, keywordAuthors).filter { it.second.isNotEmpty() }
+        if (groups.none { it.first != null }) return@remember groups.flatMap { it.second }.map<ThreadSummary, ListRow> { ListRow.Thread(it) }
+        buildList<ListRow> {
+            for ((k, ts) in groups) {
+                val collapsed = k != null && k in collapsedBands
+                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null), keyword = k, collapsed = collapsed))
+                if (!collapsed) for (t in ts) add(ListRow.Thread(t))
+            }
         }
     }
+    /** 見せているスレ(帯を除く) */
+    val shown = remember(rows) { rows.mapNotNull { (it as? ListRow.Thread)?.t } }
+    val toggleBand = { k: String -> vm.prefs.keywordBandsCollapsed = (if (k in collapsedBands) collapsedBands - k else collapsedBands + k).joinToString("\n") }
 
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
@@ -234,7 +245,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 else vm.drawerOpen = true
             },
             "forward" to { vm.forward() },
-            "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) }; Unit },
+            "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, rows.size - 1)) }; Unit },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { vm.refreshBoard(page) },
             "newThread" to { vm.openNewThread(page) },
@@ -351,8 +362,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         bottom = with(density) { bars.bottomHeight.toDp() } + 24.dp,
                     ),
                 ) {
-                    items(shown, key = { it.key }, contentType = { 0 }) { t ->
-                        bandBefore[t.key]?.let { KeywordBand(it) }
+                    items(rows, key = { r -> if (r is ListRow.Band) "band:${r.band.label}" else (r as ListRow.Thread).t.key }, contentType = { if (it is ListRow.Band) 1 else 0 }) { r ->
+                        if (r is ListRow.Band) {
+                            KeywordBand(r.band, collapsed = if (r.keyword != null) r.collapsed else null, onClick = r.keyword?.let { k -> { toggleBand(k) } })
+                            return@items
+                        }
+                        val t = (r as ListRow.Thread).t
                         ThreadRow(
                             t, pinchScale ?: prefs.listFontScale, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
@@ -681,6 +696,12 @@ internal fun authorKeywordLabel(authorId: String) = "立てた人 $authorId"
 /** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
 class ListBand(val label: String, val count: Int, val accent: Boolean)
 
+/** スレ一覧の 1 行: キーワードの帯か、スレ */
+sealed class ListRow {
+    class Band(val band: ListBand, val keyword: String?, val collapsed: Boolean) : ListRow()
+    class Thread(val t: ThreadSummary) : ListRow()
+}
+
 /**
  * キーワードごとにスレをまとめる。先のキーワードに当たったスレは後のキーワードに数えない。
  * 当たりは検索と同じく全角半角・大文字小文字・カナとかなを同じに扱う(normalizeForSearch。PC と同じ)。
@@ -710,15 +731,18 @@ internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>, au
     return groups
 }
 
+/** まとまりの帯。collapsed が null でなければ押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */
 @Composable
-private fun KeywordBand(b: ListBand) {
+private fun KeywordBand(b: ListBand, collapsed: Boolean? = null, onClick: (() -> Unit)? = null) {
+    val color = if (b.accent) Palette.accent else Palette.textMuted
     Row(
-        Modifier.fillMaxWidth().background(if (b.accent) Palette.accentWash else Palette.surface2).padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().background(if (b.accent) Palette.accentWash else Palette.surface2).let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(if (b.accent) Icons.Filled.Sell else Icons.AutoMirrored.Filled.List, null, Modifier.size(16.dp), tint = if (b.accent) Palette.accent else Palette.textMuted)
+        Icon(if (b.accent) Icons.Filled.Sell else Icons.AutoMirrored.Filled.List, null, Modifier.size(16.dp), tint = color)
         Spacer(Modifier.width(6.dp))
-        Text(b.label, color = if (b.accent) Palette.accent else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(b.count.toString(), color = if (b.accent) Palette.accent else Palette.textMuted, fontSize = 12.sp)
+        Text(b.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(b.count.toString(), color = color, fontSize = 12.sp)
+        if (collapsed != null) Icon(if (collapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp, if (collapsed) "開く" else "畳む", Modifier.size(18.dp), tint = color)
     }
 }

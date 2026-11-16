@@ -407,7 +407,7 @@ private fun ListPage(vm: AppViewModel) {
     }
     // 「板を開いたときの並び」の説明がここを指すので、ふだんの設定に出す
     Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
-        val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
+        val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順", "keyword" to "キーワード")
         val on = p.listTabs.split(',').filter { it.isNotEmpty() }
         @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -421,7 +421,8 @@ private fun ListPage(vm: AppViewModel) {
         }
         for ((k, name) in all.filter { it.first !in on }) TabRow(k, name, false, null)
     }
-    Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
+    Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上に帯でまとめて出します。帯を長押しすると直せます") {
+        SwitchRow("キーワードに当たるスレを帯で上にまとめる", p.keywordBands, desc = "切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します") { p.keywordBands = it }
         EditableWordList(p.keywords, "キーワード", "キーワードを足す", "まだありません", sortable = true) { p.keywords = it }
     }
     Group("キーワード(立てた人)", note = "この人(ID・BE 番号など)が立てたスレを、キーワードの下にまとめて出します。スレを長押しして足すこともできます") {
@@ -759,16 +760,22 @@ private fun NgPage(vm: AppViewModel) {
         val q = query.trim()
         val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true) || (it.boardName ?: "").contains(q, true)) }
             .asReversed().sortedByDescending { it.createdAt }
+        // 数百あると縦に長くなりすぎるので 50 件ずつ(種類・検索を変えたら 1 ページ目に戻る)
+        val perPage = 50
+        var pageNo by remember(filter, query) { mutableStateOf(0) }
+        val pageCount = (shown.size + perPage - 1) / perPage
+        val pageSafe = pageNo.coerceIn(0, maxOf(0, pageCount - 1))
+        val pageRules = shown.drop(pageSafe * perPage).take(perPage)
         // 選んでいる間の帯: 件数・見えているものを全部選ぶ・有効・無効・削除・選択を外す
         if (selecting) {
             val pickedRules = p.ngRules.filter { it.id in selected }
-            val allShown = shown.isNotEmpty() && shown.all { it.id in selected }
+            val allShown = pageRules.isNotEmpty() && pageRules.all { it.id in selected }
             Row(Modifier.fillMaxWidth().background(Palette.accentWash).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${selected.size} 件を選択中", Modifier.weight(1f), color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 IconButton(onClick = { picked = emptySet() }) { Icon(Icons.Filled.Close, "選択を外す", tint = Palette.textBody) }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).background(Palette.accentWash).padding(horizontal = 8.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { picked = if (allShown) emptySet() else shown.mapTo(HashSet()) { it.id } }) { Text(if (allShown) "すべて外す" else "見えているものを全部選ぶ", color = Palette.textBody) }
+                TextButton(onClick = { picked = if (allShown) selected - pageRules.mapTo(HashSet()) { it.id } else selected + pageRules.map { it.id } }) { Text(if (allShown) "このページを外す" else "このページを全部選ぶ", color = Palette.textBody) }
                 TextButton(onClick = { vm.setNgEnabledAll(pickedRules, true) }) { Text("有効にする", color = Palette.textBody) }
                 TextButton(onClick = { vm.setNgEnabledAll(pickedRules, false) }) { Text("無効にする", color = Palette.textBody) }
                 TextButton(onClick = { confirmDelete = pickedRules }) {
@@ -778,7 +785,7 @@ private fun NgPage(vm: AppViewModel) {
             }
         }
         if (shown.isEmpty()) Text(if (p.ngRules.isEmpty()) "NG はまだありません" else "当てはまる NG はありません", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 14.sp)
-        for (r in shown) {
+        for (r in pageRules) {
             val expired = r.expiresOnDate != null && r.expiresOnDate < today
             val marks = listOfNotNull(
                 if (r.isRegex) "正規表現" else null, r.boardUrl?.let { "${r.boardName ?: "この板"}だけ" },
@@ -811,6 +818,11 @@ private fun NgPage(vm: AppViewModel) {
             }
         }
         HorizontalDivider(color = Palette.border)
+        if (pageCount > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { pageNo = pageSafe - 1 }, enabled = pageSafe > 0) { Text("前へ") }
+            Text("${pageSafe + 1} / $pageCount ページ(${shown.size} 件)", Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            TextButton(onClick = { pageNo = pageSafe + 1 }, enabled = pageSafe < pageCount - 1) { Text("次へ") }
+        }
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
         val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
         if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }

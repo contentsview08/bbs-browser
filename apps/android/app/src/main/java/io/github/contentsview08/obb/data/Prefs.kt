@@ -224,6 +224,8 @@ class Prefs(context: Context) {
     var keywordAuthors by wordsPref("keywordAuthors", emptyList(), "\n")
     /** スレ一覧で畳んでいるキーワードの帯(帯を押すと畳む・開く。端末ごと。PC 版の keywordBandsCollapsed) */
     var keywordBandsCollapsed by wordsPref("keywordBandsCollapsed", emptyList(), "\n")
+    /** キーワードに当たるスレを帯で上にまとめるか。切るとふだんの並びのまま(キーワードのスレはタブ「キーワード」で見る。PC 版の keywordBands) */
+    var keywordBands by pref("keywordBands", true)
     /** スレ一覧の行の形: normal / compact(スレタイ 1 行と数だけ) */
     var listShape by pref("listShape", "normal")
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */

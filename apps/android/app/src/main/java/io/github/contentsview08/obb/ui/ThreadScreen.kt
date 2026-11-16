@@ -175,7 +175,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
-    var ngWordFor by remember { mutableStateOf<Post?>(null) }
     /** 種類「i」「n」と、そのレス */
     var headMenu by remember { mutableStateOf<Pair<Char, Post>?>(null) }
     var gallery by remember { mutableStateOf(false) }
@@ -199,6 +198,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     val swipe = rememberSwipeState()
     var ngEditing by remember { mutableStateOf<NgRule?>(null) }
+    // 長押しの「詳しく設定して NG に」で開く、新しい NG の下書き(正規表現・この板だけ・期限・メモを決めて足す。設定の NgEditSheet と同じ板)
+    var ngAdding by remember { mutableStateOf<NgRule?>(null) }
     // NG のレスだけ調べる。レスの数だけ毎回は調べない。判定の道具はルールが変わったときだけ作る(数百の正規表現を押すたびに作り直さない)
     val ngHitMatcher = remember(vm.prefs.ngRules) { io.github.contentsview08.obb.data.NgMatcher(vm.prefs.ngRules) }
     fun ngHitsOf(p: Post) = if (p.no in page.ngNos) ngHitMatcher.postHits(p, page.summary.boardUrl) else null
@@ -216,9 +217,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         listOf(
             MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule) { vm.addNg(NgRule("posterId", id, expiresOnDate = io.github.contentsview08.obb.data.today())) },
             MenuItem("この ID を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterId", id)) },
+            MenuItem("この ID を詳しく設定して NG に…(期限・この板だけ・メモ)", Icons.Filled.EditNote) { ngAdding = NgRule("posterId", id) },
         )
     }.orEmpty()
-    fun nameNgItem(p: Post) = MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterName", p.name)) }
+    fun nameNgItems(p: Post) = listOf(
+        MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterName", p.name)) },
+        MenuItem("この名前を詳しく設定して NG に…(正規表現・期限・この板だけ)", Icons.Filled.EditNote) { ngAdding = NgRule("posterName", p.name) },
+    )
+    /** 本文の言葉の NG: 1 行目を入れた下書きを開き、言葉を直して(正規表現・期限・板も決めて)足す */
+    fun wordNgItem(p: Post) = MenuItem("本文の言葉を NG に…(直して足す)", Icons.Filled.Block) {
+        ngAdding = NgRule("content", p.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(30) ?: "")
+    }
     val own = page.ownNos
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
     val wifi = rememberIsWifi(vm.prefs.thumbMode == ThumbMode.WIFI)
@@ -975,9 +984,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
                 listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p).let { hits ->
                     (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p)) +
-                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p))) +
+                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else nameNgItems(p)) +
                         ngOffItems(hits?.body.orEmpty(), "本文", null) +
-                        MenuItem("本文の言葉を NG に(直して足す)", Icons.Filled.Block) { ngWordFor = p }
+                        wordNgItem(p)
                 } +
                 vm.aiRulesFor(page).map { r ->
                     val on = page.aiNg[p.no]?.rule?.id == r.id
@@ -986,6 +995,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 }) {}),
             ),
             MenuAt.Center,
+            // 名前を省略して出しているときも、長押しで書いた人と日時が分かるように
+            header = { MenuInfo("${p.no}: ${p.name}${if (p.mail.isNotEmpty()) " [${p.mail}]" else ""}", "${p.date}${p.id?.let { " ID:$it" } ?: ""}") },
         ) { postMenu = null }
     }
 
@@ -997,7 +1008,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (kind == 'i' && p.id != null) listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p) }) {}) + listOf(
                     MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search) { openPopup(sameId, focus = p.no) },
                     MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
-                ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p)) }) {}) + listOf(
+                ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else nameNgItems(p) }) {}) + listOf(
                     MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search) { openPopup(sameName, focus = p.no) },
                     MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
                 ),
@@ -1005,15 +1016,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             MenuAt.Center,
         ) { headMenu = null }
     }
-    ngWordFor?.let { p ->
-        var word by remember(p.no) { mutableStateOf(p.body.lineSequence().firstOrNull()?.take(30) ?: "") }
-        AlertDialog(
-            onDismissRequest = { ngWordFor = null },
-            title = { Text("言葉を NG") },
-            text = { OutlinedTextField(word, { word = it }, singleLine = true, label = { Text("この言葉を含むレスをあぼーんにする") }) },
-            confirmButton = { TextButton(onClick = { vm.addNg(NgRule("content", word.trim())); ngWordFor = null }) { Text("NG に足す") } },
-            dismissButton = { TextButton(onClick = { ngWordFor = null }) { Text("やめる") } },
-        )
+    ngAdding?.let { r ->
+        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = true, onDismiss = { ngAdding = null }) { vm.addNg(it); ngAdding = null }
     }
 
     if (gallery) GalleryPanel(index.allImages, onOpen = { viewerPost = null; viewer = it }, save = { urls ->

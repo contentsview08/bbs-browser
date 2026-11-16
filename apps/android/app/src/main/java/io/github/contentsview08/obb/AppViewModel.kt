@@ -607,12 +607,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // 利用者の操作が送信待ちを積んだら、選んだ間隔を待たずに早めに送る。知らせは書いた列から来るので、時計は画面のスレッドで触る
         db.userOps.onOps = { viewModelScope.launch { syncScheduler.changed() } }
+        // 期限の切れた一時 NG は自動で片づける(PC 版と同じ。どの端末でも同じ結果になるので同期には送らない)
+        prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
     }
 
     /** 画面に触れた。伸ばしていた確認の間隔を、選んだ間隔に戻す(前面で使っている間は選んだ間隔で確かめる) */
     fun syncActivity() = syncScheduler.activity()
 
     fun syncForeground() {
+        // 日をまたいで戻ってきたときのために、ここでも期限の切れた NG を片づける
+        prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
         viewModelScope.launch {
             // 同期サーバーで使っていた端末は、自動の同期より先に同期をやめた状態へ戻す
             runCatching { withContext(Dispatchers.IO) { syncCtl.startup() } }

@@ -125,6 +125,8 @@ private enum class ListTab(val key: String, val label: String, val icon: ImageVe
     MOMENTUM("momentum", "勢い順", Icons.Filled.LocalFireDepartment),
     NEWEST("newest", "新しい順", Icons.Filled.Schedule),
     COUNT("count", "レス数順", Icons.Filled.FormatListNumbered),
+    /** キーワード(スレタイ・立てた人)に当たるスレだけ。帯でまとめるのを切っていても、ここでは帯でまとめる */
+    KEYWORD("keyword", "キーワード", Icons.Filled.Sell),
 }
 
 /** 設定の「板を開いたときの並び」に当たるタブ(タブを選んでいないときは、これを選んでいる。PC 版の defaultSort と同じ) */
@@ -176,21 +178,26 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
     val keywordAuthors = vm.prefs.keywordAuthors.lines().map { it.trim() }.filter { it.isNotEmpty() }
     val hasKeywords = keywords.isNotEmpty() || keywordAuthors.isNotEmpty()
+    val keywordBands = vm.prefs.keywordBands
     val unreadFirst = vm.prefs.unreadFirst
     // 既読が進むたびに並べ直さないよう、中身で絞るタブのときだけ既読の変化をきっかけにする
     val statesKey = if (tab == ListTab.UNREAD || tab == ListTab.VISITED) page.states else null
     // 畳んでいるキーワードの帯(帯を押すと畳む・開く)
     val collapsedBands = remember(vm.prefs.keywordBandsCollapsed) { vm.prefs.keywordBandsCollapsed.split('\n').filter { it.isNotBlank() }.toSet() }
     /** 画面の行: キーワードのまとまりの帯と、見せるスレ。畳んだまとまりは帯だけ */
-    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands) {
+    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
         val terms = io.github.contentsview08.obb.data.searchTerms(query)
         if (terms.isNotEmpty()) list = list.filter { io.github.contentsview08.obb.data.matchesTerms("${it.title} ${it.authorId ?: ""}", terms) }
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
+        // キーワードのタブ: キーワード(スレタイ・立てた人)に当たるスレだけ(並びはそのまま)
+        val onlyKeyword = (tab ?: defaultTab(sort)) == ListTab.KEYWORD
+        if (onlyKeyword) list = keywordGroups(list, keywords, keywordAuthors).filter { it.first != null }.flatMap { it.second }
         // タブを選んでいないときは、設定の並びのタブを選んでいる(押せば逆順にもなる)
         list = when (tab ?: defaultTab(sort)) {
+            ListTab.KEYWORD -> list
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states[it.key]) > 0 }
             ListTab.VISITED -> list.filter { page.states[it.key] != null }
             // スレ順は いつもの並び ⇄ 逆順(page.reversed)
@@ -205,7 +212,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
-        if (!hasKeywords) return@remember (list.filterNot { it.announcement } + list.filter { it.announcement }).map<ThreadSummary, ListRow> { ListRow.Thread(it) }
+        // 帯でまとめるのは、設定で入れているとき(キーワードのタブの中はいつも)
+        if (!hasKeywords || !(keywordBands || onlyKeyword)) return@remember (list.filterNot { it.announcement } + list.filter { it.announcement }).map<ThreadSummary, ListRow> { ListRow.Thread(it) }
         // キーワードのまとまりの頭に帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)。
         // キーワードに当たるスレが 1 つもなければ帯は出さない
         val groups = keywordGroups(list, keywords, keywordAuthors).filter { it.second.isNotEmpty() }
@@ -214,7 +222,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             for ((k, ts) in groups) {
                 val collapsed = k != null && k in collapsedBands
                 // 見ていないスレは数えない(unreadOf は読んだ記録のないスレで 0)
-                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null, unread = ts.sumOf { unreadOf(it, page.states[it.key]) }), keyword = k, collapsed = collapsed))
+                // 「その他のスレ」には新着の札を出さない(キーワードの帯だけ)
+                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null, unread = if (k != null) ts.sumOf { unreadOf(it, page.states[it.key]) } else 0), keyword = k, collapsed = collapsed))
                 if (!collapsed) for (t in ts) add(ListRow.Thread(t))
             }
         }

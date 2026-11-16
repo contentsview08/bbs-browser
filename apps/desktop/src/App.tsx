@@ -62,7 +62,7 @@ import { openLogStore } from './host/logStore'
 import { canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
 import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
-import { favoriteChange, isFavoriteIn } from './utils/favoriteBoards'
+import { favoriteChange, favoriteKey, isFavoriteIn } from './utils/favoriteBoards'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import { newRule, postMatcher, pruneExpired, threadMatcher, todayDateString, type NgRule, type NgTarget } from './utils/ng'
@@ -862,7 +862,7 @@ export default function App() {
   /** 書き込み履歴の行から: スレを開いてから、番号が分かっていればそのレスへ飛ぶ(開いたときの位置合わせのあとに) */
   const openPostEntry = (e: PostHistoryEntry) =>
     void openThread(e.thread).then(() => {
-      if (e.no !== undefined) setJump({ tabId: threadId(e.thread), no: e.no, seq: Date.now() })
+      if (e.no !== undefined) setJump({ tabId: tabIdOf(e.thread), no: e.no, seq: Date.now() })
     })
   const deletePostEntry = async (id: number) => {
     if (!store) return
@@ -1243,7 +1243,7 @@ export default function App() {
   /** スレを(タブがなければ開いて)そのレスへ飛ぶ */
   const openPost = async (t: ThreadSummary, no: number) => {
     await openThread(t)
-    setJump({ tabId: threadId(t), no, seq: Date.now() })
+    setJump({ tabId: tabIdOf(t), no, seq: Date.now() })
   }
 
   /** タブにログを読み込み(手元のものをすぐ出す)、差分を取りに行く */
@@ -1283,22 +1283,29 @@ export default function App() {
     if (store && tab && !tab.log) void run('posts', () => loadTab(store, tab.thread))
   }
 
+  /** そのスレを開いているタブ。板の URL の書き方(5ch.net と 5ch.io、http と https、末尾の / など)が違っても同じスレとみなす */
+  const findTab = (t: ThreadSummary) => tabsRef.current.find((x) => x.id === threadId(t)) ?? tabsRef.current.find((x) => x.thread.key === t.key && favoriteKey(x.thread.boardUrl) === favoriteKey(t.boardUrl))
+  /** 開いたあとに飛ぶ先のタブの id(書き方の違う URL から開いたときは、もとからあるタブ) */
+  const tabIdOf = (t: ThreadSummary) => findTab(t)?.id ?? threadId(t)
   /** スレを開く。record が false(戻る・進む)なら履歴に積まない */
   const openThread = (t: ThreadSummary, opts: { newTab?: boolean; record?: boolean } = {}) =>
     run('posts', async () => {
       if (!store) return
       const id = threadId(t)
-      const existing = tabsRef.current.find((x) => x.id === id)
+      // 同じスレを別の書き方の URL(5ch.net と 5ch.io、http と https など)で開いたときも、開いているタブを使う(同じスレのタブを 2 つ作らない)
+      const existing = findTab(t)
       if (existing) {
         // もう開いているスレは、そのタブに移って差分を取りに行く(スレ一覧で新着があるのを見て押したとき)
-        selectTab(id, opts.record ?? true)
+        selectTab(existing.id, opts.record ?? true)
         // 実況モード中のタブは、実況モードの間隔で取りに行くので、ここでは取りに行かない
         if (existing.log && !inLive(existing)) await fetchThread(store, existing.thread)
         return
       }
       // スマホはタブを使わない(閲覧履歴が代わり)。いつも今のスレを置き換える
-      const inNew = settings.tabsEnabled && !isMobile && (opts.newTab ?? settings.openInNewTab)
       const current = view.current.activeId
+      const currentTab = tabsRef.current.find((x) => x.id === current)
+      // 固定したタブからは、いつも新しいタブで開く(固定したスレを置き換えてしまわないように)
+      const inNew = settings.tabsEnabled && !isMobile && (!!currentTab?.pinned || (opts.newTab ?? settings.openInNewTab))
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
         if (i < 0) return [...ts, newTab(t)]
@@ -1974,7 +1981,7 @@ export default function App() {
   /** URL にレス番号があれば、開いたスレのそのレスへ飛んで光らせる */
   const jumpToUrlPost = (url: string, t: ThreadSummary) => {
     const no = postNoInUrl(url)
-    if (no !== undefined) setJump({ tabId: threadId(t), no, seq: Date.now(), flash: true })
+    if (no !== undefined) setJump({ tabId: tabIdOf(t), no, seq: Date.now(), flash: true })
   }
 
   /**
@@ -2788,11 +2795,10 @@ export default function App() {
     const link = n.link
     if (!link?.thread?.connectorId || !link.thread.boardUrl || !link.thread.key) return notify({ icon: 'error', title: 'この通知には開く先がありません' })
     const thread = reviveThread(link.thread)
-    const id = threadId(thread)
     const no = link.no
     openThread(thread)
       .then(() => {
-        if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
+        if (no !== undefined) setJump({ tabId: tabIdOf(thread), no, seq: Date.now() })
       })
       .catch(backgroundError('通知のスレを開く'))
   }

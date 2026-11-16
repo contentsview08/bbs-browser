@@ -87,7 +87,28 @@ fn apply_saved(window: &WebviewWindow) {
     }
 }
 
-/// 今の状態を current へ写す。最小化中は位置が画面の外の値になるので写さない。最大化中は元の大きさを残す
+/// 最大化したまま覚えるものがないとき(初めての起動ですぐ最大化した)に使う、元に戻したときの大きさ(tauri.conf.json の既定と同じ)
+const DEFAULT_WIDTH: u32 = 1280;
+const DEFAULT_HEIGHT: u32 = 800;
+
+/// 最大化中の窓の、元に戻したときの大きさの代わり: 既定の大きさを、今の画面の真ん中に置いたもの
+fn default_rect(window: &WebviewWindow) -> Saved {
+    let (x, y) = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|m| {
+            let p = m.position();
+            let z = m.size();
+            (p.x + (z.width as i32 - DEFAULT_WIDTH as i32).max(0) / 2, p.y + (z.height as i32 - DEFAULT_HEIGHT as i32).max(0) / 2)
+        })
+        .unwrap_or((0, 0));
+    Saved { x, y, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT, maximized: true }
+}
+
+/// 今の状態を current へ写す。最小化中は位置が画面の外の値になるので写さない。最大化中は元の大きさを残す。
+/// 最大化中でまだ元の大きさを知らないとき(初めての起動ですぐ最大化した・覚え書きがなかった)は、既定の大きさを添えて
+/// 「最大化していた」ことだけは覚える(前はここで何も書かず、最大化したまま閉じると次の起動で戻らなかった)
 fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Saved> {
     if window.is_minimized().unwrap_or(false) {
         return None;
@@ -95,7 +116,7 @@ fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Sav
     let mut slot = current.lock().ok()?;
     let maximized = window.is_maximized().unwrap_or(false);
     let next = if maximized {
-        let mut s = (*slot)?;
+        let mut s = (*slot).unwrap_or_else(|| default_rect(window));
         s.maximized = true;
         s
     } else {

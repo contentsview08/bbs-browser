@@ -274,6 +274,50 @@ export const removeOwnPostStatement = (thread: ThreadSummary, no: number): SqlSt
 
 export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
 
+/**
+ * ほかのアプリ(ChMate)から持ってきたスレのログを 1 つ、まとめて入れる文(1 つのトランザクションで流す)。
+ * 1 文ずつ呼ぶと画面と Rust の往復がレスの数だけ増えて遅いので、スレの行・レス・既読・見た時刻・自分の印を 1 束にする。
+ * replace が false なら(手元の方が進んでいる)レスは触らず、既読・見た時刻・印だけ書く。既読は戻さない(markReadStatement と同じ)
+ */
+export function importLogStatements(
+  thread: ThreadSummary,
+  posts: Post[],
+  opts: { title: string; readNo: number; viewedAt: number; ownNos: number[]; replace: boolean },
+  now = Date.now(),
+): SqlStatement[] {
+  const where = [thread.boardUrl, thread.key]
+  const out: SqlStatement[] = [
+    {
+      sql: `INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      params: [...where, thread.connectorId, opts.title || thread.title, nn(thread.createdAt?.getTime())],
+    },
+  ]
+  if (opts.replace && posts.length > 0) {
+    out.push({ sql: 'DELETE FROM posts WHERE board_url = $1 AND key = $2', params: where })
+    for (let i = 0; i < posts.length; i += CHUNK) {
+      const chunk = posts.slice(i, i + CHUNK)
+      out.push({
+        sql: `INSERT OR REPLACE INTO posts (board_url, key, no, ref, name, mail, date, id, body, badges) VALUES ${valuesClause(chunk.length, 10)}`,
+        params: chunk.flatMap((p) => [...where, p.no, nn(p.ref), p.name, p.mail, p.date, nn(p.id), p.body, p.badges?.length ? JSON.stringify(p.badges) : null]),
+      })
+    }
+    // cursor は NULL(次の取得は全件。ChMate の続きの印は OBB では読めない)
+    out.push({
+      sql: `UPDATE threads SET cursor = NULL, title = CASE WHEN $1 != '' THEN $1 ELSE title END,
+         post_count = (SELECT COUNT(*) FROM posts WHERE board_url = $2 AND key = $3), status = 'active', fetched_at = $4
+       WHERE board_url = $2 AND key = $3`,
+      params: [opts.title, ...where, now],
+    })
+  } else if (opts.title) {
+    out.push({ sql: `UPDATE threads SET title = CASE WHEN title = '' THEN $1 ELSE title END WHERE board_url = $2 AND key = $3`, params: [opts.title, ...where] })
+  }
+  if (opts.readNo > 0) out.push(markReadStatement(thread, opts.readNo, opts.viewedAt))
+  // 見た時刻は、もう後の時刻が入っていれば動かさない
+  out.push({ sql: 'UPDATE threads SET read_at = MAX(COALESCE(read_at, 0), $1) WHERE board_url = $2 AND key = $3', params: [opts.viewedAt, ...where] })
+  for (const no of opts.ownNos) out.push(addOwnPostStatement(thread, no, opts.viewedAt))
+  return out
+}
+
 /** 同じ板の URL の書き方。行は書いた端末の URL のまま残るので、板の未読はどの書き方の行も読む */
 export function boardUrlVariants(url: string): string[] {
   const m = /^https?:\/\/(.*)$/.exec(url)
@@ -592,6 +636,12 @@ export class LogStore {
     for (const r of targets)
       await this.deleteThread({ connectorId: r.connector_id, boardUrl: r.board_url, key: r.key, title: '', postCount: 0, order: 0 })
     return targets.length
+  }
+
+  /** ほかのアプリから持ってきたスレのログを、何スレかまとめて 1 つのトランザクションで入れる(importLogStatements) */
+  async importLogs(items: { thread: ThreadSummary; posts: Post[]; title: string; readNo: number; viewedAt: number; ownNos: number[]; replace: boolean }[], now = Date.now()): Promise<void> {
+    const statements = items.flatMap((x) => importLogStatements(x.thread, x.posts, x, now))
+    if (statements.length > 0) await this.db.batch(statements)
   }
 
   async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {

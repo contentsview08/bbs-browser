@@ -875,7 +875,7 @@ export default function App() {
   }
   /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
   const postedIn = (url: string) => {
-    const e = postHistory?.find((p) => p.body.includes(url))
+    const e = postHistory?.find((p) => typeof p.body === 'string' && p.body.includes(url))
     return e ? { title: e.thread.title, no: e.no, open: () => openPostEntry(e) } : undefined
   }
 
@@ -2401,8 +2401,11 @@ export default function App() {
    * 板・スレの URL はコネクタで確かめ、この端末で扱えないもの(家の中のアドレスなど)は入れない。足した数の言い方を返す
    */
   /**
-   * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・キーワードを足す。
-   * ログは、手元にそのスレのログがないか ChMate の方が長いときだけ入れ替える(手元の方が進んでいれば触らない)
+   * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りの板とスレ・NG・書き込みの履歴・キーワードを足す。
+   * ログは、手元にそのスレのログがないか ChMate の方が長いときだけ入れ替える(手元の方が進んでいれば触らない)。
+   * 通信はしない(板の確かめも、スレの取り直しもしない)。何百スレもあるので、DB には何スレかずつ 1 つのトランザクションでまとめて書く
+   * (1 文ずつだと画面と Rust の往復がレスの数だけ増えて、何分もかかる)。
+   * 既読・見た時刻・自分の印は手元にだけ書く(同期の操作には積まない。ほかの端末でも同じ ZIP を取り込めばそろう)
    */
   const importChmate = async (path?: string): Promise<string | undefined> => {
     if (!store) return undefined
@@ -2415,10 +2418,24 @@ export default function App() {
       const c = allConnectors().find((x) => x.canHandle(boardUrl))
       return c && { connectorId: c.id, boardUrl, key, title, postCount: 0, order: 0, createdAt: createdAtOfKey(key) }
     }
-    const haveFav = new Set((await store.listFavoriteThreads()).map((f) => threadId(f.thread)))
+    // 手元にあるログのレス数(板ごとに 1 回で読む。スレごとに読むと遅い)
+    const stateCache = new Map<string, Map<string, { postCount: number }>>()
+    const localCount = async (s: ThreadSummary) => {
+      let m = stateCache.get(s.boardUrl)
+      if (!m) stateCache.set(s.boardUrl, (m = await store.getThreadStates(s.boardUrl)))
+      return m.get(s.key)?.postCount
+    }
     let threads = 0
-    let favorites = 0
     let skippedBoards = 0
+    const untitled: ThreadSummary[] = []
+    const favoritesToAdd: { s: ThreadSummary; at: number }[] = []
+    let batch: Parameters<typeof store.importLogs>[0] = []
+    let batchPosts = 0
+    const flush = async () => {
+      if (batch.length > 0) await store.importLogs(batch)
+      batch = []
+      batchPosts = 0
+    }
     for (const t of parsed.threads) {
       const s = summaryOf(t.boardUrl, t.key, t.title)
       if (!s) {
@@ -2426,20 +2443,35 @@ export default function App() {
         continue
       }
       if (t.posts.length > 0) {
-        const existing = await store.loadThread(s)
-        if (!existing || existing.posts.length < t.posts.length) {
-          await store.saveFetch({ ...s, postCount: t.posts.length }, { status: 'reset', posts: t.posts, cursor: null, title: t.title || undefined }, t.viewedAt)
-          threads++
-        }
-        if (t.readNo > 0) await ops.markRead(s, t.readNo, t.viewedAt)
-        await ops.threadView(s, t.viewedAt)
-        for (const no of t.ownNos) await ops.ownAdd(s, no, t.viewedAt)
+        const have = await localCount(s)
+        const replace = have === undefined || have < t.posts.length
+        if (replace) threads++
+        batch.push({ thread: s, posts: t.posts, title: t.title, readNo: t.readNo, viewedAt: t.viewedAt, ownNos: t.ownNos, replace })
+        batchPosts += replace ? t.posts.length : 0
+        // 1 回のトランザクションは数千レスまで(大きすぎると 1 回の往復が重い)
+        if (batchPosts >= 3000 || batch.length >= 20) await flush()
+        if (!t.title) untitled.push(s)
       }
-      if (t.favorite && !haveFav.has(threadId(s))) {
-        await ops.favoriteThreadAdd(s, t.viewedAt)
-        haveFav.add(threadId(s))
-        favorites++
-      }
+      if (t.favorite) favoritesToAdd.push({ s, at: t.viewedAt })
+    }
+    await flush()
+    // お気に入りのスレ・板は同期の操作にも積むので UserOps で(数十件)
+    const haveFav = new Set((await store.listFavoriteThreads()).map((f) => threadId(f.thread)))
+    let favorites = 0
+    for (const { s, at } of favoritesToAdd) {
+      if (haveFav.has(threadId(s))) continue
+      await ops.favoriteThreadAdd(s, at)
+      haveFav.add(threadId(s))
+      favorites++
+    }
+    const haveBoards = new Set((await store.listFavorites()).map((b) => favoriteKey(b.url)))
+    let favoriteBoards = 0
+    for (const b of parsed.favoriteBoards) {
+      const c = allConnectors().find((x) => x.canHandle(b.url))
+      if (!c || haveBoards.has(favoriteKey(b.url))) continue
+      await ops.favoriteBoardAdd({ connectorId: c.id, url: b.url, name: b.name })
+      haveBoards.add(favoriteKey(b.url))
+      favoriteBoards++
     }
     // 書き込みの履歴は、同じスレ・同じ時刻のものがあれば重ねない(2 回読み込んでも増えない)
     const havePosts = new Set((await store.listPostHistory(100000)).map((e) => `${threadId(e.thread)}\t${e.postedAt}`))
@@ -2459,15 +2491,12 @@ export default function App() {
     const keywords = [...new Set([...cur.keywords, ...parsed.keywords])]
     const keywordsAdded = keywords.length - cur.keywords.length
     if (keywordsAdded > 0) updateSetting('keywords', keywords)
-    // お気に入りの板は、設定のファイルのお気に入り板と同じ道(板を確かめてから足す)
-    const boardsText = parsed.favoriteBoards.length > 0 ? await importBackupExtras({ favoriteBoards: parsed.favoriteBoards }) : ''
-    await Promise.all([reloadFavThreads(store), reloadRecent(store)])
+    await Promise.all([reloadFavorites(store), reloadFavThreads(store), reloadRecent(store)])
     if (history) setHistory(await loadHistory(store))
     // スレタイの分からないスレ(ChMate の dat の 1 行目にない)は、あとから間をあけて 1 つずつ取りに行って埋める(掲示板に負担をかけない)
-    const untitled = parsed.threads.filter((t) => !t.title && t.posts.length > 0).map((t) => summaryOf(t.boardUrl, t.key, '')).filter((s): s is ThreadSummary => !!s)
     if (untitled.length > 0) void fillTitlesSlowly(store, untitled)
-    const text = describeChmate({ threads, favorites, posts, ngAdded: merged.added, keywords: keywordsAdded, skippedBoards })
-    return [text ? `取り込みました(${text}${boardsText ? `・${boardsText}` : ''})` : '取り込むものがありませんでした', ...(untitled.length > 0 ? [`スレタイの分からないスレ ${untitled.length} 件は、裏で少しずつ取りに行って埋めます`] : []), ...parsed.notes].join('\n')
+    const text = describeChmate({ threads, favoriteBoards, favorites, posts, ngAdded: merged.added, keywords: keywordsAdded, skippedBoards })
+    return [text ? `取り込みました(${text})` : '取り込むものがありませんでした', ...(untitled.length > 0 ? [`スレタイの分からないスレ ${untitled.length} 件は、裏で少しずつ取りに行って埋めます`] : []), ...parsed.notes].join('\n')
   }
 
   /** スレタイのないスレを、2 秒おきに 1 つずつ取りに行って埋める(取り込みのあと。失敗したものは飛ばす) */

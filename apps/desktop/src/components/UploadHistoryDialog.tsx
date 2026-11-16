@@ -84,7 +84,7 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
             {u.name}
           </p>
           <p className="text-[10px] text-c-text-muted">
-            {new Date(u.uploadedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })} ・ {formatSize(u.size)}
+            {Number.isFinite(u.uploadedAt) ? new Date(u.uploadedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' }) : '(日時不明)'} ・ {formatSize(u.size)}
           </p>
           {posted ? (
             <button type="button" onClick={posted.open} className="mt-1 w-full text-left text-[11px] text-c-accent truncate hover:underline" title="貼ったレスへ">

@@ -457,7 +457,12 @@ function PostArticle(props: Props) {
   const ngNameActions: MenuItem[] = ngHits?.posterName.length
     ? ngOffItems(ngHits.posterName, '名前', post.name)
     : post.name
-      ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }]
+      ? [
+          // 名前はそのままの文字で足すことがまずないので(ワッチョイの一部など)、NG の画面を開いて直してから足す(スマホ版と同じ)。画面を開けないときはその場で
+          handlers.onNgDraft
+            ? { label: 'この名前を NG に…', icon: 'block', onClick: () => handlers.onNgDraft!('posterName', post.name, { content: post.body, posterName: post.name, posterId: post.id }) }
+            : { label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) },
+        ]
       : []
   const ngActions: MenuItem[] = [
     ...ngIdActions,
@@ -489,7 +494,7 @@ function PostArticle(props: Props) {
     // 本文の NG は、言葉の一部で当たっていることが多いので、いつも NG の画面で直す
     ...(ngHits ? ngOffItems(ngHits.content, '本文') : []),
     ...(handlers.onNgDraft
-      ? [{ label: '本文の言葉を NG に(直して足す)', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
+      ? [{ label: '本文の言葉を NG に…', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
       : []),
   ]
   const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng']

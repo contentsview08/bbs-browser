@@ -295,12 +295,13 @@ private fun PastRow(
         Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread.copy(alpha = 0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f)) else Color.Transparent))
         // 選んでいる間は、行を押すと選ぶ(チェックは飾りで、押した指は行が受ける)
         if (checked != null) androidx.compose.material3.Checkbox(checked, null, Modifier.align(Alignment.CenterVertically).padding(start = 10.dp), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
-        Column(Modifier.weight(1f).padding(start = 13.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)) {
+        // 字を小さくしたら余白も一緒に狭く(スレ一覧の行と同じ)
+        Column(Modifier.weight(1f).padding(start = (13 * k).dp, end = (12 * k).dp, top = (10 * k).dp, bottom = (10 * k).dp)) {
             Text(
                 t.title.ifEmpty { t.key }, color = if (unread > 0) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
-            if (own != null) Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.Top) {
+            if (own != null) Row(Modifier.padding(top = (5 * k).dp), verticalAlignment = Alignment.Top) {
                 if (ownNo != null) Badge(">>$ownNo", Palette.ownWash, Palette.own)
                 Spacer(Modifier.width(6.dp))
                 Text(own, color = Palette.textBody, fontSize = (13 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)

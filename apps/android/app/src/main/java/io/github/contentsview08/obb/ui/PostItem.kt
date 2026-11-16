@@ -109,7 +109,9 @@ fun PostItem(
     // 倍率は設定の基準の大きさに掛ける(基準を変えても見た目と設定の数字がずれないように)
     val bodySize = (io.github.contentsview08.obb.data.POST_BODY_BASE_PX * prefs.bodyScale).sp
     val headSize = (io.github.contentsview08.obb.data.POST_HEAD_BASE_PX * prefs.postHeadScale).sp
-    val pad = prefs.postPad.dp
+    // 本文の字を小さくしたら余白も一緒に狭く(字に対して余白だけ大きく見えないように)。大きくしたときは広げすぎない
+    val s = prefs.bodyScale.coerceIn(0.6f, 1.2f)
+    val pad = (prefs.postPad * s).dp
     val shownBody = if (imagesExpanded) r.bodyExpanded ?: r.body else r.body
     val body = @Composable { mod: Modifier ->
         if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
@@ -171,7 +173,7 @@ fun PostItem(
     when (style) {
         "discord" -> {
             // 左に丸い ID のアイコン、右に頭と本文。続けて書いたレス(同じ ID)はアイコンと頭を省く。返信先は頭の上に 1 行
-            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
+            Column(Modifier.fillMaxWidth().padding(start = (12 * s).dp, end = (12 * s).dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
                     Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }
@@ -193,7 +195,7 @@ fun PostItem(
             val bubbleBody = if (!own) shownBody else (if (imagesExpanded) r.bodyOwnExpandedLazy?.value else null) ?: r.bodyOwnLazy?.value ?: shownBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             // 上下の余白(設定)は、吹き出しと吹き出しの間の余白にする
-            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = lineBubbleGap(prefs.postPad).dp), verticalAlignment = Alignment.Top) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = (10 * s).dp, vertical = (lineBubbleGap(prefs.postPad) * s).dp), verticalAlignment = Alignment.Top) {
                 // 自分のレスは右に寄せる。ツリーの中は線でつなぐので左にそろえ、色だけ自分の色にする(PC 版と同じ)
                 val right = own && !LocalInTree.current
                 if (!right) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
@@ -221,7 +223,7 @@ fun PostItem(
                             side(); Spacer(Modifier.width(6.dp))
                         }
                         Column(
-                            Modifier.weight(1f, fill = false).widthIn(max = 320.dp).onSizeChanged { bubbleWidth = it.width }.background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                            Modifier.weight(1f, fill = false).widthIn(max = 320.dp).onSizeChanged { bubbleWidth = it.width }.background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = (12 * s).dp, vertical = (8 * s).dp),
                         ) {
                             if (reply != null) ReplyLine(reply, indent = 0.dp, onOwn = own) { onReply(reply.no) }
                             if (aa) AaBody(r, if (own) textColor else null) else Text(bubbleBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
@@ -249,7 +251,7 @@ fun PostItem(
         "classic" -> {
             // 専ブラ風: 余白を詰め、頭の行を小さく。1 画面にたくさん並ぶ
             Column(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = (10 * s).dp, vertical = pad / 2 + 1.dp)) {
                     // track と onTextLayout は、ID・名前の長押しのメニューに要る
                     if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
@@ -262,7 +264,7 @@ fun PostItem(
         "matome" -> {
             // まとめ風: 返信の多いレス(人気)は字を大きく濃く、ほかは小さめに。読み飛ばしながら見どころが拾える
             Column(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (heat != null) pad + 2.dp else pad / 2 + 2.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = (14 * s).dp, vertical = if (heat != null) pad + 2.dp else pad / 2 + 2.dp)) {
                     header()
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r)
@@ -275,7 +277,7 @@ fun PostItem(
         }
         else -> {
             Column(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = pad)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = (14 * s).dp, vertical = pad)) {
                     header()
                     BeIcon(r.beIcon)
                     body(Modifier.padding(top = 4.dp))

@@ -430,6 +430,15 @@ class Prefs(context: Context) {
     }
     @Synchronized
     fun removeNg(rule: NgRule) = saveNg(ngRules.filter { it.id != rule.id })
+    /** まとめて消す(1 回で保存する) */
+    @Synchronized
+    fun removeNgAll(ids: Set<String>) = saveNg(ngRules.filter { it.id !in ids })
+    /** 同じ id のものを差し替える(まとめて有効・無効)。1 回で保存する */
+    @Synchronized
+    fun updateNgAll(rules: List<NgRule>) {
+        val by = rules.associateBy { it.id }
+        saveNg(ngRules.map { by[it.id] ?: it })
+    }
     /** 期限切れの片づけ。手元からだけ消す */
     @Synchronized
     fun dropExpiredNg(today: String) = saveNg(ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today })

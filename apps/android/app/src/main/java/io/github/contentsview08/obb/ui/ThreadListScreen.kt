@@ -221,6 +221,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     /** 見せているスレ(帯を除く) */
     val shown = remember(rows) { rows.mapNotNull { (it as? ListRow.Thread)?.t } }
     val toggleBand = { k: String -> vm.prefs.keywordBandsCollapsed = (if (k in collapsedBands) collapsedBands - k else collapsedBands + k).joinToString("\n") }
+    // 帯を長押しすると、そのキーワードを直す・外す(PC の右クリックと同じ)
+    var editingKeyword by remember { mutableStateOf<String?>(null) }
+    editingKeyword?.let { KeywordEditDialog(vm, it) { editingKeyword = null } }
 
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
@@ -364,7 +367,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 ) {
                     items(rows, key = { r -> if (r is ListRow.Band) "band:${r.band.label}" else (r as ListRow.Thread).t.key }, contentType = { if (it is ListRow.Band) 1 else 0 }) { r ->
                         if (r is ListRow.Band) {
-                            KeywordBand(r.band, collapsed = if (r.keyword != null) r.collapsed else null, onClick = r.keyword?.let { k -> { toggleBand(k) } })
+                            KeywordBand(
+                                r.band, collapsed = if (r.keyword != null) r.collapsed else null, onClick = r.keyword?.let { k -> { toggleBand(k) } },
+                                onLongClick = r.keyword?.let { k -> { Haptics.longPress(hapticView); editingKeyword = k } },
+                            )
                             return@items
                         }
                         val t = (r as ListRow.Thread).t
@@ -538,7 +544,8 @@ private fun ThreadRow(
     val longClick = { onLongClick(anchor.screenRect(view)) }
     val unread = unreadOf(t, state)
     val prefs = LocalPrefs.current
-    val pad = prefs.listPad.dp
+    // 字を小さくしたら余白も一緒に狭く(字に対して余白だけ大きく見えず、見える本数が増える)。大きくしたときも同じ割合で広げる
+    val pad = (prefs.listPad * k).dp
     val visited = state != null
     val archived = state?.archived == true
     val compact = prefs.listShape == "compact"
@@ -557,7 +564,7 @@ private fun ThreadRow(
         )
         if (compact) {
             Row(
-                Modifier.fillMaxWidth().combinedClickable(onLongClick = longClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad / 2 + 2.dp, bottom = pad / 2 + 2.dp),
+                Modifier.fillMaxWidth().combinedClickable(onLongClick = longClick, onClick = onClick).padding(start = (14 * k).dp, end = (12 * k).dp, top = pad / 2 + (2 * k).dp, bottom = pad / 2 + (2 * k).dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -576,7 +583,7 @@ private fun ThreadRow(
         val thumb = rememberListThumb(t.thumb, thumbAllowed)
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = longClick, onClick = onClick)
-                .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
+                .padding(start = (14 * k).dp, end = (12 * k).dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
         ) {
         if (thumb != null) {
             StoredImage(thumb, Modifier.fillMaxHeight().heightIn(min = 64.dp).aspectRatio(1f, matchHeightConstraintsFirst = true).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
@@ -590,7 +597,7 @@ private fun ThreadRow(
                 // 開いたスレは新着があっても既読の色にする。新着は右の数の札で分かる
                 color = titleColor, fontWeight = FontWeight.Normal,
             )
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = (4 * k).dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1)
                 if (t.authorId != null) {
@@ -691,7 +698,58 @@ fun ClearTextButton(onClear: () -> Unit) {
 }
 
 /** 立てた人のキーワードの帯・通知に出す名前(PC の utils/watch.ts の authorKeywordLabel と同じ) */
-internal fun authorKeywordLabel(authorId: String) = "立てた人 $authorId"
+private const val AUTHOR_LABEL_PREFIX = "立てた人 "
+internal fun authorKeywordLabel(authorId: String) = "$AUTHOR_LABEL_PREFIX$authorId"
+
+/**
+ * 帯のキーワードを直す・外す窓(帯の長押し。PC の帯の右クリックと同じ言葉)。
+ * label はスレタイのキーワードか、立てた人の帯の名前(authorKeywordLabel)。立てた人は keywordAuthors の元の行を直す
+ */
+@Composable
+private fun KeywordEditDialog(vm: AppViewModel, label: String, onDismiss: () -> Unit) {
+    val p = vm.prefs
+    val titles = p.keywords.lines().filter { it.isNotBlank() }
+    val authors = p.keywordAuthors.lines().filter { it.isNotBlank() }
+    // スレタイのキーワードを先に探す(同じ文字が両方にあることはまずない)
+    val titleHit = titles.firstOrNull { it.trim() == label.trim() }
+    val authorHit = if (titleHit == null && label.startsWith(AUTHOR_LABEL_PREFIX)) authors.firstOrNull { legacyAuthorId(it.trim()) == label.removePrefix(AUTHOR_LABEL_PREFIX) } else null
+    val byAuthor = titleHit == null && authorHit != null
+    val original = titleHit ?: authorHit ?: label
+    var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(original, androidx.compose.ui.text.TextRange(0, original.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val w = field.text.trim()
+    val others = (if (byAuthor) authors else titles).filter { it != original }.map { if (byAuthor) legacyAuthorId(it.trim()) else it.trim() }
+    val dup = (if (byAuthor) legacyAuthorId(w) else w) in others
+    val ok = w.isNotEmpty() && w != original && !dup
+    fun replace(next: String?) {
+        if (byAuthor) p.keywordAuthors = authors.flatMap { if (it == original) listOfNotNull(next) else listOf(it) }.joinToString("\n")
+        else p.keywords = titles.flatMap { if (it == original) listOfNotNull(next) else listOf(it) }.joinToString("\n")
+        onDismiss()
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (byAuthor) "立てた人のキーワードを直す" else "キーワードを直す") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    field, { field = it }, singleLine = true,
+                    label = { Text(if (byAuthor) "立てた人の ID" else "キーワード") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (ok) replace(w) }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+                if (dup) Text("同じキーワードがもうあります", color = Palette.textMuted, fontSize = 12.sp)
+                androidx.compose.material3.TextButton(onClick = { onDismiss(); vm.openSettings("list") }) { Text("キーワードの設定を開く") }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { replace(null); vm.toast = "キーワードから外しました" }) { Text("外す", color = Palette.heatVeryHot) }
+            androidx.compose.material3.TextButton(onClick = { if (ok) replace(w) }, enabled = ok) { Text("保存") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("やめる") } },
+    )
+}
 
 /** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
 class ListBand(val label: String, val count: Int, val accent: Boolean)
@@ -733,10 +791,11 @@ internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>, au
 
 /** まとまりの帯。collapsed が null でなければ押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */
 @Composable
-private fun KeywordBand(b: ListBand, collapsed: Boolean? = null, onClick: (() -> Unit)? = null) {
+private fun KeywordBand(b: ListBand, collapsed: Boolean? = null, onClick: (() -> Unit)? = null, onLongClick: (() -> Unit)? = null) {
     val color = if (b.accent) Palette.accent else Palette.textMuted
     Row(
-        Modifier.fillMaxWidth().background(if (b.accent) Palette.accentWash else Palette.surface2).let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().background(if (b.accent) Palette.accentWash else Palette.surface2)
+            .let { if (onClick != null) it.combinedClickable(onLongClick = onLongClick, onClick = onClick) else it }.padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(if (b.accent) Icons.Filled.Sell else Icons.AutoMirrored.Filled.List, null, Modifier.size(16.dp), tint = color)

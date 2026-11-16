@@ -67,7 +67,8 @@ fun DrawerContent(vm: AppViewModel) {
         // 履歴の一覧だけは決まった高さの枠の中でスクロールし、見出し・「すべて見る」・「URL を開く」はいつも見えるようにする。
         // 枠の高さは、ほかの行を並べた残り(お気に入り板を広げていても押し出さない)。それでも入らないほど板が多いときは全体がスクロールする
         BoxWithConstraints(Modifier.weight(1f)) {
-        FitColumn(maxHeight, minFlex = 120.dp, Modifier.verticalScroll(rememberScrollState())) {
+        // 履歴の小項目は、お気に入り板が多くても最低 6 行(1 行 36dp)は見えるようにする
+        FitColumn(maxHeight, minFlex = 220.dp, Modifier.verticalScroll(rememberScrollState())) {
             DrawerRow(Icons.Filled.Star, "お気に入り板", Palette.markFav, trailing = if (favOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore) { favOpen = !favOpen }
             if (favOpen) {
                 // 長押しして掴むと、上下に動かして並べ替えられる

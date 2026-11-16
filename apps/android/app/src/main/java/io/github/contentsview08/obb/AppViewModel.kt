@@ -1434,6 +1434,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reapplyNg()
     }
 
+    /** NG をまとめて消す(選んだもの・すべて)。同期にも消したことを送る */
+    fun removeNgAll(rules: List<NgRule>) {
+        if (rules.isEmpty()) return
+        prefs.removeNgAll(rules.mapTo(HashSet()) { it.id })
+        changeNg(ngDiff(rules, emptyList(), io.github.contentsview08.obb.data.today()))
+        reapplyNg()
+        toast = "NG を ${rules.size} 件消しました"
+    }
+
+    /** NG をまとめて有効・無効にする */
+    fun setNgEnabledAll(rules: List<NgRule>, on: Boolean) {
+        val changed = rules.filter { it.enabled != on }.map { it.copy(enabled = on) }
+        if (changed.isEmpty()) return
+        prefs.updateNgAll(changed)
+        changeNg(io.github.contentsview08.obb.data.NgDiff(upsert = changed))
+        reapplyNg()
+    }
+
     /** NG を直す(同じ id を差し替える) */
     fun saveNg(rule: NgRule) {
         if (prefs.addNg(rule)) changeNg(io.github.contentsview08.obb.data.NgDiff(upsert = listOf(rule)))

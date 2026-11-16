@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -711,6 +712,13 @@ private fun NgPage(vm: AppViewModel) {
     var query by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<NgRule?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // 長押しで選んで、まとめて有効・無効・削除(PC の管理表と同じ)。消えた NG は選択に数えない
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    val selected = remember(picked, p.ngRules) { val ids = p.ngRules.mapTo(HashSet()) { it.id }; picked.filterTo(HashSet()) { it in ids } }
+    val selecting = selected.isNotEmpty()
+    fun toggle(id: String) { picked = if (id in selected) selected - id else selected + id }
+    var confirmDelete by remember { mutableStateOf<List<NgRule>?>(null) }
+    androidx.activity.compose.BackHandler(enabled = selecting) { picked = emptySet() }
     val today = io.github.contentsview08.obb.data.today()
     Group("見せ方") {
         ChoiceRow("NG のレス", p.ngMode, listOf("aborn" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngMode = it }
@@ -719,7 +727,7 @@ private fun NgPage(vm: AppViewModel) {
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
         AiNgSettings(vm)
     }
-    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
+    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます。一覧の行を長押しすると選べて、まとめて有効・無効・削除ができます") {
         // 種類の切り替え(件数付き)
         Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((k, label) in listOf("all" to "すべて") + io.github.contentsview08.obb.data.NG_TARGETS) {
@@ -749,8 +757,26 @@ private fun NgPage(vm: AppViewModel) {
             if (query.isNotEmpty()) ClearTextButton { query = "" }
         }
         val q = query.trim()
-        val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true)) }
+        val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true) || (it.boardName ?: "").contains(q, true)) }
             .asReversed().sortedByDescending { it.createdAt }
+        // 選んでいる間の帯: 件数・見えているものを全部選ぶ・有効・無効・削除・選択を外す
+        if (selecting) {
+            val pickedRules = p.ngRules.filter { it.id in selected }
+            val allShown = shown.isNotEmpty() && shown.all { it.id in selected }
+            Row(Modifier.fillMaxWidth().background(Palette.accentWash).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${selected.size} 件を選択中", Modifier.weight(1f), color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { picked = emptySet() }) { Icon(Icons.Filled.Close, "選択を外す", tint = Palette.textBody) }
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).background(Palette.accentWash).padding(horizontal = 8.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { picked = if (allShown) emptySet() else shown.mapTo(HashSet()) { it.id } }) { Text(if (allShown) "すべて外す" else "見えているものを全部選ぶ", color = Palette.textBody) }
+                TextButton(onClick = { vm.setNgEnabledAll(pickedRules, true) }) { Text("有効にする", color = Palette.textBody) }
+                TextButton(onClick = { vm.setNgEnabledAll(pickedRules, false) }) { Text("無効にする", color = Palette.textBody) }
+                TextButton(onClick = { confirmDelete = pickedRules }) {
+                    Icon(Icons.Filled.Delete, null, tint = Palette.heatVeryHot, modifier = Modifier.size(18.dp))
+                    Text("削除", color = Palette.heatVeryHot, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         if (shown.isEmpty()) Text(if (p.ngRules.isEmpty()) "NG はまだありません" else "当てはまる NG はありません", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 14.sp)
         for (r in shown) {
             val expired = r.expiresOnDate != null && r.expiresOnDate < today
@@ -760,9 +786,14 @@ private fun NgPage(vm: AppViewModel) {
             )
             HorizontalDivider(color = Palette.border)
             Row(
-                Modifier.fillMaxWidth().clickable { editing = r }.graphicsLayer { alpha = if (r.active(today)) 1f else 0.6f }.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth()
+                    .background(if (r.id in selected) Palette.accentWash else Color.Transparent)
+                    // 長押しで選ぶ。選んでいる間は押しても選ぶ(編集は選ぶのをやめてから)
+                    .combinedClickable(onLongClick = { toggle(r.id) }) { if (selecting) toggle(r.id) else editing = r }
+                    .graphicsLayer { alpha = if (r.active(today)) 1f else 0.6f }.padding(start = if (selecting) 4.dp else 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (selecting) androidx.compose.material3.Checkbox(r.id in selected, null, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -783,6 +814,17 @@ private fun NgPage(vm: AppViewModel) {
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
         val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
         if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }
+        if (p.ngRules.isNotEmpty()) ActionRow("NG をすべて削除…", Icons.Filled.Delete, danger = true) { confirmDelete = p.ngRules }
+        Text("全部で ${p.ngRules.size} 件(効いているもの ${p.ngRules.count { it.active(today) }} 件)", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
+    }
+    confirmDelete?.let { rules ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(if (rules.size == p.ngRules.size) "NG をすべて削除" else "NG を ${rules.size} 件削除") },
+            text = { Text(if (rules.size == p.ngRules.size) "NG を ${rules.size} 件すべて消します。元には戻せません。同期している端末からも消えます。" else "選んだ NG を ${rules.size} 件消します。元には戻せません。同期している端末からも消えます。") },
+            confirmButton = { TextButton(onClick = { vm.removeNgAll(rules); picked = emptySet(); confirmDelete = null }) { Text("削除", color = Palette.heatVeryHot) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("やめる") } },
+        )
     }
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {
@@ -1189,27 +1231,24 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
 
 @Composable
 private fun BackupPage(vm: AppViewModel) {
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
+    // 設定だけの JSON のバックアップは画面から外した(まるごとバックアップと取り違えるため)。読む側は配色のファイルのために残す(PC 版の設定・NG のファイルも読める)
     val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
     val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
     val loadChmate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importChmate(uri) }
     val saveFull = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> if (uri != null) vm.exportFullBackup(uri) }
     val loadFull = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importFullBackup(uri) }
     var confirmFullRestore by remember { mutableStateOf(false) }
-    Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴を 1 つのファイルに書き出します。スレのログは入りません。戻すと設定は置き換え、お気に入りなどは今あるものに足します。PC 版で書き出した設定・NG のファイルも読めます") {
-        ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
-        ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
+    Group("まるごとバックアップ", note = "ログ・既読・お気に入り・書き込み履歴・自分のレスの印・アカウント・設定・NG・書き込みの認証の状態(Cookie)を 1 つの ZIP に書き出します。アカウントのパスワードや認証の状態も入るので、ファイルの置き場所に気をつけてください。戻すときはアプリを一度閉じ、開き直すとその状態になります。いまの DB は消さずに別の名前で残します") {
+        ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
+        ActionRow("まるごと戻す…") { confirmFullRestore = true }
     }
     Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
         ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
+        // 前の版で書き出した設定・NG の JSON も、ここから読める(読む側は残してある)
     }
     var confirmReset by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    Group("まるごとバックアップ", note = "ログ・既読・お気に入り・書き込み履歴・自分のレスの印・アカウント・設定・NG を 1 つの ZIP に書き出します(上の JSON のバックアップに入らないログや既読も入ります)。アカウントのパスワードも入るので、ファイルの置き場所に気をつけてください。戻すときはアプリを一度閉じ、開き直すとその状態になります。いまの DB は消さずに別の名前で残します") {
-        ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
-        ActionRow("まるごと戻す…") { confirmFullRestore = true }
-    }
     if (confirmFullRestore) AlertDialog(
         onDismissRequest = { confirmFullRestore = false },
         title = { Text("まるごと戻す") },
@@ -1228,7 +1267,7 @@ private fun BackupPage(vm: AppViewModel) {
             }
         }
     }
-    Group("はじめの状態に戻す", note = "ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態に戻します(アプリは閉じます)。戻す前に「バックアップを書き出す」で控えを取れます") {
+    Group("はじめの状態に戻す", note = "ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態に戻します(アプリは閉じます)。戻す前に「まるごと書き出す」で控えを取れます") {
         ActionRow("はじめの状態に戻す…") { confirmReset = true }
     }
     if (confirmReset) AlertDialog(
@@ -1507,10 +1546,11 @@ private fun TextRow(label: String, value: String, placeholder: String, secret: B
 }
 
 @Composable
-private fun ActionRow(label: String, icon: ImageVector? = null, onClick: () -> Unit) {
+private fun ActionRow(label: String, icon: ImageVector? = null, /** 消すなど取り返しのつかない操作は赤で */ danger: Boolean = false, onClick: () -> Unit) {
+    val color = if (danger) Palette.heatVeryHot else Palette.accent
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (icon != null) { Icon(icon, null, tint = Palette.accent, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp)) }
-        Text(label, color = Palette.accent, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        if (icon != null) { Icon(icon, null, tint = color, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp)) }
+        Text(label, color = color, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -10,11 +10,11 @@ class SettingsIndexTest {
     @Test fun まとまりの見出しと数の項目も索引に入る() {
         assertTrue(has("write", "定型文"))
         assertTrue(has("list", "残す日数"))
-        assertTrue(has("backup", "バックアップ"))
+        assertTrue(has("backup", "まるごとバックアップ"))
     }
 
     @Test fun まとまりの説明も索引に入る() {
-        assertTrue(SETTINGS_INDEX.any { it.first == "backup" && it.third.contains("1 つのファイルに書き出します") })
+        assertTrue(SETTINGS_INDEX.any { it.first == "backup" && it.third.contains("1 つの ZIP に書き出します") })
     }
 
     @Test fun 廃止した下のタブは探しても出ない() {

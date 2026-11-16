@@ -39,6 +39,7 @@ class ChmateImportTest {
             ChmateBookmark("livejupiter", 1618048117, "橋下", """{"o":69,"n":"26","r":2,"p":1.0}""", 1785551620400, 1),
             ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000000, "ログのないお気に入り", """{"r":10}""", 5, 3),
             ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000001, "見ただけ(★なし)", """{"r":10}""", 5, 0),
+            ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000004, "★ 4", """{"r":1}""", 5, 4),
         ),
         boards = mapOf("livejupiter" to "eagle.5ch.net", "news4vip" to "mi.5ch.net", "poverty" to "greta.5ch.net"),
         skipped = emptyList(),
@@ -94,6 +95,8 @@ class ChmateImportTest {
         assertTrue(r.notes.any { it.contains("mystery") })
         // ★ のない行はログがなければ入れない
         assertFalse(r.threads.any { it.key == "1700000001" })
+        // ★ は 1〜5 の数。4 でもお気に入り
+        assertTrue(r.threads.first { it.key == "1700000004" }.favorite)
     }
 
     @Test

@@ -15,16 +15,16 @@ import java.util.zip.ZipInputStream
  * - `dat/<板>_<キー>.dat`: スレのログ(Shift_JIS の dat。板は `host%2Fboard` か、5ch の板ならディレクトリ名だけ)
  * - `dat/<板>_<キー>.idx`: 1 行目 `最終更新(ms)\tETag`、2 行目 自分の書き込みのレス番号 `no:1,no:1,…`
  * - `archive/<板>/<スレタイ>/…`: 保存したスレ(dat と同じ形)
- * - `databases/roidon.sqlite`: `bookmarks`(見たスレ。flag の 1 のビットが ★ = お気に入り。read_state の JSON の r が既読の番号)、
- *   `boards`(ディレクトリ名 → サーバー。flag の 1 のビットがお気に入りの板)
+ * - `databases/roidon.sqlite`: `bookmarks`(見たスレ。flag は ★ の数で 1 以上がお気に入り。read_state の JSON の r が既読の番号)、
+ *   `boards`(ディレクトリ名 → サーバー。flag は ★ の数で 1 以上がお気に入りの板)
  * - `ng/_id.json` `_word.json` `_name.json` `_title.json` `_be.json`: NG(`w` 言葉、`f` 旗(32 なら正規表現)、`ct` 作った時刻、`b` 板)
  * - `files/postDataList.json`: 書き込みの履歴、`files/keyword_group_list.json`: スレタイのキーワード
  * 取り込まないもの: アプリの設定(prefs。見た目の好みは別のアプリなので)、BE の NG(OBB に BE の NG はない)
  */
 class ChmateDat(val name: String, val text: String, val idx: String?)
-/** bookmarks 表の 1 行(見たスレ)。flag の 1 のビットが ★(お気に入り) */
+/** bookmarks 表の 1 行(見たスレ)。flag は ★ の数(1〜5)。0 なら履歴の行 */
 class ChmateBookmark(val name: String, val created: Long, val title: String, val readState: String, val access: Long, val flag: Long = 0)
-/** boards 表の 1 行。flag の 1 のビットがお気に入りの板 */
+/** boards 表の 1 行。flag は ★ の数。0 ならお気に入りでない */
 class ChmateBoardRow(val name: String, val server: String, val title: String, val flag: Long)
 class ChmateRaw(
     val texts: Map<String, String>,
@@ -60,9 +60,8 @@ object Chmate {
     /** ChMate の NG のファイル名 → OBB の NG の種類(BE は OBB にない) */
     private val NG_FILES = listOf("ng/_id.json" to "posterId", "ng/_word.json" to "content", "ng/_name.json" to "posterName", "ng/_title.json" to "threadTitle", "ng/_be.json" to null)
     private const val NG_FLAG_REGEX = 32
-    /** bookmarks・boards の flag: 1 のビットが ★(お気に入り) */
-    private const val FLAG_FAVORITE = 1L
-    private fun isFavorite(flag: Long?) = ((flag ?: 0L) and FLAG_FAVORITE) != 0L
+    /** bookmarks・boards の flag は ★ の数(1〜5)。1 以上ならお気に入り(前は 1 のビットで見ていて、★ 2 と 4 を落としていた) */
+    private fun isFavorite(flag: Long?) = (flag ?: 0L) > 0L
     private val DAT_NAME = Regex("^(.+)_(\\d+)\\.(?:dat|idx)$")
     private val THREAD_URL = Regex("^https?://([^/]+)/test/read\\.cgi/([^/]+)/(\\d+)")
     private val CONFIRMED_NO = Regex("/(\\d+)/?$")

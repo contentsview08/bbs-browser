@@ -1211,23 +1211,23 @@ export default function ThreadListPanel(props: Props) {
               {renderLimit < (pageItems ?? ordered).length && <div aria-hidden style={{ height: ((pageItems ?? ordered).length - renderLimit) * CARD_ESTIMATE, flexShrink: 0 }} />}
             </div>
           )}
-          {/* ページの切り替え(件数が多いとき) */}
-          {paged && (
-            <div className="flex items-center justify-center gap-2 py-3 text-sm text-c-text-body">
-              <button type="button" disabled={pageSafe === 0} onClick={() => goPage(pageSafe - 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="前のページ">
-                <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
-              </button>
-              <span className="tabular-nums">
-                {pageSafe + 1} / {pageCount}
-                <span className="ml-2 text-xs text-c-text-muted">{ordered.length} スレ</span>
-              </span>
-              <button type="button" disabled={pageSafe >= pageCount - 1} onClick={() => goPage(pageSafe + 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="次のページ">
-                <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
+      {/* ページの切り替え(件数が多いとき)。一覧の外の下に固定して、一番下までスクロールしなくても、1 ページに満たなくても見える */}
+      {paged && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 border-t border-c-border text-sm text-c-text-body bg-panel-view">
+          <button type="button" disabled={pageSafe === 0} onClick={() => goPage(pageSafe - 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="前のページ">
+            <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
+          </button>
+          <span className="tabular-nums">
+            {pageSafe + 1} / {pageCount}
+            <span className="ml-2 text-xs text-c-text-muted">{ordered.length} スレ</span>
+          </span>
+          <button type="button" disabled={pageSafe >= pageCount - 1} onClick={() => goPage(pageSafe + 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="次のページ">
+            <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
+          </button>
+        </div>
+      )}
       {peek && <PeekPopup thread={peek} onOpen={() => onOpenCard(peek)} onClose={() => setPeek(undefined)} />}
       {note && (
         <div className="absolute left-1/2 bottom-4 -translate-x-1/2 z-30 max-w-[90%] px-3 py-2 text-xs rounded-lg bg-c-surface border border-c-border shadow-lg text-c-text-body rise-in">

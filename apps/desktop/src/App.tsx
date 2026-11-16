@@ -762,8 +762,8 @@ export default function App() {
           for (const h of entries) {
             const s = got.get(`${h.thread.boardUrl}|${h.thread.key}`)
             if (s) counts.set(threadId(h.thread), s.postCount)
-            // 返らなかった = 消えた・見えない。開いて確かめる(dat 落ちの印が付く)
-            else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
+            // 返らなかった = 消えた・見えない。dat を 1 つずつ取りに行って確かめず、dat 落ちの印だけ付ける(履歴が多いと要求が何百にもなる)
+            else if (h.status !== 'archived') await store.saveFetch(h.thread, { status: 'archived', posts: [], cursor: null }).catch(() => undefined)
           }
           publishCounts()
           await reloadShownHistory()
@@ -785,7 +785,8 @@ export default function App() {
         for (const h of entries) {
           const live = subject.get(h.thread.key)
           if (live) counts.set(threadId(h.thread), live.postCount)
-          else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
+          // 板のスレ一覧にない = dat 落ち。開いて確かめずに印だけ付ける(開けば取り直して、間違いなら直る)
+          else if (h.status !== 'archived') await store.saveFetch(h.thread, { status: 'archived', posts: [], cursor: null }).catch(() => undefined)
         }
         publishCounts()
         await reloadShownHistory()

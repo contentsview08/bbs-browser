@@ -34,11 +34,17 @@ class ChmateImportTest {
             ChmateDat("mystery_1.dat", dat, null),
         ),
         bookmarks = listOf(
-            ChmateBookmark("livejupiter", 1618048117, "橋下", """{"o":69,"n":"26","r":2,"p":1.0}""", 1785551620400),
-            ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000000, "ログのないお気に入り", """{"r":10}""", 5),
+            ChmateBookmark("livejupiter", 1618048117, "橋下", """{"o":69,"n":"26","r":2,"p":1.0}""", 1785551620400, 1),
+            ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000000, "ログのないお気に入り", """{"r":10}""", 5, 3),
+            ChmateBookmark("bbs.eddibb.cc%2Fliveedge", 1700000001, "見ただけ(★なし)", """{"r":10}""", 5, 0),
         ),
         boards = mapOf("livejupiter" to "eagle.5ch.net", "news4vip" to "mi.5ch.net", "poverty" to "greta.5ch.net"),
         skipped = emptyList(),
+        favoriteBoards = listOf(
+            ChmateBoardRow("livejupiter", "eagle.5ch.net", "なんでも実況(ジュピター)", 1),
+            ChmateBoardRow("news4vip", "mi.5ch.net", "ニュー速VIP", 5),
+            ChmateBoardRow("bbs.eddibb.cc%2Fliveedge", "bbs.eddibb.cc", "エッヂ", 1),
+        ),
     )
 
     private fun parse(now: Long = 1000) = Chmate.parse(raw(), now) { parseDat(it, 1) }
@@ -84,6 +90,16 @@ class ChmateImportTest {
         assertEquals("ログのないお気に入り", noLog.title)
         assertFalse(r.threads.any { it.key == "1" })
         assertTrue(r.notes.any { it.contains("mystery") })
+        // ★ のない行はログがなければ入れない
+        assertFalse(r.threads.any { it.key == "1700000001" })
+    }
+
+    @Test
+    fun favoriteBoards() {
+        assertEquals(
+            listOf("https://eagle.5ch.net/livejupiter/" to "なんでも実況(ジュピター)", "https://mi.5ch.net/news4vip/" to "ニュー速VIP", "https://bbs.eddibb.cc/liveedge/" to "エッヂ"),
+            parse().favoriteBoards.map { it.url to it.name },
+        )
     }
 
     @Test

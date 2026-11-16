@@ -1201,9 +1201,27 @@ private fun BackupPage(vm: AppViewModel) {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
         ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
+    var confirmReset by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     Group("ほかのアプリから取り込む", note = "ChMate の「バックアップ」で書き出した ZIP から、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・スレタイのキーワードを取り込みます。今あるものに足し、同じものは重ねません。見た目などの設定は取り込みません。板のサーバーが分からないスレや、OBB が対応していない掲示板のスレは読みません") {
         ActionRow("ChMate のバックアップ(ZIP)を読み込む") { loadChmate.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) }
     }
+    Group("はじめの状態に戻す", note = "ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態に戻します(アプリは閉じます)。戻す前に「バックアップを書き出す」で控えを取れます") {
+        ActionRow("はじめの状態に戻す…") { confirmReset = true }
+    }
+    if (confirmReset) AlertDialog(
+        onDismissRequest = { confirmReset = false },
+        title = { Text("はじめの状態に戻す") },
+        text = { Text("ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウントをすべて消します。元には戻せません。") },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmReset = false
+                // Android にアプリのデータをまるごと消してもらう(アプリは終わる)
+                (context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).clearApplicationUserData()
+            }) { Text("消して戻す", color = Palette.heatVeryHot) }
+        },
+        dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("やめる") } },
+    )
 }
 
 @Composable

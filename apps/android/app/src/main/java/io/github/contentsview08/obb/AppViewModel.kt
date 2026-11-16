@@ -1015,6 +1015,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 var threads = 0
                 var favCount = 0
                 var skippedBoards = 0
+                // お気に入りの板(★)。板の URL が分かるものだけ(5ch 互換・したらば・まちBBS・hono-bbs)
+                var favBoards = 0
+                val haveBoards = db.favorites().mapTo(HashSet()) { it.url }
+                for (b in parsed.favoriteBoards) {
+                    val route = UrlRoute.parse(b.url) as? UrlRoute.BoardPage ?: continue
+                    if (!haveBoards.add(route.boardUrl)) continue
+                    db.userOps.setFavorite(io.github.contentsview08.obb.bbs.Board(route.boardUrl, b.name), true, now)
+                    favBoards++
+                }
+                val untitled = ArrayList<ThreadSummary>()
                 for (t in parsed.threads) {
                     val s = summaryOf(t.boardUrl, t.key, t.title) ?: run { skippedBoards++; continue }
                     if (t.posts.isNotEmpty()) {
@@ -1026,6 +1036,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         if (t.readNo > 0) db.userOps.markRead(s, t.readNo, t.viewedAt)
                         db.userOps.threadView(s, t.viewedAt)
                         if (t.ownNos.isNotEmpty()) db.userOps.setOwnPosts(s, t.ownNos, true, t.viewedAt)
+                        if (t.title.isEmpty() && UrlRoute.parse(t.boardUrl).let { it is UrlRoute.BoardPage && it.site == UrlRoute.Site.TWOCH }) untitled += s
                     }
                     if (t.favorite && !db.isFavoriteThread(s)) {
                         db.userOps.setFavoriteThread(s, t.title, true, t.viewedAt)
@@ -1056,8 +1067,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (keywordsAdded > 0) prefs.keywords = kw.joinToString("\n")
                 favorites = db.favorites()
                 reloadSide()
-                val text = io.github.contentsview08.obb.data.Chmate.describe(threads, favCount, posts, ngAdded, keywordsAdded, skippedBoards)
-                toast = (if (text.isNotEmpty()) "取り込みました($text)" else "取り込むものがありませんでした") + parsed.notes.joinToString("") { "\n$it" }
+                val text = io.github.contentsview08.obb.data.Chmate.describe(threads, favCount, posts, ngAdded, keywordsAdded, skippedBoards, favBoards)
+                val titleNote = if (untitled.isNotEmpty()) "\nスレタイの分からないスレ ${untitled.size} 件は、裏で少しずつ取りに行って埋めます" else ""
+                toast = (if (text.isNotEmpty()) "取り込みました($text)" else "取り込むものがありませんでした") + titleNote + parsed.notes.joinToString("") { "\n$it" }
+                // スレタイの分からないスレ(ChMate の dat の 1 行目にない)は、2 秒おきに 1 つずつ取りに行って埋める(掲示板に負担をかけない)
+                if (untitled.isNotEmpty()) launch(Dispatchers.IO) {
+                    for (s in untitled) {
+                        runCatching {
+                            val r = TwoCh.fetchPosts(s, null)
+                            if (!r.title.isNullOrEmpty()) db.saveFetch(s, r, r.title)
+                        }
+                        kotlinx.coroutines.delay(2000)
+                    }
+                    withContext(Dispatchers.Main) { reloadSide() }
+                }
             } catch (e: Exception) {
                 toast = "取り込めませんでした: ${e.message ?: e}"
             }

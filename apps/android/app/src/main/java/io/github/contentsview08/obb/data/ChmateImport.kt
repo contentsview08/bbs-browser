@@ -15,13 +15,17 @@ import java.util.zip.ZipInputStream
  * - `dat/<板>_<キー>.dat`: スレのログ(Shift_JIS の dat。板は `host%2Fboard` か、5ch の板ならディレクトリ名だけ)
  * - `dat/<板>_<キー>.idx`: 1 行目 `最終更新(ms)\tETag`、2 行目 自分の書き込みのレス番号 `no:1,no:1,…`
  * - `archive/<板>/<スレタイ>/…`: 保存したスレ(dat と同じ形)
- * - `databases/roidon.sqlite`: `bookmarks`(お気に入りのスレ。read_state の JSON の r が既読の番号)、`boards`(ディレクトリ名 → サーバー)
+ * - `databases/roidon.sqlite`: `bookmarks`(見たスレ。flag の 1 のビットが ★ = お気に入り。read_state の JSON の r が既読の番号)、
+ *   `boards`(ディレクトリ名 → サーバー。flag の 1 のビットがお気に入りの板)
  * - `ng/_id.json` `_word.json` `_name.json` `_title.json` `_be.json`: NG(`w` 言葉、`f` 旗(32 なら正規表現)、`ct` 作った時刻、`b` 板)
  * - `files/postDataList.json`: 書き込みの履歴、`files/keyword_group_list.json`: スレタイのキーワード
  * 取り込まないもの: アプリの設定(prefs。見た目の好みは別のアプリなので)、BE の NG(OBB に BE の NG はない)
  */
 class ChmateDat(val name: String, val text: String, val idx: String?)
-class ChmateBookmark(val name: String, val created: Long, val title: String, val readState: String, val access: Long)
+/** bookmarks 表の 1 行(見たスレ)。flag の 1 のビットが ★(お気に入り) */
+class ChmateBookmark(val name: String, val created: Long, val title: String, val readState: String, val access: Long, val flag: Long = 0)
+/** boards 表の 1 行。flag の 1 のビットがお気に入りの板 */
+class ChmateBoardRow(val name: String, val server: String, val title: String, val flag: Long)
 class ChmateRaw(
     val texts: Map<String, String>,
     val dats: List<ChmateDat>,
@@ -29,6 +33,8 @@ class ChmateRaw(
     /** boards 表: ディレクトリ名 → サーバー(5ch の板) */
     val boards: Map<String, String>,
     val skipped: List<String>,
+    /** boards 表のうち、お気に入りの板(flag の 1 のビット) */
+    val favoriteBoards: List<ChmateBoardRow> = emptyList(),
 )
 
 class ChmateThread(
@@ -45,7 +51,7 @@ class ChmateThread(
     val viewedAt: Long,
 )
 class ChmatePost(val boardUrl: String, val key: String, val title: String, val no: Int?, val name: String, val mail: String, val body: String, val at: Long)
-class ChmateImport(val threads: List<ChmateThread>, val ngRules: List<NgRule>, val posts: List<ChmatePost>, val keywords: List<String>, val notes: List<String>)
+class ChmateImport(val threads: List<ChmateThread>, val favoriteBoards: List<io.github.contentsview08.obb.bbs.Board>, val ngRules: List<NgRule>, val posts: List<ChmatePost>, val keywords: List<String>, val notes: List<String>)
 
 object Chmate {
     /** ZIP 全体・1 つのファイル・dat の数の上限(PC 版と同じ) */
@@ -54,6 +60,9 @@ object Chmate {
     /** ChMate の NG のファイル名 → OBB の NG の種類(BE は OBB にない) */
     private val NG_FILES = listOf("ng/_id.json" to "posterId", "ng/_word.json" to "content", "ng/_name.json" to "posterName", "ng/_title.json" to "threadTitle", "ng/_be.json" to null)
     private const val NG_FLAG_REGEX = 32
+    /** bookmarks・boards の flag: 1 のビットが ★(お気に入り) */
+    private const val FLAG_FAVORITE = 1L
+    private fun isFavorite(flag: Long?) = ((flag ?: 0L) and FLAG_FAVORITE) != 0L
     private val DAT_NAME = Regex("^(.+)_(\\d+)\\.(?:dat|idx)$")
     private val THREAD_URL = Regex("^https?://([^/]+)/test/read\\.cgi/([^/]+)/(\\d+)")
     private val CONFIRMED_NO = Regex("/(\\d+)/?$")
@@ -97,6 +106,11 @@ object Chmate {
         val unknownBoards = LinkedHashSet<String>()
         fun boardUrlOf(name: String): String? = boardUrl(name, raw.boards) ?: run { if (name.isNotEmpty()) unknownBoards += name; null }
         val favorites = raw.bookmarks.associateBy { "${it.name}_${it.created}" }
+        // お気に入りの板。5ch の板は boards 表の自分の行にサーバーがある
+        val favoriteBoards = raw.favoriteBoards.filter { isFavorite(it.flag) }.mapNotNull { b ->
+            val url = if (b.name.contains("%2F")) boardUrlOf(b.name) else if (b.server.isNotEmpty()) "https://${b.server}/${b.name}/" else null
+            url?.let { io.github.contentsview08.obb.bbs.Board(it, b.title.ifEmpty { b.name }) }
+        }
 
         val threads = ArrayList<ChmateThread>()
         val seen = HashSet<String>()
@@ -113,12 +127,13 @@ object Chmate {
                 if (r >= 0) readNo = minOf(r, posts.size)
             }
             threads += ChmateThread(
-                boardUrl, key, title ?: fav?.title ?: "", posts, readNo, ownNos.filter { it <= posts.size }, fav != null,
+                boardUrl, key, title ?: fav?.title ?: "", posts, readNo, ownNos.filter { it <= posts.size }, isFavorite(fav?.flag),
                 if (lastModified > 0) lastModified else if ((fav?.access ?: 0L) > 0) fav!!.access else now,
             )
         }
-        // dat のないお気に入り(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
+        // dat のない ★ のスレ(ログは消したがお気に入りには残っている)も、お気に入りとしては取り込む
         for (b in raw.bookmarks) {
+            if (!isFavorite(b.flag)) continue
             val boardUrl = boardUrlOf(b.name) ?: continue
             if (!seen.add("$boardUrl${b.created}")) continue
             threads += ChmateThread(boardUrl, b.created.toString(), b.title, emptyList(), 0, emptyList(), true, if (b.access > 0) b.access else now)
@@ -162,12 +177,13 @@ object Chmate {
         }
 
         if (unknownBoards.isNotEmpty()) notes += "板のサーバーが分からず読まなかった板: ${unknownBoards.take(5).joinToString("・")}${if (unknownBoards.size > 5) " ほか ${unknownBoards.size - 5}" else ""}"
-        return ChmateImport(threads, ngRules, posts, keywords, notes)
+        return ChmateImport(threads, favoriteBoards, ngRules, posts, keywords, notes)
     }
 
     /** 取り込んだ数の言い方(PC 版と同じ) */
-    fun describe(threads: Int, favorites: Int, posts: Int, ngAdded: Int, keywords: Int, skippedBoards: Int): String = listOfNotNull(
+    fun describe(threads: Int, favorites: Int, posts: Int, ngAdded: Int, keywords: Int, skippedBoards: Int, favoriteBoards: Int = 0): String = listOfNotNull(
         if (threads > 0) "スレのログ $threads" else null,
+        if (favoriteBoards > 0) "お気に入り板 $favoriteBoards" else null,
         if (favorites > 0) "お気に入りのスレ $favorites" else null,
         if (posts > 0) "書き込みの履歴 $posts" else null,
         if (ngAdded > 0) "NG $ngAdded" else null,
@@ -206,6 +222,7 @@ object Chmate {
         val datList = dats.keys.sorted().map { ChmateDat(it, dats.getValue(it), idxs[it.removeSuffix(".dat") + ".idx"]) }
         val bookmarks = ArrayList<ChmateBookmark>()
         val boards = HashMap<String, String>()
+        val favoriteBoards = ArrayList<ChmateBoardRow>()
         val db = sqlite
         if (db == null) skipped += "databases/roidon.sqlite がないので、お気に入りのスレは読めません"
         else if (!db.copyOfRange(0, minOf(16, db.size)).contentEquals("SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1))) skipped += "roidon.sqlite が SQLite のファイルではありません"
@@ -215,16 +232,17 @@ object Chmate {
                 tmp.writeBytes(db)
                 android.database.sqlite.SQLiteDatabase.openDatabase(tmp.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { sdb ->
                     runCatching {
-                        sdb.rawQuery("SELECT name, created, title, read_state, access FROM bookmarks", null).use { c ->
-                            while (c.moveToNext()) bookmarks += ChmateBookmark(c.getString(0) ?: "", c.getLong(1), c.getString(2) ?: "", c.getString(3) ?: "", c.getLong(4))
+                        sdb.rawQuery("SELECT name, created, title, read_state, access, flag FROM bookmarks", null).use { c ->
+                            while (c.moveToNext()) bookmarks += ChmateBookmark(c.getString(0) ?: "", c.getLong(1), c.getString(2) ?: "", c.getString(3) ?: "", c.getLong(4), c.getLong(5))
                         }
                     }.onFailure { skipped += "お気に入りのスレ(bookmarks)を読めません: ${it.message}" }
                     runCatching {
-                        sdb.rawQuery("SELECT name, server FROM boards", null).use { c ->
+                        sdb.rawQuery("SELECT name, server, title, flag FROM boards", null).use { c ->
                             while (c.moveToNext()) {
                                 val n = c.getString(0) ?: ""
                                 val s = c.getString(1) ?: ""
                                 if (n.isNotEmpty() && s.isNotEmpty() && !n.contains("%2F")) boards[n] = s
+                                if (isFavorite(c.getLong(3))) favoriteBoards += ChmateBoardRow(n, s, c.getString(2) ?: "", c.getLong(3))
                             }
                         }
                     }.onFailure { skipped += "板一覧(boards)を読めません: ${it.message}" }
@@ -235,7 +253,7 @@ object Chmate {
                 tmp.delete()
             }
         }
-        return ChmateRaw(texts, datList, bookmarks, boards, skipped)
+        return ChmateRaw(texts, datList, bookmarks, boards, skipped, favoriteBoards)
     }
 
     /** 上限までを読む。超えていたら null */

@@ -2,7 +2,7 @@
 // ここではアンカー(>>1)と URL だけを見つけて部品に分ける(HTML としては扱わない)。
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { shortWatchoi } from './watchoi'
+import { shortWatchoi, watchoiOf } from './watchoi'
 import { normalizeUrl, trimUrlEnd, URL_PATTERN } from './urlFind'
 import { buildPostTree, type PostTree } from './postTree'
 import { allConnectors, type Post } from '@bbs-browser/connectors'
@@ -178,6 +178,34 @@ export function countAnchors(posts: Post[], resolve: AnchorResolver = sameNo, qu
   for (const p of posts) {
     for (const n of new Set(targetsOfPost(p, resolve, quotes))) {
       if (n !== p.no) counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
+/**
+ * 人気の判定(色・絞り込み・ミニマップ)に使う被アンカー数。見せる数は countAnchors のまま。
+ * - 同じ人(ID。なければワッチョイ)から何度アンカーを付けられても 1 と数える
+ * - アンカー先を書いた本人(同じ ID・ワッチョイ)からのアンカーは数えない(自分のレスに自分で返しているだけ)
+ * - ID もワッチョイもないレスは、別の人として 1 つずつ数える
+ */
+export function countHeat(posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): Map<number, number> {
+  const authorOf = (p: Post): string | undefined => p.id || watchoiOf(p.name)
+  const byNo = new Map(posts.map((p) => [p.no, p]))
+  const seen = new Map<number, Set<string>>()
+  const counts = new Map<number, number>()
+  for (const p of posts) {
+    const who = authorOf(p)
+    for (const n of new Set(targetsOfPost(p, resolve, quotes))) {
+      if (n === p.no) continue
+      const target = byNo.get(n)
+      if (who !== undefined && target && authorOf(target) === who) continue
+      const key = who ?? `#${p.no}`
+      let s = seen.get(n)
+      if (!s) seen.set(n, (s = new Set()))
+      if (s.has(key)) continue
+      s.add(key)
+      counts.set(n, (counts.get(n) ?? 0) + 1)
     }
   }
   return counts

@@ -545,7 +545,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ) } else PostItem(
                     it, style = style, id = p.id, iconCount = iconCounts[iconKey(p)] ?: 0, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
-                    heat = Palette.heat(index.replyCount[p.no] ?: 0),
+                    heat = Palette.heat(index.heatCount[p.no] ?: 0),
                     imagesExpanded = p.no in page.expandedImages,
                     onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewerPost = p; viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)

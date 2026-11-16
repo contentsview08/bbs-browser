@@ -57,6 +57,7 @@ import {
   anchorTargets,
   postTreeOf,
   countAnchors,
+  countHeat,
   makeAnchorResolver,
   quoteLinksOf,
   quotedText,
@@ -398,6 +399,8 @@ interface FrameShared {
   quotesOf: (no: number) => ArticleProps['quotes']
   grossNos?: Set<number>
   anchorCounts: Map<number, number>
+  /** 人気の判定に使う数(同じ人は 1、本人からは数えない。utils/postBody の countHeat) */
+  heatCounts: Map<number, number>
   idCounts: Map<string, number>
   iconCounts: Map<string, number>
   iconFromWatchoi: boolean
@@ -430,6 +433,7 @@ function postArticleProps(p: Post, s: FrameShared) {
     quotes: s.quotesOf(p.no),
     blurMedia: s.grossNos?.has(p.no),
     anchorCount: s.anchorCounts.get(p.no) ?? 0,
+    heatCount: s.heatCounts.get(p.no) ?? 0,
     idCount: p.id ? (s.idCounts.get(p.id) ?? 1) : 0,
     iconCount: s.iconCounts.get(iconKeyOf(p, s.iconFromWatchoi) ?? '') ?? 0,
     variant: s.variant,
@@ -973,6 +977,7 @@ export default function ThreadView(props: Props) {
   /** レスに渡す、そのレスの引用のつながり(文章で引用しない掲示板は undefined) */
   const quotesOf = useCallback((no: number) => (quoteLinks ? (quoteLinks.get(no) ?? NO_QUOTES) : undefined), [quoteLinks])
   const anchorCounts = useMemo(() => countAnchors(log.posts, resolveAnchor, quoteLinks), [log.posts, resolveAnchor, quoteLinks])
+  const heatCounts = useMemo(() => countHeat(log.posts, resolveAnchor, quoteLinks), [log.posts, resolveAnchor, quoteLinks])
   /**
    * 画像をぼかすレス(グロ注意)。目印の言葉(「グロ」など)を含むレスが返信した先と、その言葉を書いたレス自身。
    * 画像のないレスが入っていても、ぼかすものがないだけ
@@ -1027,13 +1032,13 @@ export default function ThreadView(props: Props) {
       key === 'own'
         ? ownNos.has(p.no)
         : key === 'popular'
-        ? (anchorCounts.get(p.no) ?? 0) >= 3
+        ? (heatCounts.get(p.no) ?? 0) >= 3
         : key === 'image'
           ? imageUrlsIn(p.body).length > 0
           : key === 'video'
             ? hasVideo(p.body)
             : hasLink(p.body),
-    [anchorCounts, ownNos],
+    [heatCounts, ownNos],
   )
   /** 絞り込みのボタンに出す、当てはまるレスの数(絞り込む前から分かるように) */
   const filterCounts = useMemo(() => {
@@ -2394,6 +2399,7 @@ export default function ThreadView(props: Props) {
       quotesOf,
       grossNos,
       anchorCounts,
+      heatCounts,
       idCounts,
       iconCounts,
       iconFromWatchoi: settings.iconFromWatchoi,
@@ -2416,7 +2422,7 @@ export default function ThreadView(props: Props) {
       replyToOwn,
       reactions: props.reactions,
     }),
-    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, heatCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
   const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**
@@ -2658,7 +2664,7 @@ export default function ThreadView(props: Props) {
           newFrom={tree ? freshFrom : undefined}
           scrollRef={ref}
           listRef={listRef}
-          anchorCounts={anchorCounts}
+          anchorCounts={heatCounts}
           ownNos={ownNos}
           replyToOwn={replyToOwn}
           isNg={isNg}

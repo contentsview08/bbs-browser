@@ -116,6 +116,8 @@ export interface PostHandlers extends BodyHandlers {
 interface Props {
   post: Post
   anchorCount: number
+  /** 人気の判定に使う被アンカー数(同じ人は 1、本人からは数えない)。見せる数は anchorCount */
+  heatCount: number
   idCount: number
   /** アイコンの右下の数字(設定でワッチョイを使うなら、ワッチョイごとの書き込み数) */
   iconCount?: number
@@ -290,7 +292,7 @@ const PostBodyText = memo(function PostBodyText(props: {
 })
 
 function PostArticle(props: Props) {
-  const { post, anchorCount, idCount, handlers } = props
+  const { post, anchorCount, heatCount, idCount, handlers } = props
   const [revealed, setRevealed] = useState(false)
   const articleRef = useRef<HTMLElement>(null)
   const [ngOpen, setNgOpen] = useState(false)
@@ -397,7 +399,7 @@ function PostArticle(props: Props) {
   // Discord・LINE 風は、返信元を頭の上に出しているので、本文の頭のアンカーは省く
   const body = props.replyPreview ? dropLeadingAnchor(shownBody) : shownBody
   const name = props.display ? displayName(post.name, props.display) : post.name
-  const numHeat = heatClass(anchorCount)
+  const numHeat = heatClass(heatCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
   const hasConnections = anchorCount > 0 || (props.quotes?.size ?? 0) > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
   // 空白が続く本文は AA とみなして AA 用の字で出す(⋯ から個別に切り替えられる)
@@ -405,9 +407,9 @@ function PostArticle(props: Props) {
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする。
   // 人気のレスを「本文の色」で示すときだけ、本文を暖色に(5 件から太字。スマホのアプリと同じ)
   const heatStyle = handlers.heatStyle ?? 'left'
-  const bodyClass = heatStyle === 'text' && anchorCount >= 3 ? numHeat : 'text-c-text-body'
+  const bodyClass = heatStyle === 'text' && heatCount >= 3 ? numHeat : 'text-c-text-body'
   // 人気のレスを帯で示すときの色(左・右の 3px の帯と、淡い地)
-  const heatBar = (heatStyle === 'left' || heatStyle === 'right') && anchorCount >= 3 ? heatVar(anchorCount) : null
+  const heatBar = (heatStyle === 'left' || heatStyle === 'right') && heatCount >= 3 ? heatVar(heatCount) : null
   // 自分の書き込みの帯は、人気の帯と反対の側に(人気が左の帯なら自分は右。スマホのアプリと同じ)
   const ownRight = heatStyle === 'left'
   // サムネイル(画像・動画のファイル・YouTube)は、本文に出てくる順に並べ、ビューアーでも同じ順に見る
@@ -953,7 +955,7 @@ function PostArticle(props: Props) {
             // スマホの AA は横にずらさず(スワイプとぶつかる)、字を小さくして 1 画面に収める(fitAA)
             className={`text-base ${bodyClass} ${isAA ? `aa-font whitespace-pre ${isMobile ? 'overflow-hidden' : 'overflow-x-auto'}` : 'whitespace-pre-wrap break-words leading-relaxed'}`}
             // まとめ風: 返信の多いレスは字を大きく濃く、ほかは小さめに(読み飛ばしながら見どころを拾える)
-            style={variant === 'matome' && !isAA ? (anchorCount >= 3 ? { fontSize: 'calc(var(--post-body-size, 1rem) * 1.2)', fontWeight: 500, color: 'var(--c-text-strong)' } : { fontSize: 'calc(var(--post-body-size, 1rem) * 0.88)', opacity: 0.85 }) : undefined}
+            style={variant === 'matome' && !isAA ? (heatCount >= 3 ? { fontSize: 'calc(var(--post-body-size, 1rem) * 1.2)', fontWeight: 500, color: 'var(--c-text-strong)' } : { fontSize: 'calc(var(--post-body-size, 1rem) * 0.88)', opacity: 0.85 }) : undefined}
           >
             <PostBodyText body={body} handlers={handlers} quotes={props.quotes} imagesExpanded={imagesExpanded} onExpandImages={expandImages} />
           </p>

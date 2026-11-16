@@ -45,8 +45,13 @@ fun displayBody(body: String): String = body.replace(BLANK_LINES, "\n\n").replac
 class PostIndex(
     val posts: List<Post>,
     val info: Map<Int, PostInfo>,
-    /** そのレスに付いたアンカーの数(返信の数) */
+    /** そのレスに付いたアンカーの数(返信の数。画面に出す数) */
     val replyCount: Map<Int, Int>,
+    /**
+     * 人気の判定(色・絞り込み・ミニマップ)に使う数(PC 版の countHeat と同じ):
+     * 同じ人(ID、なければワッチョイ)からは 1 と数え、アンカー先を書いた本人からのアンカーは数えない。ID もワッチョイもないレスは別の人として数える
+     */
+    val heatCount: Map<Int, Int>,
     /** そのレスに返信したレスの番号 */
     val replies: Map<Int, List<Int>>,
     val idCount: Map<String, Int>,
@@ -59,7 +64,7 @@ class PostIndex(
         val i = info[p.no] ?: return false
         return when (f) {
             Filter.OWN -> p.no in own
-            Filter.POPULAR -> (replyCount[p.no] ?: 0) >= 3
+            Filter.POPULAR -> (heatCount[p.no] ?: 0) >= 3
             Filter.IMAGE -> i.image
             Filter.VIDEO -> i.video
             Filter.LINK -> i.link
@@ -137,22 +142,32 @@ class PostIndex(
         fun build(posts: List<Post>, collapse: Boolean = true, grossWords: List<String> = listOf("グロ"), previous: PostIndex? = null): PostIndex {
             val info = HashMap<Int, PostInfo>(posts.size * 2)
             val replyCount = HashMap<Int, Int>()
+            val heatCount = HashMap<Int, Int>()
+            /** アンカー先 → もう数えた人(ID・ワッチョイ。どちらもなければ "#レス番号") */
+            val heatSeen = HashMap<Int, HashSet<String>>()
             val replies = HashMap<Int, MutableList<Int>>()
             val idCount = HashMap<String, Int>()
             val reuse = previous?.takeIf { it.collapse == collapse }
             val oldPosts = reuse?.posts?.associateBy { it.no }
+            val byNo = posts.associateBy { it.no }
+            val authorOf = { p: Post -> p.id?.takeIf { it.isNotEmpty() } ?: io.github.contentsview08.obb.ui.watchoiOf(p.name) }
             for (p in posts) {
                 val i = (if (oldPosts?.get(p.no)?.body == p.body) reuse?.info?.get(p.no) else null) ?: infoOf(p, collapse)
                 val targets = HashSet<Int>()
                 for (s in i.spans) if (s is BodyToken.Anchor) for (n in s.nos) if (n != p.no) targets += n
+                val who = authorOf(p)
                 for (n in targets) {
                     replyCount[n] = (replyCount[n] ?: 0) + 1
                     replies.getOrPut(n) { ArrayList() } += p.no
+                    // 人気の数: 本人からは数えず、同じ人は 1 回だけ
+                    val target = byNo[n]
+                    if (who != null && target != null && authorOf(target) == who) continue
+                    if (heatSeen.getOrPut(n) { HashSet() }.add(who ?: "#${p.no}")) heatCount[n] = (heatCount[n] ?: 0) + 1
                 }
                 info[p.no] = i
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
-            return PostIndex(posts, info, replyCount, replies, idCount, grossWords, collapse)
+            return PostIndex(posts, info, replyCount, heatCount, replies, idCount, grossWords, collapse)
         }
     }
 }

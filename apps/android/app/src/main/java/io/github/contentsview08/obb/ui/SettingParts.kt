@@ -83,7 +83,7 @@ fun SamplePosts(vm: AppViewModel) {
                     ReplyPreview(to, t.id, text.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "", if (so.quote == "full") text else null)
                 }
             }
-            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, reply = reply, heat = Palette.heat(index.replyCount[post.no] ?: 0), autoLoad = false) }
+            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, reply = reply, heat = Palette.heat(index.heatCount[post.no] ?: 0), autoLoad = false) }
         }
     }
 }

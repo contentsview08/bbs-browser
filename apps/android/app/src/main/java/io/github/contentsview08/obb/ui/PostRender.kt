@@ -199,15 +199,17 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     val opId = index.posts.firstOrNull()?.id
     for (p in index.posts) {
         val replies = index.replyCount[p.no] ?: 0
+        // 人気の色は、同じ人を 1 と数え本人を除いた数で決める(見せる数は replies)
+        val heat = index.heatCount[p.no] ?: 0
         val idCount = p.id?.let { index.idCount[it] } ?: 0
         // 組み立ての入力がすべて前回と同じレスは、前の結果をそのまま使う
         if (reuse != null && oldPosts?.get(p.no) == p && reuse.index.info[p.no] === index.info[p.no] &&
-            (reuse.index.replyCount[p.no] ?: 0) == replies && (p.id?.let { reuse.index.idCount[it] } ?: 0) == idCount
+            (reuse.index.replyCount[p.no] ?: 0) == replies && (reuse.index.heatCount[p.no] ?: 0) == heat && (p.id?.let { reuse.index.idCount[it] } ?: 0) == idCount
         ) {
             val old = reuse.rendered[p.no]
             if (old != null) { out[p.no] = old; continue }
         }
-        val replyHeat = Palette.heat(replies)
+        val replyHeat = Palette.heat(heat)
         val name = displayName(p.name, nonames).let { if (o.watchoiShort) shortWatchoi(it) else it }
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
@@ -239,7 +241,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             }
         }
         // 人気のレスの示し方が「本文の色」のときだけ、本文を暖色に(5 件から太字)。ほかは本文の色を変えず、帯と淡い地で示す(PostItem の heat)
-        val bodyStyle: SpanStyle? = if (o.heatText) replyHeat?.let { SpanStyle(color = it, fontWeight = if (replies >= 5) FontWeight.Bold else FontWeight.Normal) } else null
+        val bodyStyle: SpanStyle? = if (o.heatText) replyHeat?.let { SpanStyle(color = it, fontWeight = if (heat >= 5) FontWeight.Bold else FontWeight.Normal) } else null
         val info = index.info[p.no]
         val full = info?.display ?: p.body
         // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)

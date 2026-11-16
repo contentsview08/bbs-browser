@@ -67,7 +67,7 @@ fun Minimap(
     val marks = remember(posts, index, own, toOwn, skip) {
         posts.mapIndexedNotNull { i, p ->
             if (i in skip) return@mapIndexedNotNull null
-            val heat = index.replyCount[p.no] ?: 0
+            val heat = index.heatCount[p.no] ?: 0
             val info = index.info[p.no]
             if (heat < 3 && p.no !in own && p.no !in toOwn && info?.image != true && info?.video != true && info?.link != true) null
             else Mark(i, heat, p.no in own, p.no in toOwn, info?.image == true, info?.video == true, info?.link == true)

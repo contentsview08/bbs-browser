@@ -68,6 +68,7 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
             key={p.no}
             post={p}
             anchorCount={p.no === 1 ? 1 : p.no === 2 ? 1 : 0}
+          heatCount={p.no === 1 ? 1 : p.no === 2 ? 1 : 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
             showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
             variant={variant}

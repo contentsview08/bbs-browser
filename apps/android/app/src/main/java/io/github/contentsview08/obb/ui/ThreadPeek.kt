@@ -622,7 +622,7 @@ private fun PeekPost(r: PeekRendered, p: Post, prev: Post?, style: String, own: 
             PostItem(
                 rp, aa = rp.aa, own = isOwn, toOwn = toOwn, info = null, autoLoad = false,
                 style = style, id = p.id, iconCount = iconKey(p)?.let { r.iconCounts[it] } ?: 0, continued = continued, reply = reply, onReply = { onClick() },
-                heat = Palette.heat(index.replyCount[p.no] ?: 0),
+                heat = Palette.heat(index.heatCount[p.no] ?: 0),
             )
         }
         // 画像は小さく 2 行まで(PostItem のサムネイルは使わない)。字の始まりにそろえる

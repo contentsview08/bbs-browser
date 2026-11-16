@@ -4,7 +4,7 @@
 // NG、書き込みの履歴、スレタイのキーワード。
 // 取り込まないもの: アプリの設定(prefs。見た目の好みは別のアプリなので)、BE の NG(OBB に BE の NG はない)
 
-import { parseDat, type Post } from '@bbs-browser/connectors'
+import { parseDat, to5chIo, type Post } from '@bbs-browser/connectors'
 import type { NgRule, NgTarget } from './ng'
 
 /** ホストから受け取る、ほどいたままの中身 */
@@ -25,7 +25,7 @@ export interface ChmateThread {
   key: string
   title: string
   posts: Post[]
-  /** 既読の番号(お気に入りなら ChMate の既読、そうでなければ全部読んだことにする) */
+  /** 既読の番号。ChMate の読んだ位置は使わず、持ってきたレスは全部読んだことにする(何百スレもの未読が一度に出ないように) */
   readNo: number
   /** 自分の書き込みのレス番号(idx の 2 行目) */
   ownNos: number[]
@@ -77,12 +77,13 @@ const isFavoriteFlag = (flag: number | undefined) => ((flag ?? 0) & FLAG_FAVORIT
  */
 export function chmateBoardUrl(name: string, servers: Map<string, string>): string | undefined {
   if (!name) return undefined
+  // 5ch.net は OBB の書き方(5ch.io)にそろえる(そろえないと、同じスレがお気に入り・履歴に 2 つ並ぶ)
   if (name.includes('%2F')) {
     const decoded = decodeURIComponent(name).replace(/^\/+|\/+$/g, '')
-    return decoded.includes('/') ? `https://${decoded}/` : undefined
+    return decoded.includes('/') ? to5chIo(`https://${decoded}/`) : undefined
   }
   const server = servers.get(name)
-  return server ? `https://${server}/${name}/` : undefined
+  return server ? to5chIo(`https://${server}/${name}/`) : undefined
 }
 
 /** dat のファイル名 `<板>_<キー>.dat` → 板とキー */
@@ -105,7 +106,7 @@ export function parseIdx(idx: string | null | undefined): { lastModified: number
 /** 書き込みの履歴の url `https://host/test/read.cgi/board/key/` → 板の URL とキー */
 export function splitThreadUrl(url: string): { boardUrl: string; key: string } | undefined {
   const m = /^https?:\/\/([^/]+)\/test\/read\.cgi\/([^/]+)\/(\d+)/.exec(url)
-  return m ? { boardUrl: `https://${m[1]}/${m[2]}/`, key: m[3] } : undefined
+  return m ? { boardUrl: to5chIo(`https://${m[1]}/${m[2]}/`), key: m[3] } : undefined
 }
 
 const asArray = (text: string | undefined): unknown[] => {
@@ -132,7 +133,7 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
   const favoriteBoards: { url: string; name: string }[] = []
   for (const b of raw.boards) {
     if (!isFavoriteFlag(b.flag)) continue
-    const url = b.name.includes('%2F') ? boardUrlOf(b.name) : b.server ? `https://${b.server}/${b.name}/` : undefined
+    const url = b.name.includes('%2F') ? boardUrlOf(b.name) : b.server ? to5chIo(`https://${b.server}/${b.name}/`) : undefined
     if (url) favoriteBoards.push({ url, name: b.title || b.name })
   }
 
@@ -156,21 +157,12 @@ export function parseChmate(raw: ChmateRaw, now = Date.now()): ChmateImport {
     const { posts, title } = parseDat(d.text)
     const fav = favorites.get(`${parts.board}_${parts.key}`)
     const { lastModified, ownNos } = parseIdx(d.idx)
-    let readNo = posts.length
-    if (fav) {
-      try {
-        const r = (JSON.parse(fav.read_state || '{}') as { r?: unknown }).r
-        if (typeof r === 'number' && r >= 0) readNo = Math.min(r, posts.length)
-      } catch {
-        // 読めなければ全部読んだことにする
-      }
-    }
     threads.push({
       boardUrl,
       key: parts.key,
       title: title || fav?.title || '',
       posts,
-      readNo,
+      readNo: posts.length,
       ownNos: ownNos.filter((n) => n <= posts.length),
       favorite: isFavoriteFlag(fav?.flag),
       viewedAt: lastModified > 0 ? lastModified : fav?.access && fav.access > 0 ? fav.access : now,

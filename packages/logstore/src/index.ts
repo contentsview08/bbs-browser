@@ -309,7 +309,8 @@ export function importLogStatements(
       params: [opts.title, ...where, now],
     })
   } else if (opts.title) {
-    out.push({ sql: `UPDATE threads SET title = CASE WHEN title = '' THEN $1 ELSE title END WHERE board_url = $2 AND key = $3`, params: [opts.title, ...where] })
+    // スレタイのなかった行(空か、キーが入っている)は埋める
+    out.push({ sql: `UPDATE threads SET title = CASE WHEN title = '' OR title = key THEN $1 ELSE title END WHERE board_url = $2 AND key = $3`, params: [opts.title, ...where] })
   }
   if (opts.readNo > 0) out.push(markReadStatement(thread, opts.readNo, opts.viewedAt))
   // 見た時刻は、もう後の時刻が入っていれば動かさない

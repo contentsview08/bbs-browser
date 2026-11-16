@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DEFAULT_SETTINGS, accentKeyOf, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'
 import { describeExtras, importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../../utils/backup'
 import { factoryReset, openJson, saveJson } from '../../host/backup'
+import { onBroadcast } from '../../host/crossWindow'
 import { customToJson, parseCustom } from '../../ui/customScheme'
 import { type SettingsProps, Section } from './common'
 
@@ -20,6 +21,12 @@ export function BackupTab({
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
+  /** ChMate の取り込みの進み具合(メインが知らせる。stage が空なら終わり) */
+  const [progress, setProgress] = useState<{ stage: string; done: number; total: number }>()
+  useEffect(() => {
+    const off = onBroadcast<{ stage: string; done: number; total: number }>('chmate-progress', (p) => setProgress(p.stage ? p : undefined))
+    return () => void off.then((f) => f())
+  }, [])
 
   const act = async (fn: () => Promise<string | undefined>) => {
     setBusy(true)
@@ -122,6 +129,20 @@ export function BackupTab({
               ChMate のバックアップ(ZIP)を読み込む
             </button>
           </div>
+          {progress && (
+            <div className="mt-2">
+              <p className="text-xs text-c-text-body mb-1">
+                {progress.stage}
+                {progress.total > 0 && ` ${progress.done} / ${progress.total}(${Math.round((progress.done / progress.total) * 100)}%)`}
+              </p>
+              <div className="h-1.5 rounded-full bg-c-surface2 overflow-hidden">
+                <div
+                  className={`h-full bg-c-accent transition-[width] duration-300 ${progress.total > 0 ? '' : 'animate-pulse'}`}
+                  style={{ width: progress.total > 0 ? `${Math.round((progress.done / progress.total) * 100)}%` : '100%' }}
+                />
+              </div>
+            </div>
+          )}
         </Section>
       )}
       <Section

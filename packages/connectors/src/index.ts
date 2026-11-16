@@ -11,6 +11,7 @@ export { declaredCharset, detectEncoding, looksLikeUtf8 } from './encoding'
 export { postNoInUrl, createdAtOfKey } from './common'
 // ほかの専ブラ(ChMate)のログの取り込みで、dat をそのまま読むのに使う
 export { parseDat } from './twoch/parse'
+export { to5chIo } from './twoch/connector'
 export { siteDomain, uniqueSiteDomains } from './siteDomain'
 export { twoChConnector, shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, demoConnector }
 

@@ -62,7 +62,7 @@ import ThreadListPanel, { threadId, type SortMode } from './components/ThreadLis
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
-import { canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
+import { broadcast, canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
 import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { favoriteChange, favoriteKey, isFavoriteIn } from './utils/favoriteBoards'
@@ -2408,10 +2408,20 @@ export default function App() {
    * 既読・見た時刻・自分の印は手元にだけ書く(同期の操作には積まない。ほかの端末でも同じ ZIP を取り込めばそろう)
    */
   const importChmate = async (path?: string): Promise<string | undefined> => {
+    try {
+      return await importChmateInner(path)
+    } finally {
+      void broadcast('chmate-progress', { stage: '', done: 0, total: 0 })
+    }
+  }
+  const importChmateInner = async (path?: string): Promise<string | undefined> => {
     if (!store) return undefined
     // 設定のウィンドウから頼まれたときは、そちらで選んだパスが来る
     const chosen = path ?? (await pickChmateBackup())
     if (!chosen) return undefined
+    /** 進み具合を設定のウィンドウ(と自分)に知らせる */
+    const report = (stage: string, done: number, total: number) => void broadcast('chmate-progress', { stage, done, total })
+    report('ZIP を読んでいます', 0, 0)
     const parsed = parseChmate(await readChmateBackup(chosen))
     const ops = new UserOps(store)
     const summaryOf = (boardUrl: string, key: string, title: string): ThreadSummary | undefined => {
@@ -2436,7 +2446,9 @@ export default function App() {
       batch = []
       batchPosts = 0
     }
+    let seenThreads = 0
     for (const t of parsed.threads) {
+      if (++seenThreads % 10 === 0) report('スレのログを入れています', seenThreads, parsed.threads.length)
       const s = summaryOf(t.boardUrl, t.key, t.title)
       if (!s) {
         skippedBoards++
@@ -2456,13 +2468,16 @@ export default function App() {
     }
     await flush()
     // お気に入りのスレ・板は同期の操作にも積むので UserOps で(数十件)
-    const haveFav = new Set((await store.listFavoriteThreads()).map((f) => threadId(f.thread)))
+    report('お気に入りを入れています', 0, favoritesToAdd.length)
+    // 同じスレが板の URL の書き方違いで 2 つにならないよう、favoriteKey で比べる
+    const favKey = (t: ThreadSummary) => `${favoriteKey(t.boardUrl)}\t${t.key}`
+    const haveFav = new Set((await store.listFavoriteThreads()).map((f) => favKey(f.thread)))
     let favorites = 0
     for (const { s, at } of favoritesToAdd) {
-      if (haveFav.has(threadId(s))) continue
+      if (haveFav.has(favKey(s))) continue
       await ops.favoriteThreadAdd(s, at)
-      haveFav.add(threadId(s))
-      favorites++
+      haveFav.add(favKey(s))
+      if (++favorites % 10 === 0) report('お気に入りを入れています', favorites, favoritesToAdd.length)
     }
     const haveBoards = new Set((await store.listFavorites()).map((b) => favoriteKey(b.url)))
     let favoriteBoards = 0
@@ -2474,6 +2489,7 @@ export default function App() {
       favoriteBoards++
     }
     // 書き込みの履歴は、同じスレ・同じ時刻のものがあれば重ねない(2 回読み込んでも増えない)
+    report('書き込みの履歴を入れています', 0, parsed.posts.length)
     const havePosts = new Set((await store.listPostHistory(100000)).map((e) => `${threadId(e.thread)}\t${e.postedAt}`))
     let posts = 0
     for (const p of parsed.posts) {
@@ -2491,8 +2507,10 @@ export default function App() {
     const keywords = [...new Set([...cur.keywords, ...parsed.keywords])]
     const keywordsAdded = keywords.length - cur.keywords.length
     if (keywordsAdded > 0) updateSetting('keywords', keywords)
+    report('仕上げています', 0, 0)
     await Promise.all([reloadFavorites(store), reloadFavThreads(store), reloadRecent(store)])
     if (history) setHistory(await loadHistory(store))
+    report('', 0, 0)
     // スレタイの分からないスレ(ChMate の dat の 1 行目にない)は、あとから間をあけて 1 つずつ取りに行って埋める(掲示板に負担をかけない)
     if (untitled.length > 0) void fillTitlesSlowly(store, untitled)
     const text = describeChmate({ threads, favoriteBoards, favorites, posts, ngAdded: merged.added, keywords: keywordsAdded, skippedBoards })

@@ -40,7 +40,7 @@ describe('ChMate のバックアップの読み替え', () => {
     const servers = new Map([['livejupiter', 'eagle.5ch.net']])
     expect(chmateBoardUrl('bbs.eddibb.cc%2Fliveedge', servers)).toBe('https://bbs.eddibb.cc/liveedge/')
     expect(chmateBoardUrl('jbbs.livedoor.jp%2Fsports%2F40235', servers)).toBe('https://jbbs.livedoor.jp/sports/40235/')
-    expect(chmateBoardUrl('livejupiter', servers)).toBe('https://eagle.5ch.net/livejupiter/')
+    expect(chmateBoardUrl('livejupiter', servers)).toBe('https://eagle.5ch.io/livejupiter/')
     expect(chmateBoardUrl('poverty', servers)).toBeUndefined()
   })
   it('dat の名前と idx と書き込みの URL', () => {
@@ -62,9 +62,9 @@ describe('ChMate のバックアップの読み替え', () => {
     expect(edge.favorite).toBe(false)
     expect(edge.viewedAt).toBe(1791504300000)
     const jup = r.threads.find((t) => t.key === '1618048117')!
-    expect(jup.boardUrl).toBe('https://eagle.5ch.net/livejupiter/')
+    expect(jup.boardUrl).toBe('https://eagle.5ch.io/livejupiter/')
     expect(jup.favorite).toBe(true)
-    expect(jup.readNo).toBe(2) // お気に入りの read_state の r
+    expect(jup.readNo).toBe(3) // ChMate の読んだ位置(r=2)は使わず、全部読んだことにする
     expect(jup.viewedAt).toBe(1785551620400) // idx の最終更新が 0 なら access
     // ログのないお気に入りも、お気に入りとしては入る
     const noLog = r.threads.find((t) => t.key === '1700000000')!
@@ -76,8 +76,8 @@ describe('ChMate のバックアップの読み替え', () => {
   })
   it('お気に入りの板は boards 表の flag の 1 のビット', () => {
     expect(parseChmate(raw()).favoriteBoards).toEqual([
-      { url: 'https://eagle.5ch.net/livejupiter/', name: 'なんでも実況(ジュピター)' },
-      { url: 'https://mi.5ch.net/news4vip/', name: 'ニュー速VIP' },
+      { url: 'https://eagle.5ch.io/livejupiter/', name: 'なんでも実況(ジュピター)' },
+      { url: 'https://mi.5ch.io/news4vip/', name: 'ニュー速VIP' },
       { url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' },
     ])
   })
@@ -90,9 +90,9 @@ describe('ChMate のバックアップの読み替え', () => {
     const r = parseChmate(raw())
     expect(r.ngRules.map((n) => [n.target, n.pattern, n.isRegex, n.boardUrl])).toEqual([
       ['posterId', 'AZUzoED80', false, undefined],
-      ['posterId', 'FoQ1g+Rp0', false, 'https://mi.5ch.net/news4vip/'],
+      ['posterId', 'FoQ1g+Rp0', false, 'https://mi.5ch.io/news4vip/'],
       ['content', '>>1,2.\\d', true, 'https://bbs.eddibb.cc/liveedge/'],
-      ['posterName', '(ワッチョイW 834c-nJL5)', false, 'https://greta.5ch.net/poverty/'],
+      ['posterName', '(ワッチョイW 834c-nJL5)', false, 'https://greta.5ch.io/poverty/'],
       ['threadTitle', '^\\s*(.\\s+)+.\\s*$', true, undefined],
     ])
     expect(r.ngRules.every((n) => n.enabled && n.note === 'ChMate から')).toBe(true)

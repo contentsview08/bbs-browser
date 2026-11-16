@@ -1192,6 +1192,7 @@ private fun BackupPage(vm: AppViewModel) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
     val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
+    val loadChmate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importChmate(uri) }
     Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイト・上げた画像の履歴を 1 つのファイルに書き出します。スレのログは入りません。戻すと設定は置き換え、お気に入りなどは今あるものに足します。PC 版で書き出した設定・NG のファイルも読めます") {
         ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
         ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
@@ -1199,6 +1200,9 @@ private fun BackupPage(vm: AppViewModel) {
     Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
         ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
+    }
+    Group("ほかのアプリから取り込む", note = "ChMate の「バックアップ」で書き出した ZIP から、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・スレタイのキーワードを取り込みます。今あるものに足し、同じものは重ねません。見た目などの設定は取り込みません。板のサーバーが分からないスレや、OBB が対応していない掲示板のスレは読みません") {
+        ActionRow("ChMate のバックアップ(ZIP)を読み込む") { loadChmate.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) }
     }
 }
 

@@ -165,7 +165,8 @@ private fun parseDatLine(line: String, no: Int): Pair<Post, String?> {
     ) to title
 }
 
-private fun parseDat(text: String, startNo: Int): Pair<List<Post>, String?> {
+/** dat の本文 → レスとスレタイ。ChMate のログの取り込み(data/ChmateImport.kt)からも使う */
+internal fun parseDat(text: String, startNo: Int): Pair<List<Post>, String?> {
     val lines = text.split('\n').let { if (it.lastOrNull() == "") it.dropLast(1) else it }
     var title: String? = null
     val posts = lines.mapIndexed { i, line ->

@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.contentsview08.obb.bbs.Board
+import io.github.contentsview08.obb.bbs.FetchResult
 import io.github.contentsview08.obb.bbs.FetchStatus
 import io.github.contentsview08.obb.bbs.NextThreadCandidate
 import io.github.contentsview08.obb.bbs.Post
@@ -989,6 +990,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 toast = "バックアップから戻しました"
             } catch (e: Exception) {
                 toast = "戻せませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
+    /**
+     * ChMate のバックアップ(ZIP)を読み込んで、スレのログと既読・自分の書き込みの印・お気に入りのスレ・NG・書き込みの履歴・キーワードを足す
+     * (PC 版の importChmate と同じ決まり)。ログは、手元にないか ChMate の方が長いときだけ入れ替える
+     */
+    fun importChmate(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val app = getApplication<Application>()
+                val now = System.currentTimeMillis()
+                val parsed = withContext(Dispatchers.IO) {
+                    val raw = app.contentResolver.openInputStream(uri)?.use { io.github.contentsview08.obb.data.Chmate.readZip(it, app.cacheDir) } ?: throw IllegalStateException("読めませんでした")
+                    io.github.contentsview08.obb.data.Chmate.parse(raw, now) { io.github.contentsview08.obb.bbs.parseDat(it, 1) }
+                }
+                toast = "ChMate のバックアップを取り込んでいます…"
+                fun summaryOf(boardUrl: String, key: String, title: String): ThreadSummary? {
+                    val route = UrlRoute.parse(boardUrl) as? UrlRoute.BoardPage ?: return null
+                    return ThreadSummary(route.boardUrl, key, title, 0, 0, io.github.contentsview08.obb.bbs.createdAtOf(key))
+                }
+                var threads = 0
+                var favCount = 0
+                var skippedBoards = 0
+                for (t in parsed.threads) {
+                    val s = summaryOf(t.boardUrl, t.key, t.title) ?: run { skippedBoards++; continue }
+                    if (t.posts.isNotEmpty()) {
+                        val existing = db.loadThread(s)
+                        if (existing == null || existing.posts.size < t.posts.size) {
+                            db.saveFetch(s.copy(postCount = t.posts.size), FetchResult(FetchStatus.RESET, t.posts, null, t.title.ifEmpty { null }), t.title)
+                            threads++
+                        }
+                        if (t.readNo > 0) db.userOps.markRead(s, t.readNo, t.viewedAt)
+                        db.userOps.threadView(s, t.viewedAt)
+                        if (t.ownNos.isNotEmpty()) db.userOps.setOwnPosts(s, t.ownNos, true, t.viewedAt)
+                    }
+                    if (t.favorite && !db.isFavoriteThread(s)) {
+                        db.userOps.setFavoriteThread(s, t.title, true, t.viewedAt)
+                        favCount++
+                    }
+                }
+                // 書き込みの履歴は、同じスレ・同じ時刻のものがあれば重ねない(2 回読み込んでも増えない)
+                val havePosts = db.postHistory(100000).mapTo(HashSet()) { "${it.thread.id}\t${it.postedAt}" }
+                var posts = 0
+                for (p in parsed.posts) {
+                    val s = summaryOf(p.boardUrl, p.key, p.title) ?: continue
+                    if (!havePosts.add("${s.id}\t${p.at}")) continue
+                    db.userOps.postAdd(s, p.title, p.no, p.name, p.mail, p.body, p.at)
+                    if (p.no != null) db.userOps.ownAdd(s, p.no, p.at)
+                    posts++
+                }
+                val before = prefs.ngRules
+                var ngAdded = 0
+                for (r in parsed.ngRules) if (prefs.addNg(r)) ngAdded++
+                if (ngAdded > 0) {
+                    changeNg(ngDiff(before, prefs.ngRules, io.github.contentsview08.obb.data.today(), keepRemoved = true))
+                    reapplyNg()
+                }
+                // キーワードの設定は改行区切りの文字列
+                val curKeywords = prefs.keywords.split('\n').filter { it.isNotBlank() }
+                val kw = (curKeywords + parsed.keywords).distinct()
+                val keywordsAdded = kw.size - curKeywords.size
+                if (keywordsAdded > 0) prefs.keywords = kw.joinToString("\n")
+                favorites = db.favorites()
+                reloadSide()
+                val text = io.github.contentsview08.obb.data.Chmate.describe(threads, favCount, posts, ngAdded, keywordsAdded, skippedBoards)
+                toast = (if (text.isNotEmpty()) "取り込みました($text)" else "取り込むものがありませんでした") + parsed.notes.joinToString("") { "\n$it" }
+            } catch (e: Exception) {
+                toast = "取り込めませんでした: ${e.message ?: e}"
             }
         }
     }

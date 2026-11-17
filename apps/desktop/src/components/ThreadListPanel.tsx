@@ -571,10 +571,13 @@ export default function ThreadListPanel(props: Props) {
     // 閲覧履歴の「見た順」を逆にしたら、最近見たものを下に
     if (reversed && !shownSort) list = [...list].reverse()
     if (shownUnreadTop) list = unreadFirstOrder(list, (t) => shownUnreadTop.has(threadId(t)))
+    // 板のスレ一覧では、お気に入りのスレを上に(並びはそのまま。履歴の一覧は見た順のままにする)
+    const favs = props.favoriteIds
+    if (favs && favs.size > 0 && !props.historyMetaOf) list = [...list.filter((t) => favs.has(threadId(t))), ...list.filter((t) => !favs.has(threadId(t)))]
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, keywordHit])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, keywordHit, props.historyMetaOf])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる

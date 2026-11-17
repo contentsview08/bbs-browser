@@ -59,7 +59,8 @@ export function BackupTab({
       if (expect === 'scheme') throw new Error('配色のファイルではありません')
       const parsed = parseBackup(text)
       if (parsed.kind === 'error') throw new Error(parsed.error)
-      if (parsed.kind !== expect) throw new Error(expect === 'settings' ? '設定のファイルではありません(NG のファイルです)' : 'NG のファイルではありません(設定のファイルです)')
+      // 前の版で書き出した設定のファイルは、どの「読み込む」から選んでも読み込む(画面からは「設定」の書き出しを外したため)
+      if (parsed.kind !== 'settings' && parsed.kind !== expect) throw new Error('NG のファイルではありません')
       if (parsed.kind === 'settings') {
         const values = importableSettings(parsed, DEFAULT_SETTINGS)
         for (const [k, v] of Object.entries(values)) update(k as keyof AppSettings, v as never)

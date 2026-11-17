@@ -1168,8 +1168,7 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
 
 @Composable
 private fun BackupPage(vm: AppViewModel) {
-    // 設定だけの JSON のバックアップは画面から外した(まるごとバックアップと取り違えるため)。前の版の設定・NG の JSON は「前の版の設定を読み込む」から
-    val loadOld = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
+    // 設定だけの JSON のバックアップ(書き出す・戻す)は画面から外した(まるごとバックアップと取り違えるため)
     val loadScheme = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importScheme(uri) }
     val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
     val loadChmate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importChmate(uri) }
@@ -1179,7 +1178,6 @@ private fun BackupPage(vm: AppViewModel) {
     Group("まるごとバックアップ", note = "ログ・既読・お気に入り・書き込み履歴・自分のレスの印・アカウント・設定・NG・書き込みの認証の状態(Cookie)を 1 つの ZIP に書き出します。アカウントのパスワードや認証の状態も入るので、ファイルの置き場所に気をつけてください。戻すときはアプリを一度閉じ、開き直すとその状態になります。いまの DB は消さずに別の名前で残します") {
         ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
         ActionRow("まるごと戻す…", danger = true) { confirmFullRestore = true }
-        ActionRow("前の版の設定・NG の JSON を読み込む") { loadOld.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
     Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものも読めます)") {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }

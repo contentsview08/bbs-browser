@@ -50,7 +50,11 @@ describe('設定の書き出しと読み込み', () => {
       }),
     )
     if (parsed.kind !== 'settings') throw new Error(parsed.kind)
-    expect(importableSettings(parsed, DEFAULT_SETTINGS)).toEqual({ keywords: ['実況'] })
+    // 前の形のキーワードは今の形(keywordRules)にも写る
+    const got = importableSettings(parsed, DEFAULT_SETTINGS)
+    expect(got.keywordRules?.map((r) => r.pattern)).toEqual(['実況'])
+    delete got.keywordRules
+    expect(got).toEqual({ keywords: ['実況'] })
   })
 
   it('ほかのファイルは断る', () => {
@@ -85,7 +89,10 @@ describe('設定の読み込み: 壊れたファイルでアプリを壊さな�
   const read = (settings: Record<string, unknown>) => importableSettings(file(settings), DEFAULT_SETTINGS)
 
   it('文字の配列に文字以外が混ざっていても捨てて読む', () => {
-    expect(read({ keywords: ['実況', 1, null], grossWords: [{}], quickPhrases: ['a'], postToolbar: [true, 'copy'], listTabs: [0, 'unread'] })).toEqual({
+    const got = read({ keywords: ['実況', 1, null], grossWords: [{}], quickPhrases: ['a'], postToolbar: [true, 'copy'], listTabs: [0, 'unread'] })
+    expect(got.keywordRules?.map((r) => r.pattern)).toEqual(['実況'])
+    delete got.keywordRules
+    expect(got).toEqual({
       keywords: ['実況'],
       grossWords: [],
       quickPhrases: ['a'],

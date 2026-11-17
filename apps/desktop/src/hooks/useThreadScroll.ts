@@ -630,8 +630,11 @@ export function useThreadScroll(o: Options) {
 
   // ── 読んだところ ──
 
-  /** 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ) */
-  const counting = () => !untouched.current || (positionedAt.current > 0 && Date.now() - positionedAt.current >= READ_DWELL_MS)
+  /**
+   * 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ)。
+   * 一番下まで見えているとき(新着が 1〜2 件で全部見えた)は、開いてすぐ戻っても読んだことにする(未読の札が残らないように)
+   */
+  const counting = () => !untouched.current || atBottom.current || (positionedAt.current > 0 && Date.now() - positionedAt.current >= READ_DWELL_MS)
   /**
    * 開いている間に「下端まで見えた」レスの番号(読み切れたもの。頭だけ見えたレスは入れない)。
    * 既読は、今の既読から途切れずにこの中にある所までしか進めない(treeRead。飛んで開いたときに、その手前の読んでいないレスを既読にしないため)。

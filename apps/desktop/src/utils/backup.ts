@@ -5,7 +5,7 @@
 
 import { migrateOld, migrateValues, type AppSettings } from '../ui/settings'
 import type { NgRule, NgTarget } from './ng'
-import { isKeywordRule } from './keywords'
+import { isKeywordRule, migrateLegacyKeywords } from './keywords'
 
 const APP = 'bbs-browser'
 /** Android 版のバックアップの名乗り。設定の名前と形は同じなので、そのまま読む */
@@ -198,6 +198,8 @@ export function importableSettings(file: SettingsFile, defaults: AppSettings): P
   if (out.ngRules) out.ngRules = out.ngRules.map((r) => ({ ...r, id: r.id || crypto.randomUUID(), enabled: r.enabled !== false }))
   // 古い版のファイルも、保存してある設定を読むときと同じく今の形に読み替える
   const merged = { ...out, ...migrateOld(file.settings) }
+  // 前の形のキーワード(言葉の並び)しかないファイルは、今の形(keywordRules)に写して戻す(写し終えた端末では、戻すときにしか写らないため)
+  if (!merged.keywordRules && (merged.keywords?.length || merged.keywordAuthors?.length)) merged.keywordRules = migrateLegacyKeywords(merged.keywords ?? [], merged.keywordAuthors ?? [])
   return { ...merged, ...migrateValues(merged) }
 }
 

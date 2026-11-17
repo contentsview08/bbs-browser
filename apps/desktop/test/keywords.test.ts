@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { isKeywordRule, keywordGroupsOf, keywordLabel, keywordMatcher, migrateLegacyKeywords, sameKeyword, type KeywordRule } from '../src/utils/keywords'
+import { importableSettings } from '../src/utils/backup'
+import { DEFAULT_SETTINGS } from '../src/ui/settings'
 
 // スマホ版の KeywordRuleTest と同じ見本・同じ答え
 const t = (key: string, title: string, authorId?: string, boardUrl = 'https://a/'): ThreadSummary => ({ connectorId: '2ch-compat', boardUrl, key, title, postCount: 10, order: 0, createdAt: undefined, authorId })
@@ -46,5 +48,14 @@ describe('キーワード(1 つの言葉か正規表現に 1 つの帯。別名�
     expect(sameKeyword(rule({ id: 'a', pattern: '実況 ' }), rule({ id: 'b', pattern: '実況', label: '別名' }))).toBe(true)
     expect(sameKeyword(rule({ id: 'a', pattern: '実況' }), rule({ id: 'b', pattern: '実況', isRegex: true }))).toBe(false)
     expect(keywordMatcher([rule({ id: '1', pattern: '(', isRegex: true })]).hit(t('k', '('))).toBeUndefined()
+  })
+  it('前の形のバックアップ(keywords だけ)を戻すと keywordRules に写る。今の形があればそのまま', () => {
+    const legacy = importableSettings({ kind: 'settings', version: 1, settings: { keywords: ['実況'], keywordAuthors: ['id1'] } } as never, DEFAULT_SETTINGS)
+    expect(legacy.keywordRules?.map((r) => [r.kind, r.pattern])).toEqual([
+      ['title', '実況'],
+      ['author', 'id1'],
+    ])
+    const now = importableSettings({ kind: 'settings', version: 1, settings: { keywords: ['実況'], keywordRules: [rule({ id: 'x', pattern: '雑談' })] } } as never, DEFAULT_SETTINGS)
+    expect(now.keywordRules?.map((r) => r.pattern)).toEqual(['雑談'])
   })
 })

@@ -104,8 +104,9 @@ export interface PostRect {
 }
 
 /**
- * どこまで読んだかと、読んでいた位置を求める。
- * - 画面の下端より上に頭が出ているレスのうち、いちばん大きい番号を既読にする(番号の順の表示。ツリーは treeRead で決める)
+ * 画面に出ているレスから、読み切れた最後の番号と、読んでいた位置を求める。
+ * - 下端まで見えている(読み切れる)レスのうち、いちばん大きい番号(頭だけ見えたレスは数えない。実際の既読は useThreadScroll が
+ *   「今の既読から途切れずに見た所まで」(treeRead)で決める。ここの last は一番下の判断と試験のため)
  * - 一番下まで来ていれば、絞り込みや NG で隠れているレスも含めて全部読んだことにする
  * - ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
  */
@@ -121,7 +122,7 @@ export function readProgress(input: {
   for (const r of input.rects) {
     if (r.hidden) continue
     if (r.top >= input.viewBottom) break
-    last = Math.max(last, r.no)
+    if (r.bottom <= input.viewBottom) last = Math.max(last, r.no)
     if (!top && r.bottom > input.viewTop) top = { no: r.no, offset: r.top - input.viewTop }
   }
   if (input.atBottom) last = Math.max(last, input.lastNo)

@@ -67,6 +67,8 @@ const STEP_MS = 120
 const PAGE_OVERLAP_PX = 48
 /** スクロールが止まってから既読を知らせるまでの待ち */
 const READ_DELAY_MS = 300
+/** 開いてから、触らなくても見えているレスを読んだことにするまでの時間(ms)。開いてすぐ閉じるだけでは既読を進めない(スマホ版と同じ) */
+const READ_DWELL_MS = 1200
 
 /** 描いたことのあるレスの高さ。タブを作り直しても使えるよう、スレ表示の外に置く */
 const heights = new HeightCache()
@@ -259,6 +261,8 @@ export function useThreadScroll(o: Options) {
   )
 
   const positioned = useRef(false)
+  /** 位置が決まった時刻(ms)。既読を数え始めるのは、触ってから(untouched が外れてから)か、ここから READ_DWELL_MS 経ってから */
+  const positionedAt = useRef(0)
   /** 開いてから、まだ利用者がスクロールの操作(ホイール・クリック・キー)をしていないか */
   const untouched = useRef(true)
   /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
@@ -626,22 +630,26 @@ export function useThreadScroll(o: Options) {
 
   // ── 読んだところ ──
 
+  /** 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ) */
+  const counting = () => !untouched.current || (positionedAt.current > 0 && Date.now() - positionedAt.current >= READ_DWELL_MS)
   /**
-   * ツリー表示で画面に出したレスの番号(スレを開いている間だけ持つ)。途中の既読は 1 番から途切れずに出し終えた所まで進める(treeRead)。
+   * 開いている間に「下端まで見えた」レスの番号(読み切れたもの。頭だけ見えたレスは入れない)。
+   * 既読は、今の既読から途切れずにこの中にある所までしか進めない(treeRead。飛んで開いたときに、その手前の読んでいないレスを既読にしないため)。
    * 既読の判断は止まってから(READ_DELAY_MS)なので、流れていく途中のレスもここで拾う(スクロールのコマごと。見えている枠だけ測る)
    */
   const seenNos = useRef(new Set<number>())
   const markSeen = useCallback(() => {
     const root = rootRef.current
-    if (!root || !latest.current.tree) return
+    if (!root || !counting()) return
     const box = root.getBoundingClientRect()
     const viewTop = box.top + headerOffset()
     const frames = framesIn(listRef.current)
     for (let i = firstAfter(frames.length, (k) => (frames[k].hidden ? undefined : frames[k].getBoundingClientRect().bottom), viewTop); i < frames.length; i++) {
       const el = frames[i]
       if (el.hidden) continue
-      if (el.getBoundingClientRect().top >= box.bottom) break
-      seenNos.current.add(Number(el.dataset.post))
+      const r = el.getBoundingClientRect()
+      if (r.top >= box.bottom) break
+      if (r.bottom <= box.bottom) seenNos.current.add(Number(el.dataset.post))
     }
   }, [rootRef, listRef, headerOffset])
 
@@ -677,18 +685,15 @@ export function useThreadScroll(o: Options) {
     const lastNo = frames.reduce((m, f) => Math.max(m, Number(f.dataset.post)), 0)
     const progress = readProgress({ rects, viewTop, viewBottom: box.bottom, atBottom: readAll, lastNo })
     const pos = progress.position
-    let last = progress.last
-    // ツリー: 画面の並びは番号の順ではないので、途中では 1 番から途切れずに出し終えた所まで。
-    // 一番下に着いたら番号の順と同じく全部(飛ばして出していないレスがあっても。そうしないと未読の数が残る)
-    if (latest.current.tree) {
-      markSeen()
-      last = treeRead({
-        nos: latest.current.log.posts.map((p) => p.no),
-        readNo: sent.current,
-        seen: seenNos.current,
-        atBottom: readAll,
-        lastNo,
-      })
+    // 既読は「今の既読から、途切れずに下端まで見えた所まで」(treeRead。番号の順でもツリーでも同じ)。頭だけ見えたレスや、
+    // 飛んで開いたときに手前に残った読んでいないレスは既読にしない。一番下に着いたら(飛ばしたレスがあっても)全部。
+    // 開いてすぐ(触る前・READ_DWELL_MS 経つ前)は進めない(開いて閉じるだけで 1 画面ぶん進んでいた)。
+    // 途切れの判定に使う「あるレス」は並んでいる枠(透明あぼーんで枠のないレスは飛ばしてよい)。絞り込み中は全部(絞って消えたレスを飛ばして既読にしない)
+    markSeen()
+    let last = sent.current
+    if (counting()) {
+      const nos = latest.current.filtering ? latest.current.log.posts.map((p) => p.no) : frames.filter((f) => !f.hidden).map((f) => Number(f.dataset.post))
+      last = treeRead({ nos, readNo: sent.current, seen: seenNos.current, atBottom: readAll, lastNo })
     }
     // 描かれているのは画面とその上下半画面ほど(content-visibility の範囲)なので、そこだけ覚える
     rememberHeights(measured, rects, box.top - box.height / 2, box.bottom + box.height / 2)
@@ -707,6 +712,7 @@ export function useThreadScroll(o: Options) {
     const root = rootRef.current
     if (!root || positioned.current || log.posts.length === 0) return
     positioned.current = true
+    positionedAt.current = Date.now()
     // 開いたときは空のログ(読み込み中)から始まることがあるので、既読の番号は中身が届いたこの時に合わせる
     sent.current = Math.max(sent.current, log.readNo)
     const saved = latest.current.initialPosition
@@ -739,7 +745,12 @@ export function useThreadScroll(o: Options) {
     // 描いたレスの高さは、1 度描いてからでないと測れない(content-visibility で省いた枠は、最初の描画で見える範囲が決まる)。
     // 次のコマで測って見積もりの寸法を合わせ、全部の仮の高さを早いうちに実測に近づける(待つと、しばらくしてスクロールバーが縮む)
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => latest.current.active && reportRead()))
-    return () => cancelAnimationFrame(raf)
+    // 触らずに眺めているだけでも、少し経ったら見えているレスは読んだことにする
+    const dwell = setTimeout(() => latest.current.active && reportRead(), READ_DWELL_MS + 100)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(dwell)
+    }
   }, [log, unreadFrom, byNo, rootRef, headerOffset, reportRead, scrollToUnread])
 
   // 開き直したスレは、閉じるときの位置をまた覚える

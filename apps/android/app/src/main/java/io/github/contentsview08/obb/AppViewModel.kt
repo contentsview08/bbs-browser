@@ -607,7 +607,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // 利用者の操作が送信待ちを積んだら、選んだ間隔を待たずに早めに送る。知らせは書いた列から来るので、時計は画面のスレッドで触る
         db.userOps.onOps = { viewModelScope.launch { syncScheduler.changed() } }
-        // 期限の切れた一時 NG は自動で片づける(PC 版と同じ。どの端末でも同じ結果になるので同期には送らない)
+        // 期限の切れた一時 NG は自動で片づける(PC 版と同じ。どの端末でも同じ結果になるので同期には送らない)。起動時はまだスレを開いていないので判定し直しは要らない
         prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
     }
 
@@ -615,8 +615,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun syncActivity() = syncScheduler.activity()
 
     fun syncForeground() {
-        // 日をまたいで戻ってきたときのために、ここでも期限の切れた NG を片づける
-        prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
+        // 日をまたいで戻ってきたときのために、ここでも期限の切れた NG を片づける(消えたら、開いているスレの NG も判定し直す)
+        if (prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())) reapplyNg()
         viewModelScope.launch {
             // 同期サーバーで使っていた端末は、自動の同期より先に同期をやめた状態へ戻す
             runCatching { withContext(Dispatchers.IO) { syncCtl.startup() } }
@@ -1012,6 +1012,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** バックアップから戻す(今あるものに足す。設定は上書き)。自分の配色のファイルを選んだときは、その配色を取り込んで使う */
+    /** 配色のファイルだけを読み込む(「配色を読み込む」。設定・NG のバックアップは読まない。前の版の設定の JSON は importBackup) */
+    fun importScheme(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
+                val d = io.github.contentsview08.obb.ui.CustomDef.parse(text.trim()) ?: throw IllegalArgumentException("配色のファイルではありません")
+                prefs.customScheme = d.copy(accentPick = "").toJson()
+                prefs.followOsTheme = false
+                prefs.scheme = "custom"
+                prefs.accent = d.accentPick
+                toast = "自分の配色を読み込んで、使うようにしました"
+            } catch (e: Exception) {
+                toast = e.message ?: "読み込めませんでした"
+            }
+        }
+    }
+
     fun importBackup(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
@@ -1118,7 +1135,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val before = prefs.ngRules
                 var ngAdded = 0
-                for (r in parsed.ngRules) if (prefs.addNg(r)) ngAdded++
+                // 数百件になることがあるので、1 件ずつ保存せずまとめて 1 回で
+                ngAdded = prefs.addNgAll(parsed.ngRules)
                 if (ngAdded > 0) {
                     changeNg(ngDiff(before, prefs.ngRules, io.github.contentsview08.obb.data.today(), keepRemoved = true))
                     reapplyNg()
@@ -1464,8 +1482,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 期限の切れた NG を片づける。手元からだけ消し、送らない */
     fun dropExpiredNg() {
-        prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
-        reapplyNg()
+        if (prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())) reapplyNg()
     }
 
     /**

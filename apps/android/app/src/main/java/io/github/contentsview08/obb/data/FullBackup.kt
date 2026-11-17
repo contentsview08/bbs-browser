@@ -79,11 +79,22 @@ object FullBackup {
      * DB が SQLite でなければ IllegalArgumentException
      */
     fun stageRestore(context: Context, input: InputStream): JSONObject? {
-        var settings: JSONObject? = null
-        var staged = false
         val pending = File(context.filesDir, PENDING)
         val pendingPrefs = File(context.filesDir, PENDING_PREFS)
         pendingPrefs.deleteRecursively()
+        try {
+            return stageRestoreInner(context, input, pending, pendingPrefs)
+        } catch (e: Exception) {
+            // 途中で失敗したら控えを全部消す(設定・Cookie だけが次の起動で置き換わらないように)
+            pendingPrefs.deleteRecursively()
+            pending.delete()
+            throw e
+        }
+    }
+
+    private fun stageRestoreInner(context: Context, input: InputStream, pending: File, pendingPrefs: File): JSONObject? {
+        var settings: JSONObject? = null
+        var staged = false
         ZipInputStream(input.buffered()).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
@@ -113,10 +124,7 @@ object FullBackup {
                 }
             }
         }
-        if (!staged) {
-            pendingPrefs.deleteRecursively()
-            throw IllegalArgumentException("ZIP の中に obb.db がありません(まるごとバックアップのファイルではありません)")
-        }
+        if (!staged) throw IllegalArgumentException("ZIP の中に obb.db がありません(まるごとバックアップのファイルではありません)")
         // SharedPreferences のファイルがあれば、設定もそこから戻る(settings.json はそれのない古い ZIP のため)
         return if (pendingPrefs.isDirectory) null else settings
     }

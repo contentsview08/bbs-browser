@@ -823,10 +823,12 @@ fun NgEditSheet(
                         Switch(r.enabled, { r = r.copy(enabled = it) }, colors = accentSwitchColors())
                     }
                     // 効く板・期限は選択肢が多いのでドロップダウンで(お気に入り板から選べる)
+                    // 選択肢と今の値は同じ付け方の名前にする(開いている板は「(開いている板)」付き。選んでいる印はこの名前で比べる)
+                    fun boardLabel(url: String, name: String) = if (board != null && url == board.first) "$name(開いている板)" else name
                     PickerRow(
-                        "効く板", r.boardUrl?.let { u -> boardOptions.firstOrNull { it.first == u }?.second ?: u } ?: "すべての板",
+                        "効く板", r.boardUrl?.let { u -> boardOptions.firstOrNull { it.first == u }?.let { boardLabel(it.first, it.second) } ?: u } ?: "すべての板",
                         listOf<Pair<String, () -> Unit>>("すべての板" to { r = r.copy(boardUrl = null, boardName = null) }) +
-                            boardOptions.map { (url, name) -> (if (board != null && url == board.first) "$name(開いている板)" else name) to { r = r.copy(boardUrl = url, boardName = name) } },
+                            boardOptions.map { (url, name) -> boardLabel(url, name) to { r = r.copy(boardUrl = url, boardName = name) } },
                     )
                     val t = io.github.contentsview08.obb.data.today()
                     val spans = listOf("今日だけ" to 0L, "3 日" to 3L, "7 日" to 7L, "30 日" to 30L, "90 日" to 90L)
@@ -1165,8 +1167,9 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
 
 @Composable
 private fun BackupPage(vm: AppViewModel) {
-    // 設定だけの JSON のバックアップは画面から外した(まるごとバックアップと取り違えるため)。読む側は配色のファイルのために残す(PC 版の設定・NG のファイルも読める)
-    val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
+    // 設定だけの JSON のバックアップは画面から外した(まるごとバックアップと取り違えるため)。前の版の設定・NG の JSON は「前の版の設定を読み込む」から
+    val loadOld = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
+    val loadScheme = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importScheme(uri) }
     val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
     val loadChmate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importChmate(uri) }
     val saveFull = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> if (uri != null) vm.exportFullBackup(uri) }
@@ -1174,12 +1177,12 @@ private fun BackupPage(vm: AppViewModel) {
     var confirmFullRestore by remember { mutableStateOf(false) }
     Group("まるごとバックアップ", note = "ログ・既読・お気に入り・書き込み履歴・自分のレスの印・アカウント・設定・NG・書き込みの認証の状態(Cookie)を 1 つの ZIP に書き出します。アカウントのパスワードや認証の状態も入るので、ファイルの置き場所に気をつけてください。戻すときはアプリを一度閉じ、開き直すとその状態になります。いまの DB は消さずに別の名前で残します") {
         ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
-        ActionRow("まるごと戻す…") { confirmFullRestore = true }
+        ActionRow("まるごと戻す…", danger = true) { confirmFullRestore = true }
+        ActionRow("前の版の設定・NG の JSON を読み込む") { loadOld.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
-    Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものや、「バックアップから戻す」で選んだ配色のファイルも読めます)") {
+    Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものも読めます)") {
         if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
-        ActionRow("配色を読み込む") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
-        // 前の版で書き出した設定・NG の JSON も、ここから読める(読む側は残してある)
+        ActionRow("配色を読み込む") { loadScheme.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
     var confirmReset by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1202,7 +1205,7 @@ private fun BackupPage(vm: AppViewModel) {
         }
     }
     Group("はじめの状態に戻す", note = "ログ・既読・お気に入り・書き込み履歴・設定・NG・アカウント・画像のキャッシュをすべて消し、入れたばかりの状態に戻します(アプリは閉じます)。戻す前に「まるごと書き出す」で控えを取れます") {
-        ActionRow("はじめの状態に戻す…") { confirmReset = true }
+        ActionRow("はじめの状態に戻す…", danger = true) { confirmReset = true }
     }
     if (confirmReset) AlertDialog(
         onDismissRequest = { confirmReset = false },

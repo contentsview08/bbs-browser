@@ -441,9 +441,27 @@ class Prefs(context: Context) {
         val by = rules.associateBy { it.id }
         saveNg(ngRules.map { by[it.id] ?: it })
     }
-    /** 期限切れの片づけ。手元からだけ消す */
+    /** 期限切れの片づけ。手元からだけ消す。消したものがあれば true */
     @Synchronized
-    fun dropExpiredNg(today: String) = saveNg(ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today })
+    fun dropExpiredNg(today: String): Boolean {
+        val kept = ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today }
+        if (kept.size == ngRules.size) return false
+        saveNg(kept)
+        return true
+    }
+    /** まとめて足す(同じものは重ねない。1 回で保存する)。足した数を返す */
+    @Synchronized
+    fun addNgAll(rules: List<NgRule>): Int {
+        val next = ArrayList(ngRules)
+        var added = 0
+        for (r in rules) {
+            if (r.pattern.isBlank() || next.any { it.sameAs(r) }) continue
+            next += r
+            added++
+        }
+        if (added > 0) saveNg(next)
+        return added
+    }
 
     /** 同期の適用。今の値に重ねて、操作として積まない */
     @Synchronized
@@ -603,6 +621,8 @@ class Prefs(context: Context) {
         private val NOT_IN_BACKUP = setOf(
             "lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId",
             "boardVisits", "recentBoards", "newThreadDrafts",
+            // 畳んでいるキーワードの帯は端末ごと(PC も keywordBandsCollapsed を書き出さない)
+            "keywordBandsCollapsed",
             // 画像の保存先は端末ごと(PC も imageSaveDir・imageSaveName を書き出さない)
             "imageSaveBase", "imageSaveName",
         )

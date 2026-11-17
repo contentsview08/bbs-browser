@@ -221,6 +221,8 @@ private fun NgTabList(
     // 長押しした行(範囲のはじまり)と、長押ししたときの選択(範囲はこれに足す)
     var anchor by remember { mutableStateOf<Int?>(null) }
     var base by remember { mutableStateOf(setOf<String>()) }
+    // 長押しから指を離したときの up が行の押し(clickable)として届くと、選んだ行をすぐ外してしまう。長押しの直後の押しは捨てる
+    var ignoreClickUntil by remember { mutableStateOf(0L) }
     fun indexAt(y: Float): Int? = listState.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }?.index?.takeIf { it < rules.size }
     fun extendTo(i: Int) {
         val a = anchor ?: return
@@ -262,8 +264,8 @@ private fun NgTabList(
                     indexAt(fingerY)?.let { extendTo(it) }
                     updateAutoScroll()
                 },
-                onDragEnd = { anchor = null; fingerY = -1f; autoScroll = 0f },
-                onDragCancel = { anchor = null; fingerY = -1f; autoScroll = 0f },
+                onDragEnd = { anchor = null; fingerY = -1f; autoScroll = 0f; ignoreClickUntil = System.currentTimeMillis() + 400 },
+                onDragCancel = { anchor = null; fingerY = -1f; autoScroll = 0f; ignoreClickUntil = System.currentTimeMillis() + 400 },
             )
         },
         state = listState,
@@ -271,7 +273,10 @@ private fun NgTabList(
         items(rules, key = { it.id }) { r ->
             NgListRow(
                 r, today, selected = r.id in selected, selecting = selecting,
-                onClick = { if (selecting) onPicked(if (r.id in selected) selected - r.id else selected + r.id) else onEdit(r) },
+                onClick = {
+                    if (anchor != null || System.currentTimeMillis() < ignoreClickUntil) return@NgListRow
+                    if (selecting) onPicked(if (r.id in selected) selected - r.id else selected + r.id) else onEdit(r)
+                },
                 onEnabled = { onEnabled(r, it) },
             )
         }

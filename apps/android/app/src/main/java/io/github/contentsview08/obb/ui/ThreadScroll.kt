@@ -455,7 +455,8 @@ class ThreadScroller(
         val posts = page.index.posts
         // 最後のレスが下端まで見えていれば、その下の行(-END-・次スレの案内)が長くても一番下に着いたことにする
         val lastNo = posts.lastOrNull()?.no ?: 0
-        val lastPostShown = lastNo > 0 && items.any { it.key == lastNo && it.offset + it.size <= end }
+        // ツリー表示は番号の順に並ばない(最後の番号のレスが途中に出る)ので、この判定は番号の順のときだけ
+        val lastPostShown = !tree() && lastNo > 0 && items.any { it.key == lastNo && it.offset + it.size <= end }
         ctl.atBottom = !state.canScrollForward || rest < bottomPx || lastPostShown
         noteSeen()
         // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)

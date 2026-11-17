@@ -189,7 +189,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val collapsedBands = remember(vm.prefs.keywordBandsCollapsed) { vm.prefs.keywordBandsCollapsed.split('\n').filter { it.isNotBlank() }.toSet() }
     /** 画面の行: キーワードのまとまりの帯と、見せるスレ。畳んだまとまりは帯だけ */
     val favKeys = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
-    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
+    // 帯の「+N」は既読で変わるので、帯を出すときは既読の記録もきっかけにする(並びは unreadTop の控えで保っているので、読んでも並べ直されない)
+    val bandStates = if (hasKeywords && (keywordBands || (tab ?: defaultTab(sort)) == ListTab.KEYWORD)) page.states else null
+    val rows: List<ListRow> = remember(page.threads, statesKey, bandStates, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -457,7 +459,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 for (t in tabs) {
                     // タブを選んでいないときは、設定の並びのタブを選んでいる(PC 版と同じ)
                     val active = tab == t || (tab == null && t == defaultTab(sort))
-                    val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED
+                    val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED || t == ListTab.KEYWORD
                     Box(
                         Modifier.clickable {
                             when {

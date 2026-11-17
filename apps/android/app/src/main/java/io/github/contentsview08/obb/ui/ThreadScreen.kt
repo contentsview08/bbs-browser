@@ -221,7 +221,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         )
     }.orEmpty()
     // 名前と本文は、そのままの文字で足すことがまずないので(ワッチョイの一部・言葉の一部)、いつも編集の板を開いて直してから足す。ID だけはその場で足せる
-    fun nameNgItems(p: Post) = listOf(
+    fun nameNgItems(p: Post) = if (p.name.isBlank()) emptyList() else listOf(
         MenuItem("この名前を NG に…", Icons.Filled.Block) { ngAdding = NgRule("posterName", p.name) },
     )
     /** 本文の言葉の NG: 1 行目を入れた下書きを開き、言葉を直して(正規表現・期限・板も決めて)足す */

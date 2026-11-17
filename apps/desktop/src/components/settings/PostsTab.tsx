@@ -20,7 +20,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <Choice
           value={s.openPosition}
           options={[
-            { key: 'unread', name: '最初の未読' },
+            { key: 'unread', name: '前回読んだところ' },
             { key: 'top', name: '先頭' },
             { key: 'bottom', name: '末尾' },
           ]}

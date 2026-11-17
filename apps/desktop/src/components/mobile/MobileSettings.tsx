@@ -327,7 +327,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               label="開く位置"
               value={s.openPosition}
               options={[
-                { key: 'unread', name: '最初の未読', desc: 'まだ読んでいないレスの頭から' },
+                { key: 'unread', name: '前回読んだところ', desc: '前回読んだところの続き(ここから未読の線)から' },
                 { key: 'top', name: '先頭' },
                 { key: 'bottom', name: 'いちばん下' },
               ]}

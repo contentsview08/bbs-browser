@@ -60,7 +60,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'halfUp', name: '半画面上へ', where: 'view' },
   { key: 'top', name: '先頭へ', where: 'view' },
   { key: 'bottom', name: '一番下へ', where: 'view' },
-  { key: 'unread', name: '最初の未読へ', where: 'view' },
+  { key: 'unread', name: '前回読んだところへ', where: 'view' },
   { key: 'refresh', name: '更新', where: 'view' },
   { key: 'search', name: '検索', where: 'view' },
   { key: 'reply', name: '書き込み欄へ(スレ一覧ではスレ立て)', where: 'view' },

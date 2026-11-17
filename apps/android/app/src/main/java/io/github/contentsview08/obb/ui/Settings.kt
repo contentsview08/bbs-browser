@@ -717,7 +717,7 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     var adding by remember { mutableStateOf(false) }
     val today = io.github.contentsview08.obb.data.today()
-    Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
+    Group("一覧", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
         // 一覧は長くなるので、設定の中に埋め込まず 1 つの画面で(種類のタブ・検索・長押しとなぞりで選んでまとめて操作)
         NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG の一覧", desc = "種類ごとのタブと検索。行を長押しして選び、なぞって範囲を選べます", value = "${p.ngRules.size} 件") { open("nglist") }
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
@@ -785,12 +785,6 @@ fun NgEditSheet(
         r.boardUrl?.let { u -> if (list.none { it.first == u }) list += u to (r.boardName ?: u) }
         list
     }
-    @Composable fun chip(label: String, on: Boolean, onClick: () -> Unit) = Text(
-        label,
-        Modifier.clip(RoundedCornerShape(50)).border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
-            .background(if (on) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
-        color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, maxLines = 1,
-    )
     FullWindow(onDismiss = onDismiss) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { onDismiss() },
@@ -804,11 +798,16 @@ fun NgEditSheet(
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                     Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Palette.borderStrong))
                 }
-                Text(if (isNew) "NG を足す" else "NG を直す", Modifier.padding(start = 18.dp, top = 10.dp, bottom = 6.dp), color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                // 有効のスイッチは一番上(題の横)
+                Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (isNew) "NG を足す" else "NG を直す", Modifier.weight(1f), color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("有効", color = Palette.textBody, fontSize = 14.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Switch(r.enabled, { r = r.copy(enabled = it) }, colors = accentSwitchColors())
+                }
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for ((k, label) in io.github.contentsview08.obb.data.NG_TARGETS) chip(label, r.target == k) { r = r.copy(target = k) }
-                    }
+                    // 何を NG にするかもドロップダウン(本文・名前・ID・スレタイ)
+                    PickerRow("種類", io.github.contentsview08.obb.data.ngTargetName(r.target), io.github.contentsview08.obb.data.NG_TARGETS.map { (k, label) -> label to { r = r.copy(target = k) } })
                     OutlinedTextField(
                         r.pattern, { r = r.copy(pattern = it) }, Modifier.fillMaxWidth(), isError = err != null,
                         placeholder = { Text(if (r.isRegex) "正規表現(例: ^ｷﾀ━+|ｗ{5,})" else "NG にする言葉") },
@@ -820,10 +819,6 @@ fun NgEditSheet(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("正規表現", Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
                         Switch(r.isRegex, { r = r.copy(isRegex = it) }, colors = accentSwitchColors())
-                        Spacer(Modifier.width(16.dp))
-                        Text("有効", color = Palette.textBody, fontSize = 14.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Switch(r.enabled, { r = r.copy(enabled = it) }, colors = accentSwitchColors())
                     }
                     // 効く板・期限は選択肢が多いのでドロップダウンで(お気に入り板から選べる)
                     // 選択肢と今の値は同じ付け方の名前にする(開いている板は「(開いている板)」付き。選んでいる印はこの名前で比べる)

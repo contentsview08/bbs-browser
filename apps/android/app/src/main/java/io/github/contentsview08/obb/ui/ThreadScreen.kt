@@ -926,7 +926,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ),
                 listOf(
                     MenuItem("NG", Icons.Filled.Block, children = listOf(
-                        MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("threadTitle", page.title)) },
+                        MenuItem("スレタイを NG に…", Icons.Filled.Block, danger = true) { ngAdding = NgRule("threadTitle", page.title) },
                     )) {},
                     MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() },
                 ),
@@ -963,6 +963,18 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     listOfNotNull(
                         if (anchorTreeOf(p.no).size > 1) MenuItem("アンカーツリーを表示", Icons.Filled.AccountTree) { openAnchorTree(p.no) } else null,
                     ),
+                // すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
+                listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p).let { hits ->
+                    (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p)) +
+                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else nameNgItems(p)) +
+                        ngOffItems(hits?.body.orEmpty(), "本文", null) +
+                        wordNgItem(p)
+                } +
+                vm.aiRulesFor(page).map { r ->
+                    val on = page.aiNg[p.no]?.rule?.id == r.id
+                    if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
+                    else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology) { vm.markAi(p, r.id, true) }
+                }) {}),
                 listOf(
                     MenuItem("ヘッダ含めてコピー", Icons.Filled.ContentCopy) {
                         copyText(context, "${p.no} ${p.name} ${p.date}${p.id?.let { " ID:$it" } ?: ""}\n${p.body}"); vm.toast = "コピーしました"
@@ -989,18 +1001,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group) { vm.markOwn(page, p, own = true, sameId = true) },
                     )
                 },
-                // すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
-                listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p).let { hits ->
-                    (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p)) +
-                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else nameNgItems(p)) +
-                        ngOffItems(hits?.body.orEmpty(), "本文", null) +
-                        wordNgItem(p)
-                } +
-                vm.aiRulesFor(page).map { r ->
-                    val on = page.aiNg[p.no]?.rule?.id == r.id
-                    if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
-                    else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology) { vm.markAi(p, r.id, true) }
-                }) {}),
             ),
             MenuAt.Center,
             // 名前を省略して出しているときも、長押しで書いた人と日時が分かるように

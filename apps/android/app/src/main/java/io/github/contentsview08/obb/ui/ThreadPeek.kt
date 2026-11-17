@@ -229,14 +229,11 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
     LaunchedEffect(t.id) { fav = vm.isFavoriteThread(t) }
     if (confirmDel) { ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLogOf(t) }) { confirmDel = false; onDismiss() }; return }
     ngDraft?.let { draft ->
-        var word by remember(t.id) { mutableStateOf(draft) }
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("スレタイを NG") },
-            text = { OutlinedTextField(word, { word = it }, label = { Text("この言葉を含むスレを一覧に出さない") }) },
-            confirmButton = { TextButton(onClick = { if (word.isNotBlank()) vm.addNg(NgRule("threadTitle", word.trim())); onDismiss() }) { Text("NG に足す") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
-        )
+        // スレタイはそのまま足すことがまずないので(言葉まで削る・正規表現にする)、編集の板で直してから足す
+        NgEditSheet(NgRule("threadTitle", draft), t.boardUrl to (vm.favorites.firstOrNull { it.url == t.boardUrl }?.name ?: t.boardUrl), isNew = true, onDismiss = onDismiss, boards = vm.favorites.map { it.url to it.name }) {
+            vm.addNg(it)
+            onDismiss()
+        }
         return
     }
 
@@ -295,7 +292,7 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
     val ngItems = listOfNotNull(
         // authorId はエッヂ・hono-bbs の ID、subject.txt のスレタイの後ろの [ID]。ID の NG なので、立てたスレも書いたレスも隠れる
         t.authorId?.let { a -> MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("posterId", a)); vm.toast = "立てた人を NG にしました"; close() } },
-        MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
+        MenuItem("スレタイを NG に…", Icons.Filled.Block, danger = true) { ngDraft = t.title },
     )
     // キーワードに登録: スレタイで(削って登録する)・立てた人で。どちらも確かめる画面を出してから登録する(PC の KeywordDialog と同じ)
     val keywordItems = listOfNotNull(

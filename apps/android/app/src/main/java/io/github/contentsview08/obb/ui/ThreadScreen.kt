@@ -943,7 +943,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     if (ngEditing != null) {
         val r = ngEditing!!
-        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = false, onDismiss = { ngEditing = null }, onDelete = { vm.removeNg(r); ngEditing = null }) { vm.saveNg(it); ngEditing = null }
+        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = false, onDismiss = { ngEditing = null }, onDelete = { vm.removeNg(r); ngEditing = null }, boards = vm.favorites.map { it.url to it.name }) { vm.saveNg(it); ngEditing = null }
     }
 
     postMenu?.let { p ->
@@ -1025,7 +1025,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { headMenu = null }
     }
     ngAdding?.let { r ->
-        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = true, onDismiss = { ngAdding = null }) { vm.addNg(it); ngAdding = null }
+        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = true, onDismiss = { ngAdding = null }, boards = vm.favorites.map { it.url to it.name }) { vm.addNg(it); ngAdding = null }
     }
 
     if (gallery) GalleryPanel(index.allImages, onOpen = { viewerPost = null; viewer = it }, save = { urls ->

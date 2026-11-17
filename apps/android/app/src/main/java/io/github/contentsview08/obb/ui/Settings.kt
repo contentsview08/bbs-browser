@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
@@ -713,6 +714,13 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     var adding by remember { mutableStateOf(false) }
     val today = io.github.contentsview08.obb.data.today()
+    Group {
+        // 一覧は長くなるので、設定の中に埋め込まず 1 つの画面で(種類のタブ・検索・長押しとなぞりで選んでまとめて操作)
+        NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG の一覧", desc = "種類ごとのタブと検索。行を長押しして選び、なぞって範囲を選べます", value = "${p.ngRules.size} 件") { open("nglist") }
+        ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
+        val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
+        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }
+    }
     Group("見せ方") {
         ChoiceRow("NG のレス", p.ngMode, listOf("aborn" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngMode = it }
         SwitchRow("2 つ以上続いたあぼーんを 1 行にまとめる", p.groupNg, desc = "「あぼーん × 12(NG 12)」のように出します。押すと 1 つずつのあぼーんに広がり、そこから中身を見られます") { p.groupNg = it }
@@ -720,20 +728,37 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
         AiNgSettings(vm)
     }
-    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
-        // 一覧は長くなるので、設定の中に埋め込まず 1 つの画面で(種類のタブ・検索・長押しとなぞりで選んでまとめて操作)
-        NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG の一覧", desc = "種類ごとのタブと検索。行を長押しして選び、なぞって範囲を選べます", value = "${p.ngRules.size} 件") { open("nglist") }
-        ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
-        val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
-        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }
-    }
+    Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {}
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {
         is io.github.contentsview08.obb.Page.Thread -> pg.summary.boardUrl to (vm.favorites.firstOrNull { it.url == pg.summary.boardUrl }?.name ?: pg.summary.boardUrl)
         is io.github.contentsview08.obb.Page.Threads -> pg.board.url to pg.board.name
         else -> null
     }
-    if (adding) NgEditSheet(NgRule("content", ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
+    if (adding) NgEditSheet(NgRule("content", ""), board, isNew = true, onDismiss = { adding = false }, boards = vm.favorites.map { it.url to it.name }) { vm.saveNg(it); adding = false }
+}
+
+/** 名前と今の値を 1 行に出し、押すとドロップダウンで選ぶ(NG の効く板・期限) */
+@Composable
+private fun PickerRow(label: String, value: String, options: List<Pair<String, () -> Unit>>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, Palette.border, RoundedCornerShape(8.dp)).clickable { open = true }.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, color = Palette.textMuted, fontSize = 12.sp)
+            Spacer(Modifier.width(12.dp))
+            Text(value, Modifier.weight(1f), color = Palette.textStrong, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(Icons.Filled.ArrowDropDown, null, tint = Palette.textMuted)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for ((name, pick) in options) androidx.compose.material3.DropdownMenuItem(
+                text = { Text(name, color = if (name == value) Palette.accent else Palette.textBody, fontSize = 14.sp) },
+                onClick = { open = false; pick() },
+            )
+        }
+    }
 }
 
 /**
@@ -741,11 +766,23 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
  * hono-bbs の web・PC 版の NgEditor と同じ項目・同じ言葉
  */
 @Composable
-fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null, onSave: (NgRule) -> Unit) {
+fun NgEditSheet(
+    initial: NgRule, board: Pair<String, String>?, isNew: Boolean, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null,
+    /** 「効く板」で選べる板(お気に入り板。URL と名前)。開いている板(board)はなくても選べる */
+    boards: List<Pair<String, String>> = emptyList(),
+    onSave: (NgRule) -> Unit,
+) {
     var r by remember { mutableStateOf(initial) }
     var sample by remember { mutableStateOf("") }
     val err = if (r.pattern.isBlank()) null else io.github.contentsview08.obb.data.ngPatternError(r.pattern.trim(), r.isRegex)
-    val scope = r.boardUrl?.let { it to (r.boardName ?: it) } ?: board
+    // 効く板の選択肢: すべての板・開いている板・お気に入り板(・今選んでいる板がそのどれでもなければそれも)
+    val boardOptions = remember(board, boards, r.boardUrl) {
+        val list = ArrayList<Pair<String, String>>()
+        if (board != null) list += board
+        for (b in boards) if (list.none { it.first == b.first }) list += b
+        r.boardUrl?.let { u -> if (list.none { it.first == u }) list += u to (r.boardName ?: u) }
+        list
+    }
     @Composable fun chip(label: String, on: Boolean, onClick: () -> Unit) = Text(
         label,
         Modifier.clip(RoundedCornerShape(50)).border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
@@ -786,22 +823,20 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
                         Spacer(Modifier.width(8.dp))
                         Switch(r.enabled, { r = r.copy(enabled = it) }, colors = accentSwitchColors())
                     }
-                    Text("効く板", color = Palette.textMuted, fontSize = 12.sp)
-                    Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        chip("すべての板", r.boardUrl == null) { r = r.copy(boardUrl = null, boardName = null) }
-                        scope?.let { (url, name) -> chip("この板だけ($name)", r.boardUrl != null) { r = r.copy(boardUrl = url, boardName = name) } }
-                    }
-                    Text("期限", color = Palette.textMuted, fontSize = 12.sp)
-                    Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val t = io.github.contentsview08.obb.data.today()
-                        val w = io.github.contentsview08.obb.data.daysLater(7)
-                        val m = io.github.contentsview08.obb.data.daysLater(30)
-                        chip("ずっと", r.expiresOnDate == null) { r = r.copy(expiresOnDate = null) }
-                        chip("今日だけ", r.expiresOnDate == t) { r = r.copy(expiresOnDate = t) }
-                        chip("7 日", r.expiresOnDate == w) { r = r.copy(expiresOnDate = w) }
-                        chip("30 日", r.expiresOnDate == m) { r = r.copy(expiresOnDate = m) }
-                        if (r.expiresOnDate != null && r.expiresOnDate !in listOf(t, w, m)) chip("${r.expiresOnDate} まで", true) {}
-                    }
+                    // 効く板・期限は選択肢が多いのでドロップダウンで(お気に入り板から選べる)
+                    PickerRow(
+                        "効く板", r.boardUrl?.let { u -> boardOptions.firstOrNull { it.first == u }?.second ?: u } ?: "すべての板",
+                        listOf<Pair<String, () -> Unit>>("すべての板" to { r = r.copy(boardUrl = null, boardName = null) }) +
+                            boardOptions.map { (url, name) -> (if (board != null && url == board.first) "$name(開いている板)" else name) to { r = r.copy(boardUrl = url, boardName = name) } },
+                    )
+                    val t = io.github.contentsview08.obb.data.today()
+                    val spans = listOf("今日だけ" to 0L, "3 日" to 3L, "7 日" to 7L, "30 日" to 30L, "90 日" to 90L)
+                    val expiryLabel = r.expiresOnDate?.let { d -> if (d == t) "今日だけ" else spans.firstOrNull { io.github.contentsview08.obb.data.daysLater(it.second) == d }?.first ?: "$d まで" } ?: "ずっと"
+                    PickerRow(
+                        "期限", expiryLabel,
+                        listOf<Pair<String, () -> Unit>>("ずっと" to { r = r.copy(expiresOnDate = null) }) +
+                            spans.map { (label, days) -> label to { r = r.copy(expiresOnDate = if (days == 0L) t else io.github.contentsview08.obb.data.daysLater(days)) } },
+                    )
                     OutlinedTextField(r.note ?: "", { r = r.copy(note = it.ifEmpty { null }) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("メモ(なぜ NG にしたか)") })
                     // 試し: 文を入れると、当たる所に色が付く
                     val ranges = if (err == null) io.github.contentsview08.obb.data.ngMatchRanges(r.copy(pattern = r.pattern.trim()), sample) else emptyList()
@@ -1400,11 +1435,31 @@ internal fun ChoiceRow(label: String, value: String, options: List<Pair<String, 
  */
 @Composable
 internal fun SegmentRow(label: String, value: String, options: List<Pair<String, String>>, onChange: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(label, Modifier.padding(bottom = 8.dp), color = Palette.textStrong, fontSize = 15.sp)
-        Segmented(options, value, onPick = onChange)
-        val note = options.firstOrNull { it.first == value }?.second?.takeIf { '(' in it }?.substringAfter('(')?.removeSuffix(")")
-        if (note != null) Text(note, Modifier.padding(top = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
+    // 排他の選択は、つながった切り替えボタンではなくドロップダウンで(選択肢の名前が長くても収まり、ほかの設定の行と同じ見え方)。
+    // 選択肢の「(説明)」は、選んでいるものの説明として行の下に出す
+    var open by remember { mutableStateOf(false) }
+    val current = options.firstOrNull { it.first == value }?.second ?: value
+    val note = current.takeIf { '(' in it }?.substringAfter('(')?.removeSuffix(")")
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+                Text(current.substringBefore('('), color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
+                Icon(Icons.Filled.ArrowDropDown, null, tint = Palette.textMuted)
+            }
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for ((k, name) in options) androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(name.substringBefore('('), color = if (k == value) Palette.accent else Palette.textBody, fontSize = 14.sp)
+                            name.takeIf { '(' in it }?.let { Text(it.substringAfter('(').removeSuffix(")"), color = Palette.textMuted, fontSize = 11.sp) }
+                        }
+                    },
+                    onClick = { open = false; onChange(k) },
+                )
+            }
+        }
+        if (note != null) Text(note, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp), color = Palette.textMuted, fontSize = 12.sp)
     }
 }
 

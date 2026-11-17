@@ -451,17 +451,20 @@ class ThreadScroller(
         val lastItem = info.visibleItemsInfo.firstOrNull { it.key == "end" }
             ?: info.visibleItemsInfo.lastOrNull()?.takeIf { it.index == info.totalItemsCount - 1 }
         val rest = if (lastItem != null) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
-        ctl.atBottom = !state.canScrollForward || rest < bottomPx
-        noteSeen()
         val page = ctl.page
+        val posts = page.index.posts
+        // 最後のレスが下端まで見えていれば、その下の行(-END-・次スレの案内)が長くても一番下に着いたことにする
+        val lastNo = posts.lastOrNull()?.no ?: 0
+        val lastPostShown = lastNo > 0 && items.any { it.key == lastNo && it.offset + it.size <= end }
+        ctl.atBottom = !state.canScrollForward || rest < bottomPx || lastPostShown
+        noteSeen()
         // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
         val filtering = page.filter != null || (page.searching && page.query.isNotBlank())
-        val posts = page.index.posts
         // 途切れの判定に使う「あるレス」: 並んでいる行(透明あぼーん・まとめたあぼーんで行のないレスは飛ばしてよい)。
         // 絞り込み中は全部(絞って消えたレスを飛ばして既読にしない)
         val exists = if (filtering) posts.mapTo(HashSet()) { it.no } else shown().filterTo(HashSet()) { it > 0 }
         // 実況モードでまだ出していないレスは読んでいない
-        val top = minOf(posts.lastOrNull()?.no ?: 0, if (tree()) Int.MAX_VALUE else ctl.liveLimit)
+        val top = minOf(lastNo, if (tree()) Int.MAX_VALUE else ctl.liveLimit)
         val from = maxOf(ctl.sent, page.readNo)
         val last = if (ctl.counting()) readHead(from, top, ctl.seen, exists, atBottom = ctl.atBottom && !filtering) else from
         val first = items.firstOrNull { it.offset + it.size > 0 }

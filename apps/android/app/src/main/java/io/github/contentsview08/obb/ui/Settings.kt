@@ -714,7 +714,7 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     var adding by remember { mutableStateOf(false) }
     val today = io.github.contentsview08.obb.data.today()
-    Group {
+    Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
         // 一覧は長くなるので、設定の中に埋め込まず 1 つの画面で(種類のタブ・検索・長押しとなぞりで選んでまとめて操作)
         NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG の一覧", desc = "種類ごとのタブと検索。行を長押しして選び、なぞって範囲を選べます", value = "${p.ngRules.size} 件") { open("nglist") }
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
@@ -728,7 +728,6 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
         AiNgSettings(vm)
     }
-    Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {}
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {
         is io.github.contentsview08.obb.Page.Thread -> pg.summary.boardUrl to (vm.favorites.firstOrNull { it.url == pg.summary.boardUrl }?.name ?: pg.summary.boardUrl)
@@ -1399,39 +1398,30 @@ private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> 
 
 @Composable
 internal fun ChoiceRow(label: String, value: String, options: List<Pair<String, String>>, onChange: (String) -> Unit) {
+    // 1 つを選ぶ項目はどれもドロップダウン(SegmentRow と同じ見え方。窓を開かずにその場で選べる)
     var open by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
-        Text(options.firstOrNull { it.first == value }?.second ?: value, color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
-    }
-    if (open) {
-        AlertDialog(
-            onDismissRequest = { open = false },
-            title = { Text(label) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    for ((k, name) in options) {
-                        val on = k == value
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (on) Palette.accentWash else Color.Transparent)
-                                .clickable { onChange(k); open = false }.heightIn(min = 46.dp).padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(name, Modifier.weight(1f), color = if (on) Palette.accent else Palette.textBody, fontSize = 15.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
-                            if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { open = false }) { Text("閉じる") } },
-        )
+    Box(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+            Text(options.firstOrNull { it.first == value }?.second ?: value, color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
+            Icon(Icons.Filled.ArrowDropDown, null, tint = Palette.textMuted)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for ((k, name) in options) {
+                val on = k == value
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(name, color = if (on) Palette.accent else Palette.textBody, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal) },
+                    trailingIcon = if (on) ({ Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(18.dp)) }) else null,
+                    onClick = { onChange(k); open = false },
+                )
+            }
+        }
     }
 }
 
 /**
- * 少ない選択肢から 1 つを選ぶ行。名前の下に切り替えボタンを置き、押さずに今の値と他の候補が見えるようにする。
- * 括弧の中の説明(例: 日時の見本)は、選んでいるものの分だけ下に添える
+ * 少ない選択肢から 1 つを選ぶ行(ドロップダウン)。選択肢の名前の括弧の中(例: 日時の見本)は説明として扱い、
+ * 選んでいるものの分だけ行の下に添える(ChoiceRow は名前をそのまま出す)
  */
 @Composable
 internal fun SegmentRow(label: String, value: String, options: List<Pair<String, String>>, onChange: (String) -> Unit) {

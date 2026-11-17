@@ -381,6 +381,18 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         bottom = with(density) { bars.bottomHeight.toDp() } + 24.dp,
                     ),
                 ) {
+                    // 絞り込みやタブで 1 本もないときは、何もない一覧ではなく理由を出す
+                    if (rows.isEmpty() && page.threads.isNotEmpty()) item(key = "empty", contentType = 2) {
+                        val why = when {
+                            query.isNotBlank() -> "見つかりませんでした"
+                            (tab ?: defaultTab(sort)) == ListTab.KEYWORD -> if (hasKeywords) "キーワードに当たるスレはありません" else "キーワードがまだありません。設定 → スレ一覧 → キーワードで足せます"
+                            tab == ListTab.UNREAD -> "未読のスレはありません"
+                            tab == ListTab.VISITED -> "開いたスレはありません"
+                            page.only == "new" -> "前回見たあとに立ったスレはありません"
+                            else -> "スレはありません"
+                        }
+                        Text(why, Modifier.fillMaxWidth().padding(32.dp), color = Palette.textMuted, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
                     items(rows, key = { r -> if (r is ListRow.Band) "band:${r.band.label}" else (r as ListRow.Thread).t.key }, contentType = { if (it is ListRow.Band) 1 else 0 }) { r ->
                         if (r is ListRow.Band) {
                             KeywordBand(

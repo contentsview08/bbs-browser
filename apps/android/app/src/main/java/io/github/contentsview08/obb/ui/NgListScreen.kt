@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -211,6 +212,8 @@ private fun NgTabList(
 ) {
     val listState: LazyListState = rememberLazyListState()
     val view = androidx.compose.ui.platform.LocalView.current
+    // pointerInput のラムダは rules が変わるまで作り直されないので、選択は最新のものを参照で読む
+    val selectedNow by rememberUpdatedState(selected)
     var heightPx by remember { mutableStateOf(0) }
     // なぞっている間の指の位置(y。px)と、端での自動スクロールの速さ(px / コマ。0 なら止まっている)
     var fingerY by remember { mutableFloatStateOf(-1f) }
@@ -249,7 +252,7 @@ private fun NgTabList(
                     Haptics.longPress(view)
                     anchor = i
                     val id = rules[i].id
-                    base = if (id in selected) selected - id else selected + id
+                    base = if (id in selectedNow) selectedNow - id else selectedNow + id
                     onPicked(base)
                     fingerY = pos.y
                 },

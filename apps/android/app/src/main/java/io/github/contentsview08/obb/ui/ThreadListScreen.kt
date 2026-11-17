@@ -161,6 +161,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var menu by remember { mutableStateOf(false) }
     val now = remember(page.threads) { System.currentTimeMillis() }
     val listState = page.listState
+    // タブを切り替えたら先頭から(前の位置のままだと、上に増えた分が隠れて見落とす)
+    var lastTab by remember(page) { mutableStateOf(page.tab) }
+    LaunchedEffect(page.tab) { if (page.tab != lastTab) { lastTab = page.tab; listState.scrollToItem(0) } }
     val scope = rememberCoroutineScope()
     val bars = rememberHideOnScroll()
     val density = LocalDensity.current
@@ -185,7 +188,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     // 畳んでいるキーワードの帯(帯を押すと畳む・開く)
     val collapsedBands = remember(vm.prefs.keywordBandsCollapsed) { vm.prefs.keywordBandsCollapsed.split('\n').filter { it.isNotBlank() }.toSet() }
     /** 画面の行: キーワードのまとまりの帯と、見せるスレ。畳んだまとまりは帯だけ */
-    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands) {
+    val favKeys = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
+    val rows: List<ListRow> = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -212,6 +216,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
+        // お気に入りのスレは上に(キーワードの帯の中でも「その他のスレ」の中でも先頭。並びはそのまま)
+        if (favKeys.isNotEmpty()) list = list.filter { it.id in favKeys } + list.filterNot { it.id in favKeys }
         // 帯でまとめるのは、設定で入れているとき(キーワードのタブの中はいつも)
         if (!hasKeywords || !(keywordBands || onlyKeyword)) return@remember (list.filterNot { it.announcement } + list.filter { it.announcement }).map<ThreadSummary, ListRow> { ListRow.Thread(it) }
         // キーワードのまとまりの頭に帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)。

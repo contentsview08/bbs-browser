@@ -189,6 +189,8 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         // 一覧は長いので、外のスクロールに入れず自分でスクロールする
         if (sub == "licenses") { LicensesPage(); return@Column }
         androidx.compose.runtime.CompositionLocalProvider(LocalAdvanced provides (vm.prefs.showAdvanced || viaSearch)) {
+        // ページを切り替えたら先頭から(スクロールの状態を使い回すと、上の画面で下の方の項目を押して開いたページが、その分ずれた所から始まる)
+        androidx.compose.runtime.key(sub) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
             when (sub) {
                 null -> SettingsTop(vm, { sub = it; viaSearch = true }) { sub = it }
@@ -221,6 +223,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                     color = Palette.accent, fontSize = 14.sp,
                 )
             }
+        }
         }
         }
     }

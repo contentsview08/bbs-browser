@@ -449,6 +449,8 @@ function ThreadCard({
             }
           : undefined
       }
+      // PC: 省いたスレタイを、マウスを乗せると全文で(リンクの説明と同じ)
+      title={isMobile ? undefined : thread.title}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
       data-variant={variant}

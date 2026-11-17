@@ -979,7 +979,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val app = getApplication<Application>()
                 val settings = withContext(Dispatchers.IO) {
-                    app.contentResolver.openInputStream(uri)?.use { io.github.contentsview08.obb.data.FullBackup.stageRestore(app, it) } ?: throw IllegalStateException("読めませんでした")
+                    // 開けなかったときだけ失敗にする(stageRestore は、設定のファイルが ZIP に入っていて次の起動で戻るときは null を返す。それは失敗ではない)
+                    val stream = app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("読めませんでした")
+                    stream.use { io.github.contentsview08.obb.data.FullBackup.stageRestore(app, it) }
                 }
                 if (settings != null) {
                     prefs.import(settings)

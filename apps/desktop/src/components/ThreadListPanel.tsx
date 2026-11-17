@@ -614,23 +614,27 @@ export default function ThreadListPanel(props: Props) {
     if (props.keywordBands === false && filter !== 'keyword') return undefined
     const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
-    // 帯に出す新着: 見たことのあるスレの未読の合計(見ていないスレは数えない)
-    const unreadIn = (ts: ThreadSummary[]) => ts.reduce((sum, t) => sum + threadUnread(stateOf(t), t.postCount), 0)
-    const groups: { keyword: string; threads: ThreadSummary[]; unread: number }[] = []
+    const groups: { keyword: string; threads: ThreadSummary[] }[] = []
     for (const keyword of keywords) {
       const k = normalizeForSearch(keyword)
       const hits = normal.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
       hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword, threads: hits, unread: unreadIn(hits) })
+      if (hits.length > 0) groups.push({ keyword, threads: hits })
     }
     for (const a of authors) {
       const hits = normal.filter((t) => !taken.has(threadId(t)) && t.authorId === a)
       hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits, unread: unreadIn(hits) })
+      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits })
     }
     if (groups.length === 0) return undefined
     return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
-  }, [visible, props.keywords, props.keywordAuthors, stateOf, props.keywordBands, filter])
+  }, [visible, props.keywords, props.keywordAuthors, props.keywordBands, filter])
+  // 帯に出す新着(見たことのあるスレの未読の合計。見ていないスレは数えない)。既読のたびに変わるので、まとまり分けとは別に数える(まとまりは作り直さない)
+  const bandUnread = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const g of keywordGroups?.groups ?? []) m.set(g.keyword, g.threads.reduce((sum, t) => sum + threadUnread(stateOf(t), t.postCount), 0))
+    return m
+  }, [keywordGroups, stateOf])
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
@@ -1259,7 +1263,7 @@ export default function ThreadListPanel(props: Props) {
                         icon="sell"
                         label={g.keyword}
                         count={g.threads.length}
-                        unread={g.unread}
+                        unread={bandUnread.get(g.keyword)}
                         accent
                         collapsed={collapsedSet.has(g.keyword)}
                         onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined}

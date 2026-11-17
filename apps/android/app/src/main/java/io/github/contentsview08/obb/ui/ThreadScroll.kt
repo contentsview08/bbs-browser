@@ -74,8 +74,11 @@ class ThreadScrollCtl(val page: Page.Thread) {
     val seen = HashSet<Int>()
     /** 位置が決まった時刻(ms)。既読を数え始めるのは、なぞってから(untouched が外れてから)か、ここから READ_DWELL_MS 経ってから */
     var positionedAt = 0L
-    /** 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ) */
-    fun counting() = !untouched || (positionedAt > 0 && System.currentTimeMillis() - positionedAt >= READ_DWELL_MS)
+    /**
+     * 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ)。
+     * 一番下まで見えているとき(新着が 1〜2 件で全部見えた)は、開いてすぐ戻っても読んだことにする(未読の札が残らないように)
+     */
+    fun counting() = !untouched || atBottom || (positionedAt > 0 && System.currentTimeMillis() - positionedAt >= READ_DWELL_MS)
     var atBottom = false
     /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
     var pendingUnread = false

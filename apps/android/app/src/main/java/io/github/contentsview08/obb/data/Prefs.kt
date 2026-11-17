@@ -638,6 +638,12 @@ class Prefs(context: Context) {
                 is String -> e.putString(k, v)
             }
         }
+        // 前の形のキーワード(言葉の並び)しかないファイルは、今の形(keywordRules)に写して戻す(写し終えた端末では、戻すときにしか写らないため)
+        if (!o.has("keywordRules") && (o.has("keywords") || o.has("keywordAuthors"))) {
+            fun words(key: String): List<String> = o.optJSONArray(key)?.let { a -> List(a.length()) { a.optString(it) } } ?: emptyList()
+            val legacy = KeywordRule.fromLegacy(words("keywords"), words("keywordAuthors"))
+            if (legacy.isNotEmpty()) e.putString("keywordRules", KeywordRule.listToJson(legacy))
+        }
         e.commit()
         // 画面の値は Compose の状態に持っているので、読み直さないと開き直すまで前の値のまま(変えたときに前の値で上書きもしてしまう)
         withContext(Dispatchers.Main) { reloadAfterImport() }

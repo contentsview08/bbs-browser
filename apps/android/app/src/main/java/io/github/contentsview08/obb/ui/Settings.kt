@@ -472,7 +472,7 @@ private fun ThreadPage(vm: AppViewModel) {
     val p = vm.prefs
     Group("見本", note = "変えるとすぐ映ります") { SamplePosts(vm) }
     Group("開いたとき") {
-        ChoiceRow("開く位置", p.openPosition, listOf("unread" to "最初の未読", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
+        ChoiceRow("開く位置", p.openPosition, listOf("unread" to "前回読んだところ", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
     }
     // 表示スタイルのシートの「細かい表示」と同じ言葉・同じ並び。どの見た目にも効く
     Group("細かい表示") {

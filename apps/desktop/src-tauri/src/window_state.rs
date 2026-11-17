@@ -69,8 +69,9 @@ fn write(path: &Path, s: &Saved) {
     }
 }
 
-fn apply_saved(window: &WebviewWindow) {
-    let Some(saved) = path_of(window).and_then(|p| read(&p)) else { return };
+/// 覚えていた位置と大きさへ戻す。最大化していたなら true(出してからもう一度 maximize する。隠れたままの窓への maximize は効かないことがある)
+fn apply_saved(window: &WebviewWindow) -> bool {
+    let Some(saved) = path_of(window).and_then(|p| read(&p)) else { return false };
     let screens: Vec<Area> = window
         .available_monitors()
         .unwrap_or_default()
@@ -78,13 +79,14 @@ fn apply_saved(window: &WebviewWindow) {
         .map(|m| Area { x: m.position().x, y: m.position().y, width: m.size().width, height: m.size().height })
         .collect();
     if !usable(&saved, &screens) {
-        return;
+        return false;
     }
     let _ = window.set_size(PhysicalSize::new(saved.width, saved.height));
     let _ = window.set_position(PhysicalPosition::new(saved.x, saved.y));
     if saved.maximized {
         let _ = window.maximize();
     }
+    saved.maximized
 }
 
 /// 最大化したまま覚えるものがないとき(初めての起動ですぐ最大化した)に使う、元に戻したときの大きさ(tauri.conf.json の既定と同じ)
@@ -131,8 +133,12 @@ fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Sav
 /// 起動時に前回の位置と大きさへ戻して窓を出し、以後の変化を覚える。窓は tauri.conf.json で隠して作る(動いて見えないように)
 pub fn setup(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else { return };
-    apply_saved(&window);
+    let maximized = apply_saved(&window);
     let _ = window.show();
+    // 隠れている間の maximize は効かないことがあるので、出してからもう一度(前は最大化したまま閉じても次の起動で戻らなかった)
+    if maximized {
+        let _ = window.maximize();
+    }
     let Some(path) = path_of(&window) else { return };
     let current = Arc::new(Mutex::new(read(&path)));
     let generation = Arc::new(AtomicU64::new(0));

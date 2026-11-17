@@ -6,7 +6,7 @@ import { emit, emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 
-export type ToolKind = 'settings' | 'ng'
+export type ToolKind = 'settings' | 'ng' | 'keywords'
 
 /** 道具のウィンドウを開けるか(PC 版は true。web 版は false で、画面の中に出す) */
 export const canOpenToolWindow = true
@@ -22,12 +22,13 @@ export function windowLabel(): string {
 /** 今のウィンドウが道具のウィンドウなら、その種類(URL の ?window=) */
 export function toolKindOfThisWindow(): ToolKind | undefined {
   const w = new URLSearchParams(location.search).get('window')
-  return w === 'settings' || w === 'ng' ? w : undefined
+  return w === 'settings' || w === 'ng' || w === 'keywords' ? w : undefined
 }
 
 const TOOL_DEF: Record<ToolKind, { title: string; width: number; height: number }> = {
   settings: { title: '設定', width: 1000, height: 720 },
   ng: { title: 'NG の一覧', width: 960, height: 640 },
+  keywords: { title: 'キーワードの一覧', width: 960, height: 640 },
 }
 
 /** 道具のウィンドウを開く(開いていれば前に出す)。tab は設定の分類 */

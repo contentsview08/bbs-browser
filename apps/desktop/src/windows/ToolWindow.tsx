@@ -14,6 +14,7 @@ import { backupDatabase, restoreDatabase } from '../host/backup'
 import { pickChmateBackup } from '../host/chmate'
 import SettingsDialog, { type SettingsTab } from '../components/SettingsDialog'
 import NgManager from '../components/NgManager'
+import KeywordManager from '../components/KeywordManager'
 import { backgroundError } from '../utils/backgroundError'
 
 const closeWindow = () => void getCurrentWindow().close()
@@ -32,8 +33,28 @@ export default function ToolWindow() {
         <NgManager rules={settings.ngRules} onChange={(v) => update('ngRules', v, settings.ngRules)} />
       </div>
     </div>
+  ) : kind === 'keywords' ? (
+    <KeywordsWindow store={store} settings={settings} update={update} />
   ) : (
     <SettingsWindow store={store} settings={settings} update={update} />
+  )
+}
+
+/** キーワードの管理表の窓(NG の一覧と同じ作り)。「効く板」の候補にお気に入り板が要るので DB から読む */
+function KeywordsWindow({ store, settings, update }: { store: LogStore; settings: ReturnType<typeof useSettings>[0]; update: ReturnType<typeof useSettings>[1] }) {
+  const [favorites, setFavorites] = useState<Board[]>([])
+  useEffect(() => {
+    const reload = async () => setFavorites(await store.listFavorites())
+    void reload()
+    const off = onBroadcast('favorites-changed', () => void reload())
+    return () => void off.then((f) => f())
+  }, [store])
+  return (
+    <div className="h-full w-full flex flex-col bg-c-surface text-c-text-body">
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5">
+        <KeywordManager rules={settings.keywordRules} favorites={favorites.map((b) => ({ url: b.url, name: b.name }))} onChange={(v) => update('keywordRules', v, settings.keywordRules)} />
+      </div>
+    </div>
   )
 }
 

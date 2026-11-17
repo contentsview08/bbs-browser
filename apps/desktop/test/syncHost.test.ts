@@ -47,7 +47,7 @@ describe('同期の PC の部品', () => {
 
   it('開いた窓は権限の対象に入らない', () => {
     const caps = JSON.parse(readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'))
-    expect(caps.windows).toEqual(['main', 'settings', 'ng'])
+    expect(caps.windows).toEqual(['main', 'settings', 'ng', 'keywords'])
     expect(caps.remote).toBeUndefined()
   })
 

@@ -11,6 +11,14 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
 
   return (
     <>
+      <Section title="NG の一覧" note="レスの ⋯・スレの NG ボタンからも足せます。正規表現・効く板(すべて / この板だけ)・期限・メモを決められます">
+        {/* PC: 増えると設定の中では見にくいので、管理表は自分のウィンドウに出す(件数だけここに) */}
+        {canOpenToolWindow && !isMobile ? (
+          <ManagerRow label="NG の管理表を開く" note="検索・絞り込み・まとめて操作・書き出し。別のウィンドウで開きます" count={rules.length} onOpen={() => void openToolWindow('ng')} />
+        ) : (
+          <NgManager rules={rules} onChange={(v) => update('ngRules', v, rules)} />
+        )}
+      </Section>
       <Section title="NG のレス">
         <Choice
           value={s.ngMode}
@@ -43,14 +51,6 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
         <AiNgSettings settings={s} update={update} />
       </Section>
 
-      <Section title="NG の一覧" note="レスの ⋯・スレの NG ボタンからも足せます。正規表現・効く板(すべて / この板だけ)・期限・メモを決められます">
-        {/* PC: 増えると設定の中では見にくいので、管理表は自分のウィンドウに出す(件数だけここに) */}
-        {canOpenToolWindow && !isMobile ? (
-          <ManagerRow label="NG の管理表を開く" note="検索・絞り込み・まとめて操作・書き出し。別のウィンドウで開きます" count={rules.length} onOpen={() => void openToolWindow('ng')} />
-        ) : (
-          <NgManager rules={rules} onChange={(v) => update('ngRules', v, rules)} />
-        )}
-      </Section>
     </>
   )
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { clearMediaCache, mediaCacheUsage, type MediaCacheUsage } from '../../host/saveImage'
 import { ListFontSliders } from '../FontSizeSlider'
-import { NumberField, Toggle } from '../SettingParts'
+import { ManagerRow, NumberField, Toggle } from '../SettingParts'
 import KeywordManager from '../KeywordManager'
+import { isMobile } from '../../utils/platform'
+import { canOpenToolWindow, openToolWindow } from '../../host/crossWindow'
 import { BTN_PRIMARY } from '../DialogParts'
 import { type SettingsProps, Section, Choice, ListTabsEditor } from './common'
 
@@ -11,6 +13,23 @@ export function ThreadsTab({ settings: s, update, onPruneLogs, favorites }: Pick
   const [pruning, setPruning] = useState(false)
   return (
     <>
+      <Section
+        title="キーワード"
+        note="スレタイの言葉(正規表現も)や立てた人で、スレをスレ一覧の上に帯でまとめます。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を右クリックすると直せます。上に並んでいるキーワードほど先に出ます"
+      >
+        <Toggle
+          checked={s.keywordBands}
+          onChange={(v) => update('keywordBands', v)}
+          label="キーワードに当たるスレを帯で上にまとめる"
+          note="切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します"
+        />
+        {/* PC: 増えると設定の中では見にくいので、管理表は自分のウィンドウに出す(件数だけここに。NG と同じ) */}
+        {canOpenToolWindow && !isMobile ? (
+          <ManagerRow label="キーワードの管理表を開く" note="足す・直す・消す・有効と無効。別のウィンドウで開きます" count={s.keywordRules.length} onOpen={() => void openToolWindow('keywords')} />
+        ) : (
+          <KeywordManager rules={s.keywordRules} favorites={favorites.map((b) => ({ url: b.url, name: b.name }))} onChange={(v) => update('keywordRules', v)} />
+        )}
+      </Section>
       <Section title="履歴の 1 ページの件数" note="閲覧履歴・未読・お気に入りのスレの一覧をページに分けて出します(板のスレ一覧は分けません)。絞り込み・検索はページをまたいで当たります">
         <Choice
           value={s.listPageSize}
@@ -30,18 +49,6 @@ export function ThreadsTab({ settings: s, update, onPruneLogs, favorites }: Pick
           ]}
           onChange={(v) => update('listShape', v)}
         />
-      </Section>
-      <Section
-        title="キーワード"
-        note="スレタイの言葉(正規表現も)や立てた人で、スレをスレ一覧の上に帯でまとめます。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を右クリックすると直せます。上に並んでいるキーワードほど先に出ます"
-      >
-        <Toggle
-          checked={s.keywordBands}
-          onChange={(v) => update('keywordBands', v)}
-          label="キーワードに当たるスレを帯で上にまとめる"
-          note="切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します"
-        />
-        <KeywordManager rules={s.keywordRules} favorites={favorites.map((b) => ({ url: b.url, name: b.name }))} onChange={(v) => update('keywordRules', v)} />
       </Section>
       <Section title="板を開いたときの並び" note="スレ一覧のタブで、その場でも変えられます">
         <Choice

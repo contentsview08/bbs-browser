@@ -5,6 +5,7 @@
 
 import { migrateOld, migrateValues, type AppSettings } from '../ui/settings'
 import type { NgRule, NgTarget } from './ng'
+import { isKeywordRule } from './keywords'
 
 const APP = 'bbs-browser'
 /** Android 版のバックアップの名乗り。設定の名前と形は同じなので、そのまま読む */
@@ -29,6 +30,7 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'activeTab',
   'tabGroups',
   'keywordBandsCollapsed',
+  'keywordRulesMigrated',
   'lastBoardUrl',
   'backgroundImage',
   'imageSaveDir',
@@ -137,6 +139,7 @@ const ARRAY_ITEM_CHECKS: Partial<Record<keyof AppSettings, (v: unknown) => boole
   pastTabs: isString,
   keywords: isString,
   keywordAuthors: isString,
+  keywordRules: isKeywordRule,
   grossWords: isString,
   quickPhrases: isString,
   postToolbar: isString,

@@ -222,7 +222,48 @@ class Prefs(context: Context) {
     var keywords by wordsPref("keywords", emptyList(), "\n")
     /** 立てた人のキーワード(ThreadSummary.authorId。改行区切り)。この人が立てたスレを、スレタイのキーワードの後の帯にまとめ、通知もする */
     var keywordAuthors by wordsPref("keywordAuthors", emptyList(), "\n")
-    /** スレ一覧で畳んでいるキーワードの帯(帯を押すと畳む・開く。端末ごと。PC 版の keywordBandsCollapsed) */
+    /**
+     * キーワード(data/KeywordRule.kt。PC の keywordRules と同じ JSON の配列。同期する)。
+     * 前の形 keywords・keywordAuthors は読まなくなった(初回に keywordRules へ写す。古い版の端末のために値は残す)
+     */
+    var keywordRulesJson by pref("keywordRules", "[]")
+    private var keywordRulesCache: Pair<String, List<KeywordRule>>? = null
+    val keywordRules: List<KeywordRule>
+        get() {
+            val j = keywordRulesJson
+            keywordRulesCache?.takeIf { it.first == j }?.let { return it.second }
+            return KeywordRule.listFromJson(j).also { keywordRulesCache = j to it }
+        }
+    fun saveKeywordRules(list: List<KeywordRule>) { keywordRulesJson = KeywordRule.listToJson(list) }
+    /** 足す・直す(同じ id があれば差し替え。同じ中身は重ねない)。変えたら true */
+    fun upsertKeywordRule(r: KeywordRule): Boolean {
+        if (r.pattern.isBlank()) return false
+        val cur = keywordRules
+        val next = if (cur.any { it.id == r.id }) cur.map { if (it.id == r.id) r else it } else if (cur.none { it.sameAs(r) }) cur + r else return false
+        saveKeywordRules(next)
+        return true
+    }
+    /** まとめて足す(同じ中身は重ねない)。足した数を返す */
+    fun addKeywordRules(rules: List<KeywordRule>): Int {
+        val next = ArrayList(keywordRules)
+        var added = 0
+        for (r in rules) if (r.pattern.isNotBlank() && next.none { it.sameAs(r) }) { next += r; added++ }
+        if (added > 0) saveKeywordRules(next)
+        return added
+    }
+    fun removeKeywordRules(ids: Set<String>) = saveKeywordRules(keywordRules.filter { it.id !in ids })
+    fun updateKeywordRules(rules: List<KeywordRule>) { val by = rules.associateBy { it.id }; saveKeywordRules(keywordRules.map { by[it.id] ?: it }) }
+    init {
+        // 前の形(言葉の並び)から 1 度だけ写す。写したあとに全部消しても、また写さないように印を残す
+        if (!sp.getBoolean("keywordRulesMigrated", false)) {
+            if (keywordRules.isEmpty()) {
+                val legacy = KeywordRule.fromLegacy(wordsOfJson(sp.getString("keywords", "[]") ?: "[]"), wordsOfJson(sp.getString("keywordAuthors", "[]") ?: "[]"))
+                if (legacy.isNotEmpty()) saveKeywordRules(legacy)
+            }
+            sp.edit().putBoolean("keywordRulesMigrated", true).apply()
+        }
+    }
+    /** スレ一覧で畳んでいるキーワードの帯(規則の id。帯を押すと畳む・開く。端末ごと。PC 版の keywordBandsCollapsed) */
     var keywordBandsCollapsed by wordsPref("keywordBandsCollapsed", emptyList(), "\n")
     /** キーワードに当たるスレを帯で上にまとめるか。切るとふだんの並びのまま(キーワードのスレはタブ「キーワード」で見る。PC 版の keywordBands) */
     var keywordBands by pref("keywordBands", true)
@@ -557,6 +598,8 @@ class Prefs(context: Context) {
                 "bool" -> sp.getBoolean(item.name, false)
                 "enum" -> sp.getString(item.name, null)
                 "words" -> wordsOfJson(sp.getString(item.name, null).orEmpty())
+                // json: 配列の JSON を文字列で持つ(keywordRules)。レコードの値は配列そのもの
+                "json" -> io.github.contentsview08.obb.sync.parseStrictJson(sp.getString(item.name, null).orEmpty())
                 else -> null
             }
         }.getOrNull()
@@ -567,7 +610,11 @@ class Prefs(context: Context) {
         // 薄く表示はスマホだけの値で送れない。別の端末の値で上書きしない
         if (item.name == "ngMode" && ngMode == "dim") return
         @Suppress("UNCHECKED_CAST")
-        val stored: Any? = if (item.type == "words") JSONArray(value as List<String>).toString() else value
+        val stored: Any? = when (item.type) {
+            "words" -> JSONArray(value as List<String>).toString()
+            "json" -> io.github.contentsview08.obb.sync.canonicalJson(value)
+            else -> value
+        }
         prefByKey[item.name]?.setRemote(stored)
     }
 
@@ -634,7 +681,7 @@ class Prefs(context: Context) {
 
         /** 文字列に JSON を入れて持つ項目。バックアップでは PC と同じく JSON のまま書く */
         internal val JSON_KEYS = setOf(
-            "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "grossWords", "quickPhrases",
+            "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "keywordRules", "grossWords", "quickPhrases",
             "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
         )
 

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatSize
@@ -103,7 +104,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
@@ -169,6 +170,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         sub = when (sub) {
             "licenses" -> "about"
             "nglist" -> "ng"
+            "kwlist" -> "list"
             "custom" -> "theme"
             else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
@@ -179,6 +181,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         // NG の一覧は、スレ一覧のような 1 つの画面(自分のヘッダーとタブ。一覧は自分でスクロール)
         if (sub == "nglist") { NgListPage(vm, onBack = goBack); return@Column }
+        if (sub == "kwlist") { KeywordListPage(vm, onBack = goBack); return@Column }
         val close: @Composable () -> Unit = { BarIcon(Icons.Filled.Close, "設定を閉じる") { vm.closeSettings() } }
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true }, actions = close)
         else HeaderBar(TITLES[sub] ?: sub.orEmpty().removePrefix(SITE_PAGE), onNav = { goBack() }, navIsBack = true, actions = close)
@@ -191,7 +194,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 null -> SettingsTop(vm, { sub = it; viaSearch = true }) { sub = it }
                 "theme" -> ThemePage(vm) { sub = it }
                 "text" -> TextPage(vm)
-                "list" -> ListPage(vm)
+                "list" -> ListPage(vm) { sub = it }
                 "history" -> HistoryPage(vm)
                 "thread" -> ThreadPage(vm)
                 "media" -> MediaPage(vm)
@@ -397,7 +400,7 @@ private fun TextPage(vm: AppViewModel) {
 }
 
 @Composable
-private fun ListPage(vm: AppViewModel) {
+private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     Group("並び") {
         ChoiceRow(
@@ -425,13 +428,13 @@ private fun ListPage(vm: AppViewModel) {
         }
         for ((k, name) in all.filter { it.first !in on }) TabRow(k, name, false, null)
     }
-    Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上に帯でまとめて出します。帯を長押しすると直せます") {
+    var kwAdding by remember { mutableStateOf(false) }
+    Group("キーワード", note = "スレタイの言葉(正規表現も)や立てた人で、スレを一覧のいちばん上に帯でまとめて出します。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を長押しすると直せます") {
+        NavRow(Icons.Filled.Sell, Color(0xFF0EA5E9), "キーワードの一覧", desc = "スレタイの言葉・立てた人。長押しで選んでまとめて有効・無効・削除", value = "${p.keywordRules.size} 件") { open("kwlist") }
+        ActionRow("キーワードを足す", Icons.Filled.Add) { kwAdding = true }
         SwitchRow("キーワードに当たるスレを帯で上にまとめる", p.keywordBands, desc = "切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します") { p.keywordBands = it }
-        EditableWordList(p.keywords, "キーワード", "キーワードを足す", "まだありません", sortable = true) { p.keywords = it }
     }
-    Group("キーワード(立てた人)", note = "この人(ID・BE 番号など)が立てたスレを、キーワードの下にまとめて出します。スレを長押しして足すこともできます") {
-        EditableWordList(p.keywordAuthors, "立てた人", "立てた人を足す", "まだありません", sortable = true) { p.keywordAuthors = it }
-    }
+    if (kwAdding) KeywordEditSheet(io.github.contentsview08.obb.data.KeywordRule(), openBoardOf(vm), vm.favorites.map { it.url to it.name }, isNew = true, onDismiss = { kwAdding = false }) { p.upsertKeywordRule(it); kwAdding = false }
     if (LocalAdvanced.current) Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
         NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
         ActionRow("今すぐ消す") { vm.pruneLogsNow() }
@@ -739,7 +742,7 @@ private fun NgPage(vm: AppViewModel, open: (String) -> Unit) {
 
 /** 名前と今の値を 1 行に出し、押すとドロップダウンで選ぶ(NG の効く板・期限) */
 @Composable
-private fun PickerRow(label: String, value: String, options: List<Pair<String, () -> Unit>>) {
+internal fun PickerRow(label: String, value: String, options: List<Pair<String, () -> Unit>>) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(

@@ -131,17 +131,19 @@ object Crawler {
             }
         }
         // キーワードに合うスレ(お気に入り板)
-        val keywords = prefs.keywords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() }
-        val authors = prefs.keywordAuthors.lines().map { legacyAuthorId(it.trim()) }.filter { it.isNotEmpty() }.toSet()
-        if (scope.keyword && prefs.notifyKeyword && (keywords.isNotEmpty() || authors.isNotEmpty())) {
+        val rules = prefs.keywordRules.filter { it.enabled }
+        if (scope.keyword && prefs.notifyKeyword && rules.isNotEmpty()) {
             for (b in db.favorites()) {
+                // 板限定のキーワードはその板だけ
+                val matcher = KeywordMatcher(rules, b.url)
+                if (matcher.isEmpty) continue
                 val list = boardThreads(b.url) ?: continue
                 val key = "k:${b.url}"
                 val since = seen.getLong(key, -1L)
                 val newest = list.mapNotNull { it.createdAt }.maxOrNull() ?: continue
                 if (since >= 0) {
-                    val hits = list.filter { t -> (t.createdAt ?: 0L) > since && (keywords.any { normalizeForSearch(t.title).contains(it) } || t.authorId in authors) }
-                    for (t in hits.take(MAX_NOTIFY)) Notifier.show(context, "${b.name} にキーワードのスレ", t.title, TwoCh.webUrl(t))
+                    val hits = list.mapNotNull { t -> if ((t.createdAt ?: 0L) > since) matcher.hit(t)?.let { r -> t to r } else null }
+                    for ((t, r) in hits.take(MAX_NOTIFY)) Notifier.show(context, "${b.name} に「${r.displayLabel()}」のスレ", t.title, TwoCh.webUrl(t))
                 }
                 edit.putLong(key, maxOf(newest, since))
             }

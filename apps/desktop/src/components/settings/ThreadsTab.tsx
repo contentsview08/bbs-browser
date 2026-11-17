@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { clearMediaCache, mediaCacheUsage, type MediaCacheUsage } from '../../host/saveImage'
 import { ListFontSliders } from '../FontSizeSlider'
-import { ListEditor, NumberField, Toggle } from '../SettingParts'
+import { NumberField, Toggle } from '../SettingParts'
+import KeywordManager from '../KeywordManager'
 import { BTN_PRIMARY } from '../DialogParts'
 import { type SettingsProps, Section, Choice, ListTabsEditor } from './common'
 
-export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 'settings' | 'update' | 'onPruneLogs'>) {
+export function ThreadsTab({ settings: s, update, onPruneLogs, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'onPruneLogs' | 'favorites'>) {
   const [pruneMessage, setPruneMessage] = useState<string>()
   const [pruning, setPruning] = useState(false)
   return (
@@ -32,7 +33,7 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
       </Section>
       <Section
         title="キーワード"
-        note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます。帯を右クリックすると直せます"
+        note="スレタイの言葉(正規表現も)や立てた人で、スレをスレ一覧の上に帯でまとめます。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を右クリックすると直せます。上に並んでいるキーワードほど先に出ます"
       >
         <Toggle
           checked={s.keywordBands}
@@ -40,13 +41,7 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
           label="キーワードに当たるスレを帯で上にまとめる"
           note="切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します"
         />
-        <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
-      </Section>
-      <Section
-        title="キーワード(立てた人)"
-        note="この人(ID・BE 番号など)が立てたスレを、スレタイのキーワードの後に帯をつけてまとめます。スレを右クリック →「キーワードに登録」でも足せます"
-      >
-        <ListEditor noun="立てた人" sortable items={s.keywordAuthors} onChange={(v) => update('keywordAuthors', v)} placeholder="例: ID の文字" />
+        <KeywordManager rules={s.keywordRules} favorites={favorites.map((b) => ({ url: b.url, name: b.name }))} onChange={(v) => update('keywordRules', v)} />
       </Section>
       <Section title="板を開いたときの並び" note="スレ一覧のタブで、その場でも変えられます">
         <Choice

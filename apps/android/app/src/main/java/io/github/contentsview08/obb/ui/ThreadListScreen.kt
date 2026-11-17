@@ -178,9 +178,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val ngRules = vm.prefs.ngRules
     val ngMatcher = remember(ngRules) { io.github.contentsview08.obb.data.NgMatcher(ngRules) }
     val sort = vm.prefs.threadSort
-    val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val keywordAuthors = vm.prefs.keywordAuthors.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val hasKeywords = keywords.isNotEmpty() || keywordAuthors.isNotEmpty()
+    // キーワード(スレタイの言葉・立てた人。板限定はこの板のものだけ)
+    val keywordRules = vm.prefs.keywordRules
+    val keywordMatcher = remember(keywordRules, page.board.url) { io.github.contentsview08.obb.data.KeywordMatcher(keywordRules, page.board.url) }
+    val hasKeywords = !keywordMatcher.isEmpty
     val keywordBands = vm.prefs.keywordBands
     val unreadFirst = vm.prefs.unreadFirst
     // 既読が進むたびに並べ直さないよう、中身で絞るタブのときだけ既読の変化をきっかけにする
@@ -191,7 +192,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val favKeys = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     // 帯の「+N」は既読で変わるので、帯を出すときは既読の記録もきっかけにする(並びは unreadTop の控えで保っているので、読んでも並べ直されない)
     val bandStates = if (hasKeywords && (keywordBands || (tab ?: defaultTab(sort)) == ListTab.KEYWORD)) page.states else null
-    val rows: List<ListRow> = remember(page.threads, statesKey, bandStates, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
+    val rows: List<ListRow> = remember(page.threads, statesKey, bandStates, tab, query, ngMatcher, sort, keywordMatcher, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -200,7 +201,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
         // キーワードのタブ: キーワード(スレタイ・立てた人)に当たるスレだけ(並びはそのまま)
         val onlyKeyword = (tab ?: defaultTab(sort)) == ListTab.KEYWORD
-        if (onlyKeyword) list = keywordGroups(list, keywords, keywordAuthors).filter { it.first != null }.flatMap { it.second }
+        if (onlyKeyword) list = keywordMatcher.groups(list).filter { it.first != null }.flatMap { it.second }
         // タブを選んでいないときは、設定の並びのタブを選んでいる(押せば逆順にもなる)
         list = when (tab ?: defaultTab(sort)) {
             ListTab.KEYWORD -> list
@@ -224,14 +225,13 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         if (!hasKeywords || !(keywordBands || onlyKeyword)) return@remember (list.filterNot { it.announcement } + list.filter { it.announcement }).map<ThreadSummary, ListRow> { ListRow.Thread(it) }
         // キーワードのまとまりの頭に帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)。
         // キーワードに当たるスレが 1 つもなければ帯は出さない
-        val groups = keywordGroups(list, keywords, keywordAuthors).filter { it.second.isNotEmpty() }
+        val groups = keywordMatcher.groups(list).filter { it.second.isNotEmpty() }
         if (groups.none { it.first != null }) return@remember groups.flatMap { it.second }.map<ThreadSummary, ListRow> { ListRow.Thread(it) }
         buildList<ListRow> {
-            for ((k, ts) in groups) {
-                val collapsed = k != null && k in collapsedBands
-                // 見ていないスレは数えない(unreadOf は読んだ記録のないスレで 0)
-                // 「その他のスレ」には新着の札を出さない(キーワードの帯だけ)
-                add(ListRow.Band(ListBand(k ?: "その他のスレ", ts.size, accent = k != null, unread = if (k != null) ts.sumOf { unreadOf(it, page.states[it.key]) } else 0), keyword = k, collapsed = collapsed))
+            for ((rule, ts) in groups) {
+                val collapsed = rule != null && rule.id in collapsedBands
+                // 新着の札は、畳んでいるキーワードの帯だけ(開いていれば中が見える。「その他のスレ」には出さない)。見ていないスレは数えない
+                add(ListRow.Band(ListBand(rule?.displayLabel() ?: "その他のスレ", ts.size, accent = rule != null, unread = if (rule != null && collapsed) ts.sumOf { unreadOf(it, page.states[it.key]) } else 0), rule = rule, collapsed = collapsed))
                 if (!collapsed) for (t in ts) add(ListRow.Thread(t))
             }
         }
@@ -240,8 +240,13 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val shown = remember(rows) { rows.mapNotNull { (it as? ListRow.Thread)?.t } }
     val toggleBand = { k: String -> vm.prefs.keywordBandsCollapsed = (if (k in collapsedBands) collapsedBands - k else collapsedBands + k).joinToString("\n") }
     // 帯を長押しすると、そのキーワードを直す・外す(PC の右クリックと同じ)
-    var editingKeyword by remember { mutableStateOf<String?>(null) }
-    editingKeyword?.let { KeywordEditDialog(vm, it) { editingKeyword = null } }
+    var editingKeyword by remember { mutableStateOf<io.github.contentsview08.obb.data.KeywordRule?>(null) }
+    editingKeyword?.let { r ->
+        KeywordEditSheet(
+            r, page.board.url to page.board.name, vm.favorites.map { it.url to it.name }, isNew = false,
+            onDismiss = { editingKeyword = null }, onDelete = { vm.prefs.removeKeywordRules(setOf(r.id)); editingKeyword = null },
+        ) { vm.prefs.upsertKeywordRule(it); editingKeyword = null }
+    }
 
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
@@ -395,11 +400,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         }
                         Text(why, Modifier.fillMaxWidth().padding(32.dp), color = Palette.textMuted, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
-                    items(rows, key = { r -> if (r is ListRow.Band) "band:${r.band.label}" else (r as ListRow.Thread).t.key }, contentType = { if (it is ListRow.Band) 1 else 0 }) { r ->
+                    items(rows, key = { r -> if (r is ListRow.Band) "band:${r.rule?.id ?: ""}" else (r as ListRow.Thread).t.key }, contentType = { if (it is ListRow.Band) 1 else 0 }) { r ->
                         if (r is ListRow.Band) {
                             KeywordBand(
-                                r.band, collapsed = if (r.keyword != null) r.collapsed else null, onClick = r.keyword?.let { k -> { toggleBand(k) } },
-                                onLongClick = r.keyword?.let { k -> { Haptics.longPress(hapticView); editingKeyword = k } },
+                                r.band, collapsed = if (r.rule != null) r.collapsed else null, onClick = r.rule?.let { k -> { toggleBand(k.id) } },
+                                onLongClick = r.rule?.let { k -> { Haptics.longPress(hapticView); editingKeyword = k } },
                             )
                             return@items
                         }
@@ -727,96 +732,13 @@ fun ClearTextButton(onClear: () -> Unit) {
     }
 }
 
-/** 立てた人のキーワードの帯・通知に出す名前(PC の utils/watch.ts の authorKeywordLabel と同じ) */
-private const val AUTHOR_LABEL_PREFIX = "立てた人 "
-internal fun authorKeywordLabel(authorId: String) = "$AUTHOR_LABEL_PREFIX$authorId"
-
-/**
- * 帯のキーワードを直す・外す窓(帯の長押し。PC の帯の右クリックと同じ言葉)。
- * label はスレタイのキーワードか、立てた人の帯の名前(authorKeywordLabel)。立てた人は keywordAuthors の元の行を直す
- */
-@Composable
-private fun KeywordEditDialog(vm: AppViewModel, label: String, onDismiss: () -> Unit) {
-    val p = vm.prefs
-    val titles = p.keywords.lines().filter { it.isNotBlank() }
-    val authors = p.keywordAuthors.lines().filter { it.isNotBlank() }
-    // スレタイのキーワードを先に探す(同じ文字が両方にあることはまずない)
-    val titleHit = titles.firstOrNull { it.trim() == label.trim() }
-    val authorHit = if (titleHit == null && label.startsWith(AUTHOR_LABEL_PREFIX)) authors.firstOrNull { legacyAuthorId(it.trim()) == label.removePrefix(AUTHOR_LABEL_PREFIX) } else null
-    val byAuthor = titleHit == null && authorHit != null
-    val original = titleHit ?: authorHit ?: label
-    var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(original, androidx.compose.ui.text.TextRange(0, original.length))) }
-    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    val w = field.text.trim()
-    val others = (if (byAuthor) authors else titles).filter { it != original }.map { if (byAuthor) legacyAuthorId(it.trim()) else it.trim() }
-    val dup = (if (byAuthor) legacyAuthorId(w) else w) in others
-    val ok = w.isNotEmpty() && w != original && !dup
-    fun replace(next: String?) {
-        if (byAuthor) p.keywordAuthors = authors.flatMap { if (it == original) listOfNotNull(next) else listOf(it) }.joinToString("\n")
-        else p.keywords = titles.flatMap { if (it == original) listOfNotNull(next) else listOf(it) }.joinToString("\n")
-        onDismiss()
-    }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (byAuthor) "立てた人のキーワードを直す" else "キーワードを直す") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.OutlinedTextField(
-                    field, { field = it }, singleLine = true,
-                    label = { Text(if (byAuthor) "立てた人の ID" else "キーワード") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (ok) replace(w) }),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
-                )
-                if (dup) Text("同じキーワードがもうあります", color = Palette.textMuted, fontSize = 12.sp)
-                androidx.compose.material3.TextButton(onClick = { onDismiss(); vm.openSettings("list") }) { Text("キーワードの設定を開く") }
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { replace(null); vm.toast = "キーワードから外しました" }) { Text("外す", color = Palette.heatVeryHot) }
-            androidx.compose.material3.TextButton(onClick = { if (ok) replace(w) }, enabled = ok) { Text("保存") }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("やめる") } },
-    )
-}
-
 /** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
 class ListBand(val label: String, val count: Int, val accent: Boolean, /** まとまりの中の、見たことのあるスレの新着の合計(畳んでいても新着が分かるように「+N」) */ val unread: Int = 0)
 
 /** スレ一覧の 1 行: キーワードの帯か、スレ */
 sealed class ListRow {
-    class Band(val band: ListBand, val keyword: String?, val collapsed: Boolean) : ListRow()
+    class Band(val band: ListBand, /** キーワードの規則(「その他のスレ」は null) */ val rule: io.github.contentsview08.obb.data.KeywordRule?, val collapsed: Boolean) : ListRow()
     class Thread(val t: ThreadSummary) : ListRow()
-}
-
-/**
- * キーワードごとにスレをまとめる。先のキーワードに当たったスレは後のキーワードに数えない。
- * 当たりは検索と同じく全角半角・大文字小文字・カナとかなを同じに扱う(normalizeForSearch。PC と同じ)。
- * 戻りは (キーワード, スレ) の並びで、最後に (null, 残り)。並びは元の一覧の順。
- * 運営のお知らせはどのまとまりにも入れず、残りの最後に置く(一番下に回すので、キーワードの帯の下に並ばない)。
- * 立てた人のキーワード(authors)は、スレタイのキーワードの後に、authorId が同じスレを authorKeywordLabel の名前でまとめる(PC と同じ)
- */
-internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>, authors: List<String> = emptyList()): List<Pair<String?, List<ThreadSummary>>> {
-    val (normal, notices) = list.partition { !it.announcement }
-    val titles = normal.associate { it.key to normalizeForSearch(it.title) }
-    val taken = HashSet<String>()
-    val groups = ArrayList<Pair<String?, List<ThreadSummary>>>()
-    for (k in keywords) {
-        val nk = normalizeForSearch(k)
-        if (nk.isEmpty()) continue
-        val hits = normal.filter { it.key !in taken && titles.getValue(it.key).contains(nk) }
-        hits.forEach { taken += it.key }
-        if (hits.isNotEmpty()) groups += k to hits
-    }
-    for (a in authors) {
-        if (a.isEmpty()) continue
-        val hits = normal.filter { it.key !in taken && it.authorId == legacyAuthorId(a) }
-        hits.forEach { taken += it.key }
-        if (hits.isNotEmpty()) groups += authorKeywordLabel(a) to hits
-    }
-    groups += null to normal.filter { it.key !in taken } + notices
-    return groups
 }
 
 /** まとまりの帯。collapsed が null でなければ押して畳む・開く(キーワードが増えても「その他のスレ」が見えるように) */

@@ -23,6 +23,8 @@ const val BOARD_META_KEY = "boardMeta"
 private const val SEED_PRIORITY = 2L
 private const val SEED_WALL = 1L
 private const val WORDS_MAX = 4096
+/** json の設定(keywordRules など)の 1 つの値の上限(文字数。PC の JSON_MAX と同じ) */
+private const val JSON_MAX = 65536
 
 class AllowedSetting(val name: String, val type: String, val values: List<String>?, val default: Any?)
 
@@ -56,8 +58,23 @@ class SettingAllowlist(json: String) {
             "bool" -> value as? Boolean
             "enum" -> (value as? String)?.takeIf { item.values.orEmpty().contains(it) }
             "words" -> wordsValue(value)?.takeIf { it.length <= WORDS_MAX }
+            "json" -> jsonValue(value)?.takeIf { it.length <= JSON_MAX }
             else -> null
         }
+    }
+
+    /** json: 平らな値(文字・真偽・数・文字の配列)だけを持つオブジェクトの配列。それ以外は送らない */
+    private fun jsonValue(v: Any?): String? {
+        if (v !is List<*>) return null
+        for (o in v) {
+            if (o !is Map<*, *>) return null
+            for ((k, x) in o) {
+                if (k !is String) return null
+                val ok = x == null || x is String || x is Boolean || x is Number || (x is List<*> && x.all { it is String })
+                if (!ok) return null
+            }
+        }
+        return canonicalJson(v)
     }
 
     /** 板ごとの設定は許可された項目だけを送る。名前欄・メール欄の既定値とファビコンは手元に残す */
@@ -82,10 +99,10 @@ class SettingAllowlist(json: String) {
             }
         }
         val item = byName[name] ?: return null
-        if (item.type == "words") {
+        if (item.type == "words" || item.type == "json") {
             if (wire !is String) return null
             return try {
-                parseStrictJson(wire).takeIf { wordsValue(it) != null }
+                parseStrictJson(wire).takeIf { if (item.type == "words") wordsValue(it) != null else jsonValue(it) != null }
             } catch (_: Exception) {
                 null
             }

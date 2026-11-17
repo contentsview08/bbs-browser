@@ -9,8 +9,8 @@ import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { keywordHits } from '../utils/watch'
 import { isAppVisible } from '../utils/visibility'
 
-/** スレタイのキーワードか、立てた人のキーワードが 1 つでもある */
-const hasAnyKeyword = (s: AppSettings) => s.keywords.some((k) => k.trim()) || s.keywordAuthors.some((k) => k.trim())
+/** 効いているキーワードが 1 つでもある */
+const hasAnyKeyword = (s: AppSettings) => s.keywordRules.some((r) => r.enabled && r.pattern.trim() !== '')
 
 export function useKeywordWatch(o: {
   enabled: boolean
@@ -28,8 +28,6 @@ export function useKeywordWatch(o: {
 
   const check = async () => {
     const { settings, favorites, listForWatch, isNgThread, notify, updateSetting } = latest.current
-    const keywords = settings.keywords
-    const authors = settings.keywordAuthors
     if (!hasAnyKeyword(settings)) return
     const since = { ...settings.keywordWatchSince }
     for (const b of favorites ?? []) {
@@ -44,7 +42,7 @@ export function useKeywordWatch(o: {
       // 境目は一覧を取った時刻まで(使い回しの一覧を見たとき、取ったあとに立ったスレを次の確認で拾うため)。戻しはしない
       since[b.url] = Math.max(prev ?? 0, at)
       if (prev === undefined) continue
-      const hits = keywordHits(list, keywords, prev, authors).filter((h) => !isNgThread(h.thread))
+      const hits = keywordHits(list, settings.keywordRules, prev, b.url).filter((h) => !isNgThread(h.thread))
       const boardName = settings.boardMeta[b.url]?.alias || b.name
       for (const h of hits.slice(0, 3))
         notify({

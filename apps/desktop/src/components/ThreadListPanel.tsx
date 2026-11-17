@@ -1,6 +1,5 @@
 // スレ一覧パネル。板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
 
-import { legacyAuthorId } from '../utils/authorId'
 import { useLayoutEffect, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
@@ -24,7 +23,7 @@ import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { LIST_FILTERS, isListTabActive, tabDefOf, type AppSettings, type ListFilter, type ListTabKey, type ThreadSort, type UpdateSetting } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
-import { authorKeywordLabel } from '../utils/watch'
+import { keywordGroupsOf, keywordLabel, keywordMatcher, type KeywordRule } from '../utils/keywords'
 import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
@@ -157,17 +156,16 @@ interface Props {
   keywordBands?: boolean
   onToggleKeyword?: (keyword: string) => void
   /** キーワードの帯の右クリック(スマホ版は長押し): そのキーワードを直す・外す・キーワードの設定を開く */
-  onEditKeyword?: (keyword: string) => void
-  onRemoveKeyword?: (keyword: string) => void
+  onEditKeyword?: (ruleId: string) => void
+  onRemoveKeyword?: (ruleId: string) => void
   onOpenKeywordSettings?: () => void
   /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
   onResort?: () => void
   /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
   postedIds?: Set<string>
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
-  keywords?: string[]
-  /** 立てた人のキーワード(authorId)。この人が立てたスレを、スレタイのキーワードの後の帯にまとめる */
-  keywordAuthors?: string[]
+  /** キーワード(帯・タブ「キーワード」。履歴の一覧では渡さない) */
+  keywordRules?: KeywordRule[]
   /** キーワードに登録する画面を開く(スレの右クリック・長押しのメニューから) */
   onKeyword?: (t: ThreadSummary, kind: 'title' | 'author') => void
   /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
@@ -535,11 +533,9 @@ export default function ThreadListPanel(props: Props) {
   /** 既読が進むたびに一覧を作り直さないよう、「見たスレ」の絞り込みのときだけ stateOf を見る */
   const visitedStateOf = visitedOnly ? stateOf : undefined
   // タブ「キーワード」: スレタイのキーワードか立てた人のキーワードに当たるスレだけ
-  const keywordHit = useMemo(() => {
-    const ks = (props.keywords ?? []).map((k) => normalizeForSearch(k.trim())).filter(Boolean)
-    const as = new Set((props.keywordAuthors ?? []).map((k) => legacyAuthorId(k.trim())).filter(Boolean))
-    return (t: ThreadSummary) => ks.some((k) => normalizedOf(t).title.includes(k)) || (t.authorId !== undefined && as.has(t.authorId))
-  }, [props.keywords, props.keywordAuthors])
+  // キーワード(スレタイの言葉・正規表現・立てた人。板限定はこの一覧の板のものだけ)
+  const kwMatcher = useMemo(() => keywordMatcher(props.keywordRules ?? [], props.boardUrl), [props.keywordRules, props.boardUrl])
+  const keywordHit = (t: ThreadSummary) => kwMatcher.hit(t) !== undefined
   const visible = useMemo(() => {
     // 検索: 全角・半角・大文字・小文字・カナを同一視し、空白で区切った言葉はすべて含むもの(AND)。立てた人の ID も探す
     const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
@@ -577,7 +573,7 @@ export default function ThreadListPanel(props: Props) {
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, keywordHit, props.historyMetaOf])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, kwMatcher, props.historyMetaOf])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる
@@ -607,32 +603,16 @@ export default function ThreadListPanel(props: Props) {
    * 立てた人のキーワードは、スレタイのキーワードの後に、立てた人(authorId)が同じスレをまとめる
    */
   const keywordGroups = useMemo(() => {
-    const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
-    const authors = (props.keywordAuthors ?? []).map((k) => legacyAuthorId(k.trim())).filter(Boolean)
-    if (keywords.length === 0 && authors.length === 0) return undefined
+    if (kwMatcher.isEmpty) return undefined
     // 帯でまとめるのは、設定で入れているとき(タブ「キーワード」の中はいつも)
     if (props.keywordBands === false && filter !== 'keyword') return undefined
-    const normal = visible.filter((t) => !isAnnouncement(t))
-    const taken = new Set<string>()
-    const groups: { keyword: string; threads: ThreadSummary[] }[] = []
-    for (const keyword of keywords) {
-      const k = normalizeForSearch(keyword)
-      const hits = normal.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
-      hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword, threads: hits })
-    }
-    for (const a of authors) {
-      const hits = normal.filter((t) => !taken.has(threadId(t)) && t.authorId === a)
-      hits.forEach((t) => taken.add(threadId(t)))
-      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits })
-    }
-    if (groups.length === 0) return undefined
-    return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
-  }, [visible, props.keywords, props.keywordAuthors, props.keywordBands, filter])
+    const g = keywordGroupsOf(visible, kwMatcher, isAnnouncement)
+    return g.groups.length === 0 ? undefined : g
+  }, [visible, kwMatcher, props.keywordBands, filter])
   // 帯に出す新着(見たことのあるスレの未読の合計。見ていないスレは数えない)。既読のたびに変わるので、まとまり分けとは別に数える(まとまりは作り直さない)
   const bandUnread = useMemo(() => {
     const m = new Map<string, number>()
-    for (const g of keywordGroups?.groups ?? []) m.set(g.keyword, g.threads.reduce((sum, t) => sum + threadUnread(stateOf(t), t.postCount), 0))
+    for (const g of keywordGroups?.groups ?? []) m.set(g.rule.id, g.threads.reduce((sum, t) => sum + threadUnread(stateOf(t), t.postCount), 0))
     return m
   }, [keywordGroups, stateOf])
 
@@ -663,7 +643,7 @@ export default function ThreadListPanel(props: Props) {
   }
   // 畳んだまとまりのスレは、キー操作やページにも入れない(画面にないものを選ばない)
   const ordered = useMemo(
-    () => (keywordGroups ? [...keywordGroups.groups.filter((g) => !collapsedSet.has(g.keyword)).flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
+    () => (keywordGroups ? [...keywordGroups.groups.filter((g) => !collapsedSet.has(g.rule.id)).flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
     [keywordGroups, visible, collapsedSet],
   )
   // ページ: 並び(ordered)を pageSize ごとに分ける。並び・絞り込み・検索が変わったら 1 ページ目へ
@@ -1258,18 +1238,19 @@ export default function ThreadListPanel(props: Props) {
               ) : keywordGroups ? (
                 <>
                   {keywordGroups.groups.map((g) => (
-                    <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
+                    <div key={g.rule.id} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
                       <Band
                         icon="sell"
-                        label={g.keyword}
+                        label={keywordLabel(g.rule)}
                         count={g.threads.length}
-                        unread={bandUnread.get(g.keyword)}
+                        // 新着の札は畳んでいるときだけ(開いていれば中が見える)
+                        unread={collapsedSet.has(g.rule.id) ? bandUnread.get(g.rule.id) : undefined}
                         accent
-                        collapsed={collapsedSet.has(g.keyword)}
-                        onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.keyword) : undefined}
-                        onContextMenu={bandContextMenu(g.keyword)}
+                        collapsed={collapsedSet.has(g.rule.id)}
+                        onToggle={props.onToggleKeyword ? () => props.onToggleKeyword?.(g.rule.id) : undefined}
+                        onContextMenu={bandContextMenu(g.rule.id)}
                       />
-                      {!collapsedSet.has(g.keyword) && g.threads.map(renderLimited)}
+                      {!collapsedSet.has(g.rule.id) && g.threads.map(renderLimited)}
                     </div>
                   ))}
                   {keywordGroups.rest.length > 0 && <Band icon="list" label="その他のスレ" count={keywordGroups.rest.length} />}

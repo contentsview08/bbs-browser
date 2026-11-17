@@ -44,9 +44,8 @@ import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
 import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toImageUrl } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
-import KeywordDialog, { type KeywordDraft } from './components/KeywordDialog'
+import { newKeywordRule, sameKeyword, type KeywordRule } from './utils/keywords'
 import KeywordEditDialog from './components/KeywordEditDialog'
-import { legacyAuthorId } from './utils/authorId'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
@@ -399,27 +398,16 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number; flash?: boolean }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
-  const [keywordDraft, setKeywordDraft] = useState<KeywordDraft>()
-  /** 帯の右クリック「キーワードを直す」で開いている帯の名前 */
+  /** キーワードを足す窓(スレの右クリック「キーワードに登録」。元の文字を入れて開く) */
+  const [keywordDraft, setKeywordDraft] = useState<KeywordRule>()
+  /** 帯の右クリック「キーワードを直す」で開いているキーワードの id */
   const [keywordEdit, setKeywordEdit] = useState<string>()
-  /** 帯の名前(キーワードか「立てた人 ID」)から、設定のどの行かを探す(スマホ版の KeywordEditDialog と同じ) */
-  const keywordEntryOf = (label: string): { kind: 'title' | 'author'; original: string } | undefined => {
-    const t = settings.keywords.find((k) => k.trim() === label.trim())
-    if (t !== undefined) return { kind: 'title', original: t }
-    if (!label.startsWith('立てた人 ')) return undefined
-    const id = label.slice('立てた人 '.length)
-    const a = settings.keywordAuthors.find((k) => legacyAuthorId(k.trim()) === id)
-    return a === undefined ? undefined : { kind: 'author', original: a }
+  /** キーワードを足す・直す(同じ id があれば差し替え) */
+  const saveKeywordRule = (r: KeywordRule) => {
+    const cur = settings.keywordRules
+    updateSetting('keywordRules', cur.some((x) => x.id === r.id) ? cur.map((x) => (x.id === r.id ? r : x)) : [...cur, r], settings.keywordRules)
   }
-  /** 帯のキーワードを next に直す(null なら外す) */
-  const replaceKeyword = (label: string, next: string | null) => {
-    const e = keywordEntryOf(label)
-    if (!e) return
-    const swap = (list: string[]) => list.flatMap((k) => (k === e.original ? (next === null ? [] : [next]) : [k]))
-    if (e.kind === 'title') updateSetting('keywords', swap(settings.keywords), settings.keywords)
-    else updateSetting('keywordAuthors', swap(settings.keywordAuthors), settings.keywordAuthors)
-  }
-  const keywordEditEntry = keywordEdit !== undefined ? keywordEntryOf(keywordEdit) : undefined
+  const removeKeywordRule = (id: string) => updateSetting('keywordRules', settings.keywordRules.filter((x) => x.id !== id), settings.keywordRules)
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
@@ -2527,9 +2515,10 @@ export default function App() {
     const rules = cur.ngRules
     const merged = mergeNgRules(rules, parsed.ngRules.map((r) => ({ ...r, id: '' })), () => crypto.randomUUID())
     if (merged.added > 0) updateSetting('ngRules', merged.rules, rules)
-    const keywords = [...new Set([...cur.keywords, ...parsed.keywords])]
-    const keywordsAdded = keywords.length - cur.keywords.length
-    if (keywordsAdded > 0) updateSetting('keywords', keywords)
+    // ChMate のキーワードは 1 つの言葉が 1 つのキーワード(同じものは重ねない)
+    const newRules = parsed.keywords.map((k) => newKeywordRule({ kind: 'title', pattern: k })).filter((r, i, arr) => !cur.keywordRules.some((x) => sameKeyword(x, r)) && arr.findIndex((y) => sameKeyword(y, r)) === i)
+    const keywordsAdded = newRules.length
+    if (keywordsAdded > 0) updateSetting('keywordRules', [...cur.keywordRules, ...newRules])
     report('仕上げています', 0, 0)
     await Promise.all([reloadFavorites(store), reloadFavThreads(store), reloadRecent(store)])
     if (history) setHistory(await loadHistory(store))
@@ -3198,7 +3187,7 @@ export default function App() {
           keywordBands={settings.keywordBands}
           onToggleKeyword={(k) => updateSetting('keywordBandsCollapsed', settings.keywordBandsCollapsed.includes(k) ? settings.keywordBandsCollapsed.filter((x) => x !== k) : [...settings.keywordBandsCollapsed, k])}
           onEditKeyword={setKeywordEdit}
-          onRemoveKeyword={(k) => replaceKeyword(k, null)}
+          onRemoveKeyword={removeKeywordRule}
           onOpenKeywordSettings={() => openSettings('threads')}
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
@@ -3220,9 +3209,8 @@ export default function App() {
           onDeleteThreadLog={(t) => confirmDeleteLogs([], [t])}
           onRemoveFromHistory={history ? removeFromHistory : undefined}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
-          keywords={history ? undefined : settings.keywords}
-          keywordAuthors={history ? undefined : settings.keywordAuthors}
-          onKeyword={(t, kind) => setKeywordDraft({ kind, title: t.title, authorId: t.authorId })}
+          keywordRules={history ? undefined : settings.keywordRules}
+          onKeyword={(t, kind) => setKeywordDraft(newKeywordRule({ kind, pattern: kind === 'author' ? (t.authorId ?? '') : t.title }))}
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}
           filterRequest={history ? filterRequest : undefined}
           tabRequest={tabRequest}
@@ -3458,26 +3446,24 @@ export default function App() {
       )}
       {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
-      {keywordEdit !== undefined && keywordEditEntry && (
+      {(keywordEdit !== undefined || keywordDraft) && (
         <KeywordEditDialog
-          kind={keywordEditEntry.kind}
-          original={keywordEditEntry.original}
-          others={(keywordEditEntry.kind === 'title' ? settings.keywords : settings.keywordAuthors).filter((k) => k !== keywordEditEntry.original)}
-          onSubmit={(next) => replaceKeyword(keywordEdit, next)}
-          onClose={() => setKeywordEdit(undefined)}
-        />
-      )}
-      {keywordDraft && (
-        <KeywordDialog
-          draft={keywordDraft}
-          keywords={settings.keywords}
-          keywordAuthors={settings.keywordAuthors}
-          onSubmit={(kind, word) =>
-            kind === 'author'
-              ? updateSetting('keywordAuthors', [...settings.keywordAuthors, word], settings.keywordAuthors)
-              : updateSetting('keywords', [...settings.keywords, word], settings.keywords)
+          rule={keywordDraft ?? settings.keywordRules.find((r) => r.id === keywordEdit) ?? newKeywordRule({ pattern: '' })}
+          isNew={!!keywordDraft}
+          // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板(NG の窓と同じ)
+          board={
+            activeTab
+              ? { url: activeTab.thread.boardUrl, name: favorites?.find((f) => f.url === activeTab.thread.boardUrl)?.name ?? (board?.url === activeTab.thread.boardUrl ? board.name : activeTab.thread.boardUrl) }
+              : board && { url: board.url, name: board.name }
           }
-          onClose={() => setKeywordDraft(undefined)}
+          favorites={(favorites ?? []).map((b) => ({ url: b.url, name: b.name }))}
+          others={settings.keywordRules.filter((r) => r.id !== keywordEdit)}
+          onSubmit={saveKeywordRule}
+          onDelete={keywordDraft ? undefined : () => removeKeywordRule(keywordEdit!)}
+          onClose={() => {
+            setKeywordDraft(undefined)
+            setKeywordEdit(undefined)
+          }}
         />
       )}
       {ngDraft && (

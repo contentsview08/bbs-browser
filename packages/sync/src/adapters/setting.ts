@@ -23,7 +23,8 @@ export type SyncDevice = 'pc' | 'phone'
 
 export interface AllowedSetting {
   name: string
-  type: 'bool' | 'enum' | 'words'
+  /** json: 平らな値(文字・真偽・数・文字の配列)だけを持つオブジェクトの配列(keywordRules) */
+  type: 'bool' | 'enum' | 'words' | 'json'
   values?: string[]
   default: unknown
 }
@@ -38,6 +39,11 @@ export function settingDefault(item: AllowedSetting, device: SyncDevice): unknow
 }
 
 const wordsValue = (v: unknown): string | null => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? canonicalJson(v) : null)
+/** json の設定の 1 つの値の上限(文字数。スマホの JSON_MAX と同じ) */
+export const JSON_MAX = 65536
+const flatOk = (x: unknown) => x === null || typeof x === 'string' || typeof x === 'boolean' || typeof x === 'number' || (Array.isArray(x) && x.every((y) => typeof y === 'string'))
+const jsonValue = (v: unknown): string | null =>
+  Array.isArray(v) && v.every((o) => o !== null && typeof o === 'object' && !Array.isArray(o) && Object.values(o as Record<string, unknown>).every(flatOk)) ? canonicalJson(v) : null
 
 /** 手元の値 → レコードの値。配列は JSON の文字列にする(scalar は真偽・整数・文字列だけ)。許可リストにない項目と範囲の外は null */
 export function settingToWire(name: string, value: unknown): SettingValue | null {
@@ -52,6 +58,10 @@ export function settingToWire(name: string, value: unknown): SettingValue | null
     case 'words': {
       const s = wordsValue(value)
       return s !== null && s.length <= WORDS_MAX ? s : null
+    }
+    case 'json': {
+      const s = jsonValue(value)
+      return s !== null && s.length <= JSON_MAX ? s : null
     }
   }
 }
@@ -81,11 +91,11 @@ export function settingFromWire(name: string, wire: unknown): unknown {
   }
   const item = byName.get(name)
   if (!item) return undefined
-  if (item.type === 'words') {
+  if (item.type === 'words' || item.type === 'json') {
     if (typeof wire !== 'string') return undefined
     try {
       const v = parseStrictJson(wire)
-      return wordsValue(v) === null ? undefined : v
+      return (item.type === 'words' ? wordsValue(v) : jsonValue(v)) === null ? undefined : v
     } catch {
       return undefined
     }

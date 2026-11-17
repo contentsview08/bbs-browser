@@ -1141,11 +1141,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     changeNg(ngDiff(before, prefs.ngRules, io.github.contentsview08.obb.data.today(), keepRemoved = true))
                     reapplyNg()
                 }
-                // キーワードの設定は改行区切りの文字列
-                val curKeywords = prefs.keywords.split('\n').filter { it.isNotBlank() }
-                val kw = (curKeywords + parsed.keywords).distinct()
-                val keywordsAdded = kw.size - curKeywords.size
-                if (keywordsAdded > 0) prefs.keywords = kw.joinToString("\n")
+                // ChMate のキーワードは 1 つの言葉が 1 つのキーワード(同じものは重ねない)
+                val keywordsAdded = prefs.addKeywordRules(parsed.keywords.map { io.github.contentsview08.obb.data.KeywordRule(kind = "title", pattern = it) })
                 favorites = db.favorites()
                 reloadSide()
                 val text = io.github.contentsview08.obb.data.Chmate.describe(threads, favCount, posts, ngAdded, keywordsAdded, skippedBoards, favBoards)
@@ -2045,7 +2042,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 閉じている間は、ここで止まって起きない
                 snapshotFlow { appVisible }.first { it }
                 // キーワードは知らせるだけのものなので、知らせないときはスレ一覧を取りに行かない
-                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && (prefs.keywords.isNotBlank() || prefs.keywordAuthors.isNotBlank())) prefs.keywordWatchMin else 0
+                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && prefs.keywordRules.any { it.enabled }) prefs.keywordWatchMin else 0
                 clock.due(System.currentTimeMillis(), prefs.historyCheckMin, prefs.favCheckMin, keywordMin)?.let { scope ->
                     // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
                     runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { remoteCounts = remoteCounts + it }

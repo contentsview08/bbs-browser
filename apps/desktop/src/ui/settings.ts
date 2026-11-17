@@ -19,6 +19,7 @@ import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
 import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host/uploader'
 import { broadcast, onBroadcast } from '../host/crossWindow'
+import { migrateLegacyKeywords, type KeywordRule } from '../utils/keywords'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
   // スマホ版で足した配色。色は theme/native-schemes.css
@@ -338,6 +339,10 @@ export interface AppSettings {
   keywords: string[]
   /** スレ一覧で畳んでいるキーワードの帯(帯を押すと畳む・開く。端末ごと) */
   keywordBandsCollapsed: string[]
+  /** キーワード(utils/keywords.ts。1 つの言葉か正規表現、立てた人の ID が 1 つの帯。同期する)。前の keywords・keywordAuthors は初回に写す */
+  keywordRules: KeywordRule[]
+  /** 前の形の keywords・keywordAuthors を keywordRules へ写し終えた(端末ごと) */
+  keywordRulesMigrated: boolean
   /** キーワードに当たるスレを帯で上にまとめるか。切るとふだんの並びのまま(キーワードのスレはタブ「キーワード」で見る) */
   keywordBands: boolean
   /**
@@ -618,6 +623,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keywords: [],
   keywordAuthors: [],
   keywordBandsCollapsed: [],
+  keywordRules: [],
+  keywordRulesMigrated: false,
   keywordBands: true,
   paneMode: 'auto',
   boardVisits: {},
@@ -1121,6 +1128,18 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
       }
       setSettings((s) => {
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
+        // 前の形のキーワード(言葉の並び)を 1 度だけ keywordRules へ写す(写したあとに全部消しても、また写さないように印を残す)
+        if (!next.keywordRulesMigrated) {
+          if (next.keywordRules.length === 0) {
+            const rules = migrateLegacyKeywords(next.keywords, next.keywordAuthors)
+            if (rules.length > 0) {
+              next.keywordRules = rules
+              void store.setSetting('keywordRules', rules)
+            }
+          }
+          next.keywordRulesMigrated = true
+          void store.setSetting('keywordRulesMigrated', true)
+        }
         return { ...next, ...migrateValues(next) }
       })
       setLoaded(true)

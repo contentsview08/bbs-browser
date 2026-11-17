@@ -21,6 +21,8 @@ class SyncSettingsTest {
             return if (m.groupValues[1].startsWith("empty")) emptyList<String>() else Regex("\"([^\"]*)\"").findAll(m.groupValues[2]).map { it.groupValues[1] }.toList()
         }
         val raw = Regex("""by pref\("$name", ([^)]*)\)""").find(prefsText)!!.groupValues[1]
+        // json は JSON の文字列で持つ(例: "[]")ので、読んで比べる
+        if (type == "json") return io.github.contentsview08.obb.sync.parseStrictJson(raw.trim('"'))
         return if (type == "bool") raw.toBooleanStrict() else raw.trim('"')
     }
 

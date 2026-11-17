@@ -1,9 +1,8 @@
 // 通知の判定。お気に入りのスレの新着と、キーワードに合う新しいスレ。
 // 通信や画面には触らず、取ってきた値を比べるだけ(App が数分おきに呼ぶ)
 
-import { legacyAuthorId } from './authorId'
 import type { ThreadSummary } from '@bbs-browser/connectors'
-import { normalizeForSearch } from './postBody'
+import { keywordLabel, keywordMatcher, type KeywordRule } from './keywords'
 
 export interface FavIncrease {
   id: string
@@ -38,29 +37,20 @@ export function favIncreases(
   return out
 }
 
-/** 立てた人のキーワードの帯・通知に出す名前(スマホ版の authorKeywordLabel と同じ) */
-export const authorKeywordLabel = (authorId: string) => `立てた人 ${authorId}`
+export { authorKeywordLabel } from './keywords'
 
 /**
- * since より後に立ったスレのうち、スレタイにキーワードを含むもの・立てた人(authorId)が登録した人と同じもの。
- * 当たった名前を添える(スレタイのキーワードが先、立てた人は authorKeywordLabel の形)
+ * since より後に立ったスレのうち、キーワード(スレタイの言葉・正規表現・立てた人)に当たるもの。
+ * 当たったキーワードの名前(別名があればそれ)を添える。boardUrl はその板(板限定のキーワードを絞る)
  */
-export function keywordHits(
-  threads: ThreadSummary[],
-  keywords: string[],
-  since: number,
-  authors: string[] = [],
-): { thread: ThreadSummary; keyword: string }[] {
-  const ks = keywords.map((k) => ({ raw: k.trim(), n: normalizeForSearch(k.trim()) })).filter((k) => k.n !== '')
-  const as = authors.map((a) => legacyAuthorId(a.trim())).filter(Boolean)
-  if (ks.length === 0 && as.length === 0) return []
+export function keywordHits(threads: ThreadSummary[], rules: KeywordRule[], since: number, boardUrl?: string): { thread: ThreadSummary; keyword: string }[] {
+  const m = keywordMatcher(rules, boardUrl)
+  if (m.isEmpty) return []
   const out: { thread: ThreadSummary; keyword: string }[] = []
   for (const t of threads) {
     if ((t.createdAt?.getTime() ?? 0) <= since) continue
-    const title = normalizeForSearch(t.title)
-    const hit = ks.find((k) => title.includes(k.n))
-    if (hit) out.push({ thread: t, keyword: hit.raw })
-    else if (t.authorId && as.includes(t.authorId)) out.push({ thread: t, keyword: authorKeywordLabel(t.authorId) })
+    const r = m.hit(t)
+    if (r) out.push({ thread: t, keyword: keywordLabel(r) })
   }
   return out
 }

@@ -368,9 +368,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(listState) {
         snapshotFlow { Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, listState.layoutInfo.totalItemsCount) }
             .collectLatest {
+                // 見えたレスはすぐ覚え(速く流しても途切れないように)、既読を書くのは止まってから
+                if (ctl.positioned) scroller.noteSeen()
                 delay(300)
                 if (ctl.positioned) reportRead(ctl, scroller, vm, page)
             }
+    }
+    // なぞらずに眺めているだけでも、少し経ったら見えているレスは読んだことにする
+    LaunchedEffect(ctl.positioned) {
+        if (!ctl.positioned) return@LaunchedEffect
+        delay(READ_DWELL_MS + 100)
+        reportRead(ctl, scroller, vm, page)
     }
     // 利用者がスクロールしたら、それ以降の新着へは動かして見せる
     LaunchedEffect(listState) {

@@ -43,6 +43,8 @@ import kotlinx.coroutines.launch
 
 /** 未読の頭を置く位置(見えている範囲の上からの割合) */
 private const val UNREAD_AT = 0.3f
+/** 開いてから、なぞらなくても見えているレスを読んだことにするまでの時間(ms)。開いてすぐ閉じるだけでは既読を進めない */
+const val READ_DWELL_MS = 1200L
 private const val STAGGER_MS = 35f
 private const val STAGGER_TOTAL_MS = 450f
 private const val FLASH_MS = 1000L
@@ -64,8 +66,16 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var firstGrowth = true
     /** 知らせた既読の番号 */
     var sent = page.readNo
-    /** ツリー表示で画面に出たレスの番号(スレを開いている間だけ。既読は 1 番から途切れずに出し終えた所まで進める) */
-    val treeSeen = HashSet<Int>()
+    /**
+     * 開いている間に「下端まで見えた」レスの番号(読み切れたもの。頭だけ見えたレスは入れない)。
+     * 既読は、今の既読から途切れずにこの中にある所までしか進めない(飛んで開いたときに、その手前の読んでいないレスを既読にしないため)。
+     * 一番下に着いたときだけ全部読んだことにする
+     */
+    val seen = HashSet<Int>()
+    /** 位置が決まった時刻(ms)。既読を数え始めるのは、なぞってから(untouched が外れてから)か、ここから READ_DWELL_MS 経ってから */
+    var positionedAt = 0L
+    /** 見えているレスを読んだことにしてよいか(開いて閉じるだけで 1 画面ぶん既読が進むのを防ぐ) */
+    fun counting() = !untouched || (positionedAt > 0 && System.currentTimeMillis() - positionedAt >= READ_DWELL_MS)
     var atBottom = false
     /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
     var pendingUnread = false
@@ -343,6 +353,7 @@ class ThreadScroller(
         ctl.prevCount = posts.size
         ctl.lastMax = posts.lastOrNull()?.no ?: 0
         ctl.positioned = true
+        ctl.positionedAt = System.currentTimeMillis()
     }
 
     /**
@@ -413,8 +424,22 @@ class ThreadScroller(
     }
 
     /**
-     * どこまで読んだかを測り、読んでいた位置を返す(PC 版の readProgress):
-     * 画面の下端より上に頭が出ているレスのうち、いちばん後ろを既読に。一番下まで来ていれば全部読んだことに。
+     * 下端まで見えた(読み切れた)レスを、見た印(ctl.seen)に足す。スクロールのたびに呼ぶ
+     * (止まってからだけだと、速く流した途中のレスを見たことにできず、既読が止まる)。
+     * 開いた直後(なぞる前・少し経つ前)は数えない
+     */
+    fun noteSeen() {
+        if (!ctl.counting()) return
+        val info = state.layoutInfo
+        val end = info.viewportEndOffset - info.afterContentPadding
+        for (it in info.visibleItemsInfo) if (it.key is Int && it.offset + it.size <= end) ctl.seen += it.key as Int
+    }
+
+    /**
+     * どこまで読んだかを測り、読んでいた位置を返す。
+     * 既読は「今の既読から、途切れずに下端まで見えた所まで」(readHead)。頭だけ見えたレスや、飛んで開いたときに手前に残った
+     * 読んでいないレスは既読にしない。一番下まで来ていれば(飛ばしたレスがあっても)全部読んだことに。
+     * 開いてすぐ(なぞる前・READ_DWELL_MS 経つ前)は既読を進めない(開いて閉じるだけで 1 画面ぶん進んでいた)。
      * 上の帯の下に少しでも見えている最初のレスを、読んでいた位置として覚える
      */
     fun progress(): Pair<Int, ScrollPos?> {
@@ -427,25 +452,20 @@ class ThreadScroller(
             ?: info.visibleItemsInfo.lastOrNull()?.takeIf { it.index == info.totalItemsCount - 1 }
         val rest = if (lastItem != null) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
         ctl.atBottom = !state.canScrollForward || rest < bottomPx
-        var last = items.last().key as Int
+        noteSeen()
         val page = ctl.page
         // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
-        val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
-        if (tree()) {
-            // ツリー表示では並びが番号の順ではないので、出たレスを覚え、途中では 1 番から途切れずに出し終えた番号まで。
-            // 一番下に着いたら番号の順と同じく全部(飛ばして出していないレスがあっても。そうしないと未読の数が残る)
-            for (it in items) ctl.treeSeen += it.key as Int
-            val posts = page.index.posts
-            val top = posts.lastOrNull()?.no ?: 0
-            val exists = posts.mapTo(HashSet()) { it.no }
-            last = readHead(maxOf(ctl.sent, page.readNo), top, ctl.treeSeen, exists, atBottom = ctl.atBottom && !filtering)
-            val first = items.firstOrNull { it.offset + it.size > 0 }
-            return last to first?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
-        }
+        val filtering = page.filter != null || (page.searching && page.query.isNotBlank())
+        val posts = page.index.posts
+        // 途切れの判定に使う「あるレス」: 並んでいる行(透明あぼーん・まとめたあぼーんで行のないレスは飛ばしてよい)。
+        // 絞り込み中は全部(絞って消えたレスを飛ばして既読にしない)
+        val exists = if (filtering) posts.mapTo(HashSet()) { it.no } else shown().filterTo(HashSet()) { it > 0 }
         // 実況モードでまだ出していないレスは読んでいない
-        if (ctl.atBottom && !filtering) last = maxOf(last, minOf(ctl.page.index.posts.lastOrNull()?.no ?: 0, ctl.liveLimit))
-        val top = items.firstOrNull { it.offset + it.size > 0 }
-        return last to top?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
+        val top = minOf(posts.lastOrNull()?.no ?: 0, if (tree()) Int.MAX_VALUE else ctl.liveLimit)
+        val from = maxOf(ctl.sent, page.readNo)
+        val last = if (ctl.counting()) readHead(from, top, ctl.seen, exists, atBottom = ctl.atBottom && !filtering) else from
+        val first = items.firstOrNull { it.offset + it.size > 0 }
+        return last to first?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
     }
 }
 

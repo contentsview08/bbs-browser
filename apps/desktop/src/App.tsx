@@ -2763,6 +2763,7 @@ export default function App() {
     refresh: useEvent(() => void refreshThread()),
     openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
     openUrl: useEvent((url: string) => void openLink(url)),
+    notice: useEvent((n: { icon: string; title: string; body?: string }) => notify(n)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
     removeNg: useEvent((rules: NgRule[]) => updateSetting('ngRules', settings.ngRules.filter((r) => !rules.some((x) => x.id === r.id)), settings.ngRules)),
     editNg: useEvent((rule: NgRule, values: Partial<Record<NgTarget, string>>) => setNgDraft({ target: rule.target, pattern: rule.pattern, rule, values })),

@@ -83,6 +83,8 @@ export interface PostHandlers extends BodyHandlers {
   onSearchText?: (text: string) => void
   /** OS の既定のブラウザで開く(選んだ文字の検索に使う) */
   onOpenExternal?: (url: string) => void
+  /** 画像(サムネイル)の右クリック「保存」。設定の保存先へ */
+  onSaveImage?: (url: string, post: Post) => void
   /** レスの共有の小項目 */
   shareOf?: (post: Post) => MenuItem[]
   /** 自分の書き込みを消す。消せない掲示板は undefined */
@@ -299,6 +301,10 @@ function PostArticle(props: Props) {
   const [moreOpen, setMoreOpen] = useState(false)
   /** 右クリックのメニューを開いている位置。ID・名前の上で開いたなら、その要素。文字を選んで開いたなら、その文 */
   const [ctxMenu, setCtxMenu] = useState<{
+    /** リンクの上で右クリックした(URL) */
+    link?: string
+    /** 画像・動画のサムネイルの上で右クリックした(元の URL) */
+    mediaUrl?: string
     pos: MenuPos
     head?: { kind: 'id' | 'name'; el: HTMLElement }
     sel?: { text: string; inside: boolean }
@@ -571,6 +577,26 @@ function PostArticle(props: Props) {
         : undefined,
       postItems: actions,
     })
+
+  /** リンクの右クリック */
+  const linkItems = (url: string): MenuItem[] => [
+    { label: '開く', icon: 'open_in_new', onClick: () => handlers.onUrl(url) },
+    ...(handlers.onOpenExternal ? [{ label: 'ブラウザで開く', icon: 'open_in_browser', onClick: () => handlers.onOpenExternal!(url) }] : []),
+    { label: 'リンクをコピー', icon: 'link', onClick: () => copy(url) },
+    ...(handlers.onOpenExternal ? [{ label: 'Google で検索', icon: 'search', onClick: () => handlers.onOpenExternal!(`https://www.google.com/search?q=${encodeURIComponent(url)}`) }] : []),
+  ]
+  /** 画像・動画のサムネイルの右クリック */
+  const mediaMenuItems = (url: string): MenuItem[] => [
+    { label: '見る', icon: 'visibility', onClick: () => handlers.onImage(media, Math.max(0, media.indexOf(url)), post) },
+    ...(handlers.onSaveImage ? [{ label: '保存', icon: 'download', onClick: () => handlers.onSaveImage!(url, post) }] : []),
+    { label: 'URL をコピー', icon: 'link', onClick: () => copy(url) },
+    ...(handlers.onOpenExternal
+      ? [
+          { label: 'ブラウザで開く', icon: 'open_in_browser', onClick: () => handlers.onOpenExternal!(url) },
+          { label: 'Google で画像を検索', icon: 'image_search', onClick: () => handlers.onOpenExternal!(`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(url)}`) },
+        ]
+      : []),
+  ]
 
   const variant = props.variant ?? 'card'
 
@@ -1007,6 +1033,7 @@ function PostArticle(props: Props) {
                     <button
                       key={m.url + i}
                       type="button"
+                      data-media-url={m.url}
                       onClick={open}
                       className="post-thumb relative bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
                     >
@@ -1025,6 +1052,7 @@ function PostArticle(props: Props) {
                     <button
                       key={m.url}
                       type="button"
+                      data-media-url={m.url}
                       onClick={open}
                       className="post-thumb relative bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
                       title="動画を再生する"
@@ -1244,6 +1272,14 @@ function PostArticle(props: Props) {
                 setCtxMenu({ pos: menuPosAt(e.clientX, e.clientY), sel })
                 return
               }
+              // リンク・画像(サムネイル)の上: それ向けのメニュー(開く・ブラウザで開く・コピー・検索・保存)
+              const link = target.closest?.('a[href]') as HTMLAnchorElement | null
+              const mediaEl = target.closest?.('[data-media-url]') as HTMLElement | null
+              if (link || mediaEl) {
+                e.preventDefault()
+                setCtxMenu({ pos: menuPosAt(e.clientX, e.clientY), link: link?.href, mediaUrl: mediaEl?.dataset.mediaUrl })
+                return
+              }
               if (wantsNativeMenu(e)) return
               e.preventDefault()
               const el = (e.target as Element).closest<HTMLElement>('[data-head-target]')
@@ -1318,7 +1354,7 @@ function PostArticle(props: Props) {
         </>
       )}
       {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}
-      {ctxMenu && <FloatingMenu pos={ctxMenu.pos} items={ctxMenu.sel ? selectionItems(ctxMenu.sel) : ctxMenu.head ? headMenuItems(ctxMenu.head) : actions} onClose={closeCtxMenu} />}
+      {ctxMenu && <FloatingMenu pos={ctxMenu.pos} items={ctxMenu.link ? linkItems(ctxMenu.link) : ctxMenu.mediaUrl ? mediaMenuItems(ctxMenu.mediaUrl) : ctxMenu.sel ? selectionItems(ctxMenu.sel) : ctxMenu.head ? headMenuItems(ctxMenu.head) : actions} onClose={closeCtxMenu} />}
     </article>
   )
 }

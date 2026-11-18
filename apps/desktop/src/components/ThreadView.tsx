@@ -4,7 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import type { SaveThread } from '../host/saveImage'
+import { saveImage, type SaveThread } from '../host/saveImage'
 import { countIconKeys, iconKeyOf, watchoiOf } from '../utils/watchoi'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
@@ -113,6 +113,8 @@ interface Props {
   onRefresh: () => Promise<unknown> | void
   onOpenInBrowser: () => void
   onUrl: (url: string) => void
+  /** 短い知らせ(画像を保存した、など)。なければ出さない */
+  onNotice?: (n: { icon: string; title: string; body?: string }) => void
   onAddNg: (rule: NgRule) => void
   onRemoveNg?: (rules: NgRule[]) => void
   onEditNg?: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
@@ -2124,6 +2126,13 @@ export default function ThreadView(props: Props) {
           setSearchActive(true)
         },
         onOpenExternal: (url) => void openUrl(url),
+        // サムネイルの右クリック「保存」: ビューアーの保存と同じ保存先へ
+        onSaveImage: (url, p) => {
+          saveImage(url, saveTo, p.no).then(
+            (r) => props.onNotice?.({ icon: 'download', title: '画像を保存しました', body: r.path }),
+            (e: unknown) => props.onNotice?.({ icon: 'error', title: '画像を保存できませんでした', body: e instanceof Error ? e.message : String(e) }),
+          )
+        },
         toNo: (n: number) => d().resolveAnchor(n),
         urls: { shorten: settings.urlShorten, omitImages: settings.urlShorten, collapseImageRuns: settings.urlShorten },
         // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)

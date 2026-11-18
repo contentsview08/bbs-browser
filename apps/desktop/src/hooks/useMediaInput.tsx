@@ -249,10 +249,15 @@ export function useMediaInput(o: {
             continue
           }
           const r = await uploadMedia(next.file, uploader)
-          await verifyImage(r.url, r.host, next.file)
+          // 上がったらすぐ URL を本文に入れる。上げた URL が本当に画像を返すかの確かめは裏で(待つと、上がってから URL が入るまでが長かった)
           patch(next.id, { state: 'done', url: r.url })
           oRef.current.insert(`${r.url}\n`, { ownLine: true })
           oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST, hash, deleteUrl: r.deleteUrl })
+          void verifyImage(r.url, r.host, next.file).catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e)
+            patch(next.id, { state: 'failed', error: msg })
+            setError(`${msg}。本文に入れた URL は開けないかもしれません`)
+          })
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           patch(next.id, { state: 'failed', error: msg })
@@ -311,9 +316,13 @@ export function useMediaInput(o: {
     }
     upload(files)
   }
-  /** 貼り付け・ドロップで来たファイル。1 枚でも、上げる前に確かめる */
+  /**
+   * 貼り付け・ドロップで来たファイル。API で上げるときは、上げる前に確かめる(枚数の選び直し・スレタイと URL の描き込み)。
+   * サイトの画面で上げるときは、その画面で選び直せるので確かめずにそのまま渡す(確かめと描き込みは画面での操作と合わず、手間だけ増えていた)
+   */
   const take = (files: File[]) => {
     if (files.length === 0) return
+    if (!o.attach && webSiteDef) return takeNow(files)
     setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)) })
   }
   const confirmView: ReactNode = pending

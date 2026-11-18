@@ -44,6 +44,8 @@ export interface Tab {
 
 /** アプリ側の処理。どれも関数そのものは変わらない(描き直しても同じもの) */
 export interface TabEvents {
+  /** 短い知らせ(画像を保存した、など) */
+  notice?: (n: { icon: string; title: string; body?: string }) => void
   savePosition: (id: string, pos: ScrollPosition) => void
   markRead: (t: ThreadSummary, no: number) => void
   refresh: () => void
@@ -223,6 +225,7 @@ function TabPane({
       onRefresh={ev.refresh}
       onOpenInBrowser={onOpenInBrowser}
       onUrl={ev.openUrl}
+      onNotice={ev.notice}
       onAddNg={ev.addNg}
       onRemoveNg={ev.removeNg}
       onEditNg={ev.editNg}

@@ -397,6 +397,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 未読のスレ(閲覧履歴のうち、新着のあるもの) */
     var allUnread by mutableStateOf<List<HistoryEntry>>(emptyList())
+    /** 未読のレスの数の合計(札に出す数。スレの数ではなく、スレごとの新着を足したもの) */
+    val unreadTotal: Int get() = allUnread.sumOf { maxOf(0, maxOf(it.thread.postCount, remoteCounts[it.thread.id] ?: 0) - it.readNo) }
     /**
      * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味)。
      * 板ごとにスレ一覧を 1 回だけ取り、載っていればそのレス数を新しい数にする(dat を 1 つずつ取りに行かない)

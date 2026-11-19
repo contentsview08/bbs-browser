@@ -100,8 +100,8 @@ fun DrawerContent(vm: AppViewModel) {
                     "posts" -> current is Page.PostHistory
                     else -> current is Page.Uploads
                 }
-                // 未読は未読の札、お気に入りのスレは数(履歴のタブと同じ)
-                val badge = when (k) { "unread" -> vm.allUnread.size.takeIf { it > 0 }; "fav" -> vm.favThreads.size.takeIf { it > 0 }; else -> null }
+                // 未読は未読のレスの数の合計を未読の札で、お気に入りのスレはスレの数(履歴のタブと同じ)
+                val badge = when (k) { "unread" -> vm.unreadTotal.takeIf { it > 0 }; "fav" -> vm.favThreads.size.takeIf { it > 0 }; else -> null }
                 DrawerRow(icon, label, if (k == "fav") Palette.markFav else Palette.textMuted, active = active, badge = badge, badgeUnread = k == "unread") { vm.openPast(k) }
             }
             HorizontalDivider(color = Palette.border, modifier = Modifier.padding(vertical = 6.dp))

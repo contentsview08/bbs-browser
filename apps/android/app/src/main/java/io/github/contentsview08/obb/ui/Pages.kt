@@ -238,7 +238,8 @@ private fun PastTabBar(vm: AppViewModel, current: String, footer: Boolean) {
             content = {
             for (k in tabs) {
                 val on = k == current
-                val count = when (k) { "unread" -> vm.allUnread.size; "fav" -> vm.favThreads.size; else -> 0 }
+                // 未読は未読のレスの数の合計(スレの数ではない)
+                val count = when (k) { "unread" -> vm.unreadTotal; "fav" -> vm.favThreads.size; else -> 0 }
                 Box(
                     Modifier.clickable(enabled = !on) { vm.openPast(k) }
                         .background(if (on) Palette.accentWash else Color.Transparent).heightIn(min = height.dp).padding(horizontal = 10.dp),

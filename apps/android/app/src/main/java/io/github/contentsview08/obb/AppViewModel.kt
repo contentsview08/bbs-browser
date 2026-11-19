@@ -1342,7 +1342,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     page.freshFrom = io.github.contentsview08.obb.ui.treeFreshFrom(page.freshFrom, page.readNo, log?.posts?.lastOrNull()?.no ?: 0, arrived = r.posts.isNotEmpty(), manual = !quiet)
                 }
                 val shown = renderSeq[page]?.second ?: page.index.posts
-                mergeRefreshed(shown, log?.posts.orEmpty(), r.posts, r.status == FetchStatus.RESET)?.let { setPosts(page, it) }
+                mergeRefreshed(shown, log?.posts.orEmpty(), r.posts, r.status == FetchStatus.RESET)?.let { setPosts(page, it); noteThreadCount(t, it.size, page.readNo) }
             } catch (e: Exception) {
                 page.error = loadErrorText(e)
             } finally {
@@ -1540,15 +1540,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val st = p.states[t.key]
             p.states = p.states + (t.key to (st?.copy(readNo = maxOf(st.readNo, no)) ?: ThreadState(no, page.index.posts.size)))
         }
-        // 未読の一覧と札はその場で直す: 既読を進め、読み切ったスレは外す(次の確かめを待たない)。レス数は開いているスレの今の数で
-        if (allUnread.any { it.thread.id == t.id }) {
-            val count = page.index.posts.size
-            allUnread = unreadEntries(allUnread.map { if (it.thread.id == t.id) HistoryEntry(it.thread.copy(postCount = maxOf(it.thread.postCount, count)), maxOf(it.readNo, no), it.readAt) else it }, remoteCounts)
-        }
+        // 未読の一覧と札はその場で直す(次の確かめを待たない)
+        noteThreadCount(t, page.index.posts.size, no)
         // 変わるものがないときは書き換えない(読み手全員を作り直さない)
         if (history.any { it.thread.id == t.id && it.readNo < no }) history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         if (favThreads.any { it.thread.id == t.id && it.readNo < no }) favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         viewModelScope.launch { db.userOps.markRead(page.summary, no) }
+    }
+
+    /**
+     * スレを取得した・読んだその場で、未読の一覧(allUnread)と札を直す。掲示板のレス数(remoteCounts)も手元の数に合わせる
+     * (前は未読の確かめ(スレ一覧の取得)のときにしか作り直さず、読み切ったスレが残ったり、新着を取り込んだスレが入らなかったり、
+     * 古いレス数で比べて未読が消えたりしていた)。count は手元のレス数、readNo は既読
+     */
+    private fun noteThreadCount(t: ThreadSummary, count: Int, readNo: Int) {
+        if (count <= 0) return
+        if ((remoteCounts[t.id] ?: 0) != count) remoteCounts = remoteCounts + (t.id to count)
+        val entry = allUnread.firstOrNull { it.thread.id == t.id } ?: history.firstOrNull { it.thread.id == t.id }
+        val fresh = HistoryEntry((entry?.thread ?: t).copy(postCount = count), maxOf(entry?.readNo ?: 0, readNo), entry?.readAt ?: System.currentTimeMillis())
+        val next = unreadEntries(allUnread.filter { it.thread.id != t.id } + fresh, remoteCounts)
+        if (next != allUnread) allUnread = next
     }
 
     /**

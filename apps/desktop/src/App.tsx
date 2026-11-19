@@ -2991,12 +2991,8 @@ export default function App() {
   const pastHeader = pastView && isMobile && (
     <PastTabs
       current={pastTab}
-      unreadCount={
-        historyThreads?.filter((t) => {
-          const st = historyStates.get(threadId(t))
-          return threadUnread(st, t.postCount) > 0
-        }).length ?? 0
-      }
+      // 未読の札はレスの数の合計(スレの数ではない。スマホのアプリと同じ)
+      unreadCount={historyThreads?.reduce((n, t) => n + threadUnread(historyStates.get(threadId(t)), t.postCount), 0) ?? 0}
       favCount={favNewTotal}
       onPick={pickPastTab}
     />

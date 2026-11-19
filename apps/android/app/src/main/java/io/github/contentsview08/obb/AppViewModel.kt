@@ -1540,7 +1540,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val st = p.states[t.key]
             p.states = p.states + (t.key to (st?.copy(readNo = maxOf(st.readNo, no)) ?: ThreadState(no, page.index.posts.size)))
         }
-        if (allUnread.any { it.thread.id == t.id }) allUnread = allUnread.map { if (it.thread.id == t.id) HistoryEntry(it.thread, maxOf(it.readNo, no), it.readAt) else it }
+        // 未読の一覧と札はその場で直す: 既読を進め、読み切ったスレは外す(次の確かめを待たない)。レス数は開いているスレの今の数で
+        if (allUnread.any { it.thread.id == t.id }) {
+            val count = page.index.posts.size
+            allUnread = unreadEntries(allUnread.map { if (it.thread.id == t.id) HistoryEntry(it.thread.copy(postCount = maxOf(it.thread.postCount, count)), maxOf(it.readNo, no), it.readAt) else it }, remoteCounts)
+        }
         // 変わるものがないときは書き換えない(読み手全員を作り直さない)
         if (history.any { it.thread.id == t.id && it.readNo < no }) history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         if (favThreads.any { it.thread.id == t.id && it.readNo < no }) favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }

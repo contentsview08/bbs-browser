@@ -82,9 +82,9 @@ fun DrawerContent(vm: AppViewModel) {
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
             HorizontalDivider(color = Palette.border, modifier = Modifier.padding(vertical = 6.dp))
-            // 履歴の仲間。並びはここで決める(お気に入りのスレ → 閲覧履歴 → 書き込み履歴 → 未読 → 上げた画像)。出すものは設定「履歴のタブ」と同じ
+            // 履歴の仲間。並びはここで決める(お気に入りのスレ → 閲覧履歴 → 書き込み履歴 → 未読)。上げた画像は履歴の画面のタブから。出すものは設定「履歴のタブ」と同じ
             val shown = io.github.contentsview08.obb.data.shownPastTabs(vm.prefs.pastTabs).toSet()
-            for (k in listOf("fav", "history", "posts", "unread", "uploads")) {
+            for (k in listOf("fav", "history", "posts", "unread")) {
                 if (k !in shown) continue
                 val (icon, label) = when (k) {
                     "unread" -> Icons.Filled.MarkEmailUnread to "未読"

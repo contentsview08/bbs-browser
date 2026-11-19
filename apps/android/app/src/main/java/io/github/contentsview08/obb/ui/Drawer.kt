@@ -20,6 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -54,21 +57,40 @@ import androidx.compose.foundation.lazy.itemsIndexed
 
 private const val BAD_URL_NOTICE = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)"
 
-/** 左から出るメニュー */
+/**
+ * 左から出るメニュー。履歴の仲間(未読・閲覧履歴・お気に入りのスレ・書き込み履歴・上げた画像)は、小項目を広げずに 1 行ずつすぐ押せるように並べる
+ * (前は「履歴」の下に最近見たスレを広げていたが、閲覧履歴やお気に入りのスレにすぐ行けない方が困る、という声があった)。
+ * 顔ぶれと並びは、設定「履歴のタブ」で出しているものと同じ
+ */
 @Composable
 fun DrawerContent(vm: AppViewModel) {
     var favOpen by rememberSaveable { mutableStateOf(true) }
-    var histOpen by rememberSaveable { mutableStateOf(false) }
     var urlDialog by rememberSaveable { mutableStateOf(false) }
     // 設定を重ねている間は、下の画面の行を「今いる所」にしない
     val current = if (vm.settingsOpen) null else vm.stack.lastOrNull()
     Column(Modifier.fillMaxHeight().width(300.dp).background(Palette.surface).safeDrawingPadding()) {
         Text("OBB", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 12.dp), color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        // 履歴の一覧だけは決まった高さの枠の中でスクロールし、見出し・「すべて見る」・「URL を開く」はいつも見えるようにする。
-        // 枠の高さは、ほかの行を並べた残り(お気に入り板を広げていても押し出さない)。それでも入らないほど板が多いときは全体がスクロールする
-        BoxWithConstraints(Modifier.weight(1f)) {
-        // 履歴の小項目は、お気に入り板が多くても最低 6 行(1 行 36dp)は見えるようにする
-        FitColumn(maxHeight, minFlex = 220.dp, Modifier.verticalScroll(rememberScrollState())) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            for (k in io.github.contentsview08.obb.data.shownPastTabs(vm.prefs.pastTabs)) {
+                val (icon, label) = when (k) {
+                    "unread" -> Icons.Filled.MarkEmailUnread to "未読"
+                    "history" -> Icons.Filled.History to "閲覧履歴"
+                    "fav" -> Icons.Filled.Star to "お気に入りのスレ"
+                    "posts" -> Icons.Filled.EditNote to "書き込み履歴"
+                    else -> Icons.Filled.PhotoLibrary to "上げた画像"
+                }
+                val active = when (k) {
+                    "unread" -> current is Page.AllUnread
+                    "history" -> current is Page.History
+                    "fav" -> current is Page.FavThreads
+                    "posts" -> current is Page.PostHistory
+                    else -> current is Page.Uploads
+                }
+                // 未読は未読の札、お気に入りのスレは数(履歴のタブと同じ)
+                val badge = when (k) { "unread" -> vm.allUnread.size.takeIf { it > 0 }; "fav" -> vm.favThreads.size.takeIf { it > 0 }; else -> null }
+                DrawerRow(icon, label, if (k == "fav") Palette.markFav else Palette.textMuted, active = active, badge = badge, badgeUnread = k == "unread") { vm.openPast(k) }
+            }
+            HorizontalDivider(color = Palette.border, modifier = Modifier.padding(vertical = 6.dp))
             DrawerRow(Icons.Filled.Star, "お気に入り板", Palette.markFav, trailing = if (favOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore) { favOpen = !favOpen }
             if (favOpen) {
                 // 長押しして掴むと、上下に動かして並べ替えられる
@@ -78,26 +100,8 @@ fun DrawerContent(vm: AppViewModel) {
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
-            // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴・上げた画像)は 1 つの画面にまとめ、上のタブで切り替える
-            val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads
-            // 行を押すと小項目(最近見たスレ)を広げる。画面へは一番下の「すべて見る」から
-            DrawerRow(Icons.Filled.History, "履歴", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
-                histOpen = !histOpen
-            }
-            if (histOpen) {
-                // 枠の中でスクロールするので 100 件まで出す(見えている行だけ組み立てる)
-                DrumColumn(Modifier.fitFlex()) { d ->
-                    itemsIndexed(vm.history.take(100)) { i, h ->
-                        Text(
-                            h.thread.title, Modifier.fillMaxWidth().drumItem(d, i).clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                            color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                DrawerRow(Icons.Filled.History, "すべて見る", Palette.textMuted, sub = true, muted = true) { vm.openPast("history") } // 前に見ていたタブではなく、いつも閲覧のタブで開く
-            }
+            HorizontalDivider(color = Palette.border, modifier = Modifier.padding(vertical = 6.dp))
             DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
-        }
         }
         HorizontalDivider(color = Palette.border)
         DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = vm.settingsOpen) { vm.openSettings() }
@@ -147,6 +151,9 @@ private fun DrawerRow(
     onTrailing: (() -> Unit)? = null,
     /** 板のファビコンを出すとき、その板の URL */
     boardUrl: String? = null,
+    /** 右に出す数(未読の数・お気に入りのスレの数)。badgeUnread なら未読の色の札、そうでなければ薄い数 */
+    badge: Int? = null,
+    badgeUnread: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -165,6 +172,10 @@ private fun DrawerRow(
             label, Modifier.weight(1f), color = if (muted) Palette.textMuted else if (active) Palette.accent else Palette.textStrong,
             fontSize = if (sub) 15.sp else 17.sp, fontWeight = if (sub) FontWeight.Normal else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
+        if (badge != null) {
+            if (badgeUnread) UnreadBadge(badge) else Text(badgeCount(badge), color = Palette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+        }
         if (trailing != null) {
             Box(Modifier.size(40.dp).clickable(onClick = onTrailing ?: onClick), contentAlignment = Alignment.Center) {
                 Icon(trailing, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))

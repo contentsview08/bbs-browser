@@ -579,7 +579,7 @@ fun BadgeChip(text: String, bg: Color, fg: Color) {
 }
 
 /** 新(新しいスレ)の札の色。塗りつぶして、字は濃い色(暗い配色)・白(明るい配色) */
-fun newChipColors() = if (Palette.dark) Color(0xFFF2C14E) to Color(0xFF221A00) else Color(0xFFB8860B) to Color.White
+fun newChipColors() = Palette.newBadge to Palette.newBadgeText
 
 private var chipsScheme: Scheme? = null
 private var chips: Map<String, androidx.compose.foundation.text.InlineTextContent> = emptyMap()

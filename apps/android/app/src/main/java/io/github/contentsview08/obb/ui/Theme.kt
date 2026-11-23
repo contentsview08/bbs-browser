@@ -24,6 +24,8 @@ class Scheme(
     val unread: Color, val unreadText: Color,
     val link: Color, val posterName: Color, val threadReadTitle: Color,
     val heatWarm: Color, val heatHot: Color, val heatVeryHot: Color,
+    /** 自分の配色の細かい色(own・toOwn・mark* など。キーは ui/CustomScheme.kt の EXTRA_COLORS)。Palette は配色の決まりの色より先にこれを見る */
+    val extra: Map<String, Color> = emptyMap(),
 )
 
 private fun c(hex: Long) = Color(hex or 0xFF000000)
@@ -165,28 +167,60 @@ object Palette {
     val unreadText get() = scheme.unreadText
     /** 「ここから未読」の字。未読の色は札の地に使う明るい色なので、明るい配色では濃くして読めるようにする */
     val unreadInk get() = if (scheme.dark) unread else androidx.compose.ui.graphics.Color(unread.red * 0.45f, unread.green * 0.45f, unread.blue * 0.45f)
-    // 自分の書き込みは紫、自分へのレスは水色(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
-    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF5A3CC0) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
+    // 自分の書き込みは紫、自分へのレスは水色(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)。
+    // 値は extraOf に。自分の配色で細かい色を選んでいれば(scheme.extra)そちら
+    val own get() = scheme.extra["own"] ?: extraOf(scheme, "own")
     val ownWash get() = own.copy(alpha = 0.16f)
-    val toOwn get() = if (scheme.dark) Color(0xFF4DD0E1) else Color(0xFF0B7A8C)
+    val toOwn get() = scheme.extra["toOwn"] ?: extraOf(scheme, "toOwn")
     val toOwnWash get() = toOwn.copy(alpha = 0.16f)
-    val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFF926019)
+    val op get() = scheme.extra["op"] ?: extraOf(scheme, "op")
     val opWash get() = op.copy(alpha = 0.16f)
+    /** スレ一覧の「新」の札(地と字)。暗い配色はお気に入りの金に暗い字、明るい配色は濃い金に白い字 */
+    val newBadge get() = scheme.extra["newBadge"] ?: extraOf(scheme, "newBadge")
+    val newBadgeText get() = scheme.extra["newBadgeText"] ?: extraOf(scheme, "newBadgeText")
     val link get() = scheme.link
     val posterName get() = scheme.posterName
     val threadReadTitle get() = scheme.threadReadTitle
     val heatWarm get() = scheme.heatWarm
     val heatHot get() = scheme.heatHot
     val heatVeryHot get() = scheme.heatVeryHot
-    // 意味の色(差し色)。明るい配色では少し濃くする
-    val markFav get() = if (scheme.dark) Color(0xFFF2C14E) else Color(0xFFAC8016)
-    val markDanger get() = if (scheme.dark) Color(0xFFEF7470) else Color(0xFFC53631)
-    val markNew get() = if (scheme.dark) Color(0xFF5FC28A) else Color(0xFF24794A)
+    // 意味の色(差し色)。明るい配色では少し濃くする(値は extraOf)
+    val markFav get() = scheme.extra["markFav"] ?: extraOf(scheme, "markFav")
+    val markDanger get() = scheme.extra["markDanger"] ?: extraOf(scheme, "markDanger")
+    val markNew get() = scheme.extra["markNew"] ?: extraOf(scheme, "markNew")
     val markVideo get() = markDanger
     val markImage get() = markNew
-    val markHot get() = if (scheme.dark) Color(0xFFF0954A) else Color(0xFFCC5F00)
-    val markLink get() = if (scheme.dark) Color(0xFF6AA9F0) else Color(0xFF2969C2)
-    val markPurple get() = if (scheme.dark) Color(0xFFB48CF0) else Color(0xFF8051C7)
+    val markHot get() = scheme.extra["markHot"] ?: extraOf(scheme, "markHot")
+    val markLink get() = scheme.extra["markLink"] ?: extraOf(scheme, "markLink")
+    val markPurple get() = scheme.extra["markPurple"] ?: extraOf(scheme, "markPurple")
+
+    /**
+     * 配色の決まりの色(配色ごとの値ではなく、明るい・暗いで決まる色)。own・toOwn・op・mark*・「新」の札・LINE 風の自分の吹き出し・LINE 風の地。
+     * 自分の配色の細かい色(Scheme.extra)で選んでいなければこの値。tools/colors.py がこの表を読んで PC 版・Web の CSS と突き合わせる
+     * (「"名前" -> if (s.dark) Color(0x…) else Color(0x…)」か「"名前" -> Color(0x…)」の形を崩さない)
+     */
+    fun extraOf(s: Scheme, key: String): Color = when (key) {
+        "own" -> if (s.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
+        "toOwn" -> if (s.dark) Color(0xFF4DD0E1) else Color(0xFF0B7A8C)
+        "op" -> if (s.dark) Color(0xFFF0B44C) else Color(0xFF926019)
+        "newBadge" -> if (s.dark) Color(0xFFF2C14E) else Color(0xFFB8860B)
+        "newBadgeText" -> if (s.dark) Color(0xFF221A00) else Color(0xFFFFFFFF)
+        "markFav" -> if (s.dark) Color(0xFFF2C14E) else Color(0xFFAC8016)
+        "markDanger" -> if (s.dark) Color(0xFFEF7470) else Color(0xFFC53631)
+        "markNew" -> if (s.dark) Color(0xFF5FC28A) else Color(0xFF24794A)
+        "markHot" -> if (s.dark) Color(0xFFF0954A) else Color(0xFFCC5F00)
+        "markLink" -> if (s.dark) Color(0xFF6AA9F0) else Color(0xFF2969C2)
+        "markPurple" -> if (s.dark) Color(0xFFB48CF0) else Color(0xFF8051C7)
+        "lineOwnBg" -> if (s.dark) Color(0xFFA6DB8A) else Color(0xFF8DE055)
+        "lineOwnText" -> Color(0xFF10200A)
+        "lineOwnLink" -> Color(0xFF0B4F9E)
+        "lineOwnYoutube" -> Color(0xFF9B0F27)
+        // 地と吹き出しが見分けられるように: 暗い配色は地を沈めて吹き出しを少し浮かせ、明るい配色は地に青灰をはっきり混ぜる
+        // (地と吹き出しの明るさの比が 1.2〜2 になるように。字と吹き出しの差は大きいまま)
+        "lineBg" -> if (s.dark) androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.lerp(s.base, Color(0xFF6F8FB8), 0.06f), Color.Black, 0.35f)
+            else androidx.compose.ui.graphics.lerp(s.base, Color(0xFF7F9CC0), 0.22f)
+        else -> s.accent
+    }
 
     /**
      * スレ表示の地。LINE 風のときだけ配色ごとに変える: LINE ライトは LINE のトーク画面のような空色(ライトとの見分け)、
@@ -194,6 +228,8 @@ object Palette {
      */
     fun threadBg(style: String) = when {
         style != "line" -> base
+        // 自分の配色で LINE 風の地を選んでいればそれ
+        scheme.extra["lineBg"] != null -> scheme.extra.getValue("lineBg")
         scheme.key == "line-light" -> Color(0xFF9DB8DC)
         scheme.key == "gray" -> Color(0xFF1C2838)
         else -> lineBg
@@ -204,17 +240,14 @@ object Palette {
     fun selectionWash(style: String): Color = if (onSky(style)) Color.White.copy(alpha = 0.12f) else accentWash
     val skyText get() = Color(0xFFF4F8FC)
     val skyMuted get() = Color(0xE6FFFFFF)
-    // 地と吹き出しが見分けられるように: 暗い配色は地を沈めて吹き出しを少し浮かせ、明るい配色は地に青灰をはっきり混ぜる
-    // (地と吹き出しの明るさの比が 1.2〜2 になるように。字と吹き出しの差は大きいまま)
-    val lineBg get() = if (scheme.dark) androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.lerp(base, Color(0xFF6F8FB8), 0.06f), Color.Black, 0.35f)
-        else androidx.compose.ui.graphics.lerp(base, Color(0xFF7F9CC0), 0.22f)
+    val lineBg get() = scheme.extra["lineBg"] ?: extraOf(scheme, "lineBg")
     val lineBubble get() = if (scheme.key == "gray") surface2 else if (scheme.dark) androidx.compose.ui.graphics.lerp(surface2, Color.White, 0.08f) else Color.White
     // 自分の吹き出し: LINE と同じく、暗い配色でも明るい緑の地に黒い字(暗い緑は地に沈んで読みにくい)。
     // 暗い配色は眩しくないよう、明るい配色の緑より少し淡くする。字・リンクはどちらの地でも 4.5:1 を超える(PC・Web の --line-own-* と同じ)
-    val lineOwnBg get() = if (scheme.dark) Color(0xFFA6DB8A) else Color(0xFF8DE055)
-    val lineOwnText get() = Color(0xFF10200A)
-    val lineOwnLink get() = Color(0xFF0B4F9E)
-    val lineOwnYoutube get() = Color(0xFF9B0F27)
+    val lineOwnBg get() = scheme.extra["lineOwnBg"] ?: extraOf(scheme, "lineOwnBg")
+    val lineOwnText get() = scheme.extra["lineOwnText"] ?: extraOf(scheme, "lineOwnText")
+    val lineOwnLink get() = scheme.extra["lineOwnLink"] ?: extraOf(scheme, "lineOwnLink")
+    val lineOwnYoutube get() = extraOf(scheme, "lineOwnYoutube")
 
     /**
      * ID ごとの色。ID の文字から色相を決め、彩度と明るさは配色の明るさで固定する(どの色相でも地との差が同じくらいになるように)。

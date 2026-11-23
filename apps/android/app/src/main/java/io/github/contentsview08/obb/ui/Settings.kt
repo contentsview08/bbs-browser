@@ -343,6 +343,18 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
+    // 見た目のテーマ: 配色・レスの見た目・細かい表示・文字と余白をまとめた JSON(data/LookTheme.kt)。入っている項目だけを上書きする
+    Group("見た目のテーマ", note = "配色・レスの見た目・細かい表示・文字と余白をまとめた JSON です。入っている項目だけを上書きするので、人が作ったテーマを取り込んで、気に入らない所だけ直せます。ファイルの書き出し・読み込みは設定 → バックアップ から") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        for ((key, name) in io.github.contentsview08.obb.data.LookTheme.PRESETS) ActionRow("$name にする") { vm.applyLookJsonNow(io.github.contentsview08.obb.data.LookTheme.preset(key)) }
+        ActionRow("いまの見た目を JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "見た目のテーマの JSON をコピーしました" }
+        ActionRow("JSON を貼り付けて当てる") {
+            val clip = runCatching {
+                context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+            }.getOrNull()
+            if (clip.isNullOrEmpty()) vm.toast = "クリップボードに JSON がありません" else vm.applyLookJsonNow(clip)
+        }
+    }
     Group("見本") { SamplePosts(vm) }
 }
 
@@ -1180,7 +1192,7 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
 private fun BackupPage(vm: AppViewModel) {
     // 設定だけの JSON のバックアップ(書き出す・戻す)は画面から外した(まるごとバックアップと取り違えるため)
     val loadScheme = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importScheme(uri) }
-    val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportScheme(uri) }
+    val saveScheme = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportTheme(uri) }
     val loadChmate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importChmate(uri) }
     val saveFull = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> if (uri != null) vm.exportFullBackup(uri) }
     val loadFull = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importFullBackup(uri) }
@@ -1189,9 +1201,9 @@ private fun BackupPage(vm: AppViewModel) {
         ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
         ActionRow("まるごと戻す…", danger = true) { confirmFullRestore = true }
     }
-    Group("自分の配色", note = "自分の配色の 6 色と、選んでいる差し色を JSON のファイルに書き出します。読み込むと、その配色に切り替えます(PC 版で書き出したものも読めます)") {
-        if (vm.prefs.customScheme.isNotEmpty()) ActionRow("配色を書き出す") { saveScheme.launch("OBB-scheme.json") }
-        ActionRow("配色を読み込む") { loadScheme.launch(arrayOf("application/json", "text/plain", "*/*")) }
+    Group("見た目のテーマ", note = "配色(自分の配色・差し色)・レスの見た目・細かい表示・文字と余白を 1 つの JSON に書き出します。読み込むと、入っている項目だけを上書きします(自分の配色だけの JSON も読めます。PC 版で書き出したものも同じ形)") {
+        ActionRow("見た目のテーマを書き出す") { saveScheme.launch("OBB-theme.json") }
+        ActionRow("見た目のテーマを読み込む") { loadScheme.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
     var confirmReset by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current

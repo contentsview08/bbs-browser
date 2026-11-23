@@ -626,11 +626,17 @@ class Prefs(context: Context) {
     /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
     fun export(): JSONObject = exportedSettings(sp.all, knownKeys)
 
-    /** バックアップから戻す(戻したらすぐ画面に効く)。commit はディスクに書くので IO で */
-    suspend fun import(o: JSONObject) = withContext(Dispatchers.IO) {
+    /** 見た目のテーマ(data/LookTheme.kt)など、決めたキーだけを JSON に */
+    fun exportKeys(keys: Set<String>): JSONObject = exportedSettings(sp.all.filterKeys { it in keys }, knownKeys)
+
+    /**
+     * バックアップから戻す(戻したらすぐ画面に効く)。commit はディスクに書くので IO で。
+     * only を渡すと、そのキーだけを戻す(見た目のテーマ。入っていない項目は触らない)
+     */
+    suspend fun import(o: JSONObject, only: Set<String>? = null) = withContext(Dispatchers.IO) {
         val e = sp.edit()
         for ((k, v) in restoredSettings(o, floatKeys)) {
-            if (k !in knownKeys) continue
+            if (k !in knownKeys || (only != null && k !in only)) continue
             when (v) {
                 is Boolean -> e.putBoolean(k, v)
                 is Int -> e.putInt(k, v)
@@ -639,7 +645,7 @@ class Prefs(context: Context) {
             }
         }
         // 前の形のキーワード(言葉の並び)しかないファイルは、今の形(keywordRules)に写して戻す(写し終えた端末では、戻すときにしか写らないため)
-        if (!o.has("keywordRules") && (o.has("keywords") || o.has("keywordAuthors"))) {
+        if (only == null && !o.has("keywordRules") && (o.has("keywords") || o.has("keywordAuthors"))) {
             fun words(key: String): List<String> = o.optJSONArray(key)?.let { a -> List(a.length()) { a.optString(it) } } ?: emptyList()
             val legacy = KeywordRule.fromLegacy(words("keywords"), words("keywordAuthors"))
             if (legacy.isNotEmpty()) e.putString("keywordRules", KeywordRule.listToJson(legacy))
@@ -689,6 +695,8 @@ class Prefs(context: Context) {
         internal val JSON_KEYS = setOf(
             "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "keywordRules", "grossWords", "quickPhrases",
             "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
+            // 見た目ごとの設定(ツリー表示など)。見た目のテーマで読み書きするので JSON のまま
+            "styleOptions",
         )
 
         /** なぞる操作の既定 */

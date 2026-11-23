@@ -1066,18 +1066,57 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** バックアップから戻す(今あるものに足す。設定は上書き)。自分の配色のファイルを選んだときは、その配色を取り込んで使う */
     /** 配色のファイルだけを読み込む(「配色を読み込む」。設定・NG のバックアップは読まない。前の版の設定の JSON は importBackup) */
+    /** 見た目のテーマ(JSON)か自分の配色(JSON)のファイルを読んで当てる */
     fun importScheme(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
                 val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
-                val d = io.github.contentsview08.obb.ui.CustomDef.parse(text.trim()) ?: throw IllegalArgumentException("配色のファイルではありません")
-                prefs.customScheme = d.copy(accentPick = "").toJson()
-                prefs.followOsTheme = false
-                prefs.scheme = "custom"
-                prefs.accent = d.accentPick
-                toast = "自分の配色を読み込んで、使うようにしました"
+                toast = applyLookJson(text)
             } catch (e: Exception) {
                 toast = e.message ?: "読み込めませんでした"
+            }
+        }
+    }
+
+    /**
+     * 見た目のテーマ(data/LookTheme.kt)か、自分の配色(ui/CustomScheme.kt)の JSON を当てる。戻り値は知らせの文。
+     * テーマは入っている項目だけを上書きする
+     */
+    suspend fun applyLookJson(text: String): String {
+        val o = runCatching { org.json.JSONObject(text.trim()) }.getOrNull() ?: throw IllegalArgumentException("JSON ではありません")
+        if (io.github.contentsview08.obb.data.LookTheme.isTheme(o)) {
+            val n = io.github.contentsview08.obb.data.LookTheme.apply(prefs, o)
+            prefs.reloadNg()
+            return "見た目のテーマ「${o.optString("name").ifEmpty { "名前なし" }}」を当てました($n 項目)"
+        }
+        val d = io.github.contentsview08.obb.ui.CustomDef.parse(o.toString()) ?: throw IllegalArgumentException("配色・テーマのファイルではありません")
+        prefs.customScheme = d.copy(accentPick = "").toJson()
+        prefs.followOsTheme = false
+        prefs.scheme = "custom"
+        // 一緒に書き出した差し色も戻す(なければテーマの色。差し色が残ると、読み込んだ「強調」の色が隠れる)
+        prefs.accent = d.accentPick
+        return "自分の配色を読み込んで、使うようにしました"
+    }
+
+    /** 設定の画面から(貼り付け・同梱のテーマ) */
+    fun applyLookJsonNow(text: String) {
+        viewModelScope.launch { toast = runCatching { applyLookJson(text) }.getOrElse { it.message ?: "読み込めませんでした" } }
+    }
+
+    /** いまの見た目をテーマの JSON に */
+    fun themeJson(): String = io.github.contentsview08.obb.data.LookTheme.export(prefs).toString(2)
+
+    /** いまの見た目をテーマの JSON のファイルに書き出す */
+    fun exportTheme(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val json = themeJson()
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
+                }
+                toast = "見た目のテーマを保存しました"
+            } catch (e: Exception) {
+                toast = "保存できませんでした: ${e.message ?: e}"
             }
         }
     }

@@ -2,7 +2,7 @@
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ダーク)",
-  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
+  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色(紫 → 桃 → 赤)、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "gray",
     "base": "#313131",
@@ -23,8 +23,8 @@
       "link": "#6AA6E8",
       "newBadge": "#8E6BC8",
       "newBadgeText": "#FFFFFF",
-      "heatWarm": "#7986CB",
-      "heatHot": "#AB47BC",
+      "heatWarm": "#AB47BC",
+      "heatHot": "#EC407A",
       "heatVeryHot": "#EF5350",
       "markFav": "#F2C14E"
     }

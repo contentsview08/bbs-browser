@@ -1,5 +1,5 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
-import { LOOK_PRESETS, lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
+import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
 import { openJson, saveJson } from '../../host/backup'
 import { useContext, useEffect, useState } from 'react'
 import {
@@ -181,7 +181,9 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
   return (
     <>
       <StickySample settings={s} />
-      <Section title="カラーテーマ">
+      {/* スキン: 配色・レスの見た目・細かい表示・文字と余白をまとめたもの(ui/lookTheme.ts)。入っている項目だけを上書きする */}
+      <LookThemeSection settings={s} update={update} />
+      <Section title="配色">
         <Toggle
           checked={s.followOsTheme}
           onChange={(v) => update('followOsTheme', v)}
@@ -242,8 +244,6 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
       <Section advanced title="自分の配色" note="地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます(スマホのアプリと同じ JSON)">
         <OpenRow label={parseCustom(s.customScheme) ? '自分の配色を直す' : '自分の配色を作る'} value={effectiveScheme(s) === 'custom' ? '使っています' : undefined} onOpen={onOpenCustomScheme} />
       </Section>
-      {/* 見た目のテーマ: 配色・レスの見た目・細かい表示・文字と余白をまとめた JSON(ui/lookTheme.ts)。入っている項目だけを上書きする */}
-      <LookThemeSection settings={s} update={update} />
       <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
         <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
         {s.fontFamily === 'custom' && (
@@ -340,16 +340,16 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
 }
 
 /**
- * 見た目のテーマ(ui/lookTheme.ts): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
- * ドロップダウンで選んで当てる(同梱のものと、保存したもの)。いまの見た目に名前を付けて保存できる。
- * JSON の貼り付け・コピー・ファイルは詳細設定(貼り付けたテーマは保存されて、次からドロップダウンに出る)
+ * スキン(ui/lookTheme.ts): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
+ * 保存したスキンをドロップダウンで選んで当てる(最初は 1 つもない)。いまの見た目に名前を付けて保存できる。
+ * JSON の貼り付け・コピー・ファイルは詳細設定(貼り付けたスキンは保存されて、次からドロップダウンに出る)
  */
 function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const [notice, setNotice] = useState<string>()
   const [saveName, setSaveName] = useState('')
   const showAdvanced = useContext(AdvancedContext)
   const BTN = 'px-3 py-1.5 rounded-md text-sm border border-c-border text-c-text-strong hover:bg-c-surface2'
-  /** テーマの JSON を当てる。key はドロップダウンで選んだときのキー(貼り付け・ファイルのときは保存して、そのキーを選んだことにする) */
+  /** スキンの JSON を当てる。key はドロップダウンで選んだときのキー(貼り付け・ファイルのときは保存して、そのキーを選んだことにする) */
   const applyText = (text: string, key?: string) => {
     const r = lookThemePatch(text, DEFAULT_SETTINGS)
     if (typeof r === 'string') return setNotice(r)
@@ -358,7 +358,7 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
       if (!key) update('lookThemes', withSavedTheme(s.lookThemes, r.theme))
       update('lookThemeKey', key ?? `saved:${r.name}`)
     }
-    setNotice(`見た目のテーマ「${r.name}」を当てました(${Object.keys(r.patch).length} 項目)`)
+    setNotice(`スキン「${r.name}」を当てました(${Object.keys(r.patch).length} 項目)`)
   }
   const saveCurrent = () => {
     const name = saveName.trim()
@@ -366,20 +366,19 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
     update('lookThemes', withSavedTheme(s.lookThemes, lookThemeOf(s, name)))
     update('lookThemeKey', `saved:${name}`)
     setSaveName('')
-    setNotice(`テーマ「${name}」を保存しました`)
+    setNotice(`スキン「${name}」を保存しました`)
   }
   const options = [
-    { key: '', name: '(選んでいません)' },
-    ...LOOK_PRESETS.map((p) => ({ key: `preset:${p.key}`, name: p.name })),
+    { key: '', name: s.lookThemes.length ? '(選んでいません)' : '(スキンがありません)' },
     ...s.lookThemes.map((t) => ({ key: `saved:${lookThemeName(t)}`, name: lookThemeName(t) })),
   ]
   return (
     <Section
-      title="見た目のテーマ"
-      note="配色・レスの見た目・細かい表示・文字と余白をまとめて切り替えます。テーマに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。いまの見た目は名前を付けてテーマとして保存できます(スマホのアプリと同じ形)"
+      title="スキン"
+      note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
     >
       <div className="flex items-center gap-3">
-        <span className="text-sm text-c-text-body">テーマ</span>
+        <span className="text-sm text-c-text-body">スキン</span>
         <Choice
           value={options.some((o) => o.key === s.lookThemeKey) ? s.lookThemeKey : ''}
           options={options}
@@ -393,7 +392,7 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
         <input
           type="text"
           value={saveName}
-          placeholder={lookThemeKeyName(s.lookThemeKey) || 'テーマの名前'}
+          placeholder={lookThemeKeyName(s.lookThemeKey) || 'スキンの名前'}
           onChange={(e) => setSaveName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveCurrent()
@@ -401,7 +400,7 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
           className={`${INPUT} w-[14em]`}
         />
         <button type="button" className={BTN} disabled={!saveName.trim()} onClick={saveCurrent}>
-          いまの見た目をテーマとして保存
+          いまの見た目をスキンとして保存
         </button>
       </div>
       {s.lookThemes.length > 0 && (
@@ -427,14 +426,14 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
       {showAdvanced && (
         <div className="flex flex-wrap gap-2 pt-3">
           <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
-            JSON を貼り付けて当てる
+            スキンの JSON を貼り付けて当てる
           </button>
-          <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまの見た目の JSON をコピーしました'))}>
-            いまの見た目を JSON でコピー
+          <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまのスキンの JSON をコピーしました'))}>
+            いまのスキンを JSON でコピー
           </button>
           {!isMobile && (
             <>
-              <button type="button" className={BTN} onClick={() => void saveJson('theme', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
+              <button type="button" className={BTN} onClick={() => void saveJson('skin', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
                 ファイルに書き出す
               </button>
               <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>

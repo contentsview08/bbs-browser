@@ -62,7 +62,7 @@ type PageId =
 
 const TITLES: Record<PageId, string> = {
   home: '設定',
-  theme: 'テーマと色',
+  theme: 'スキンと配色',
   text: '文字と余白',
   list: 'スレ一覧',
   listTabs: 'スレ一覧のタブ',
@@ -132,7 +132,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
       return (
         <>
           <Group title="見た目">
-            <NavRow icon="palette" color="#8b5cf6" label="テーマと色" value={scheme?.name} onClick={() => push('theme')} />
+            <NavRow icon="palette" color="#8b5cf6" label="スキンと配色" value={scheme?.name} onClick={() => push('theme')} />
             <NavRow icon="format_size" color="#6366f1" label="文字と余白" value={`${baseFontPx(s)}px`} onClick={() => push('text')} />
           </Group>
           <Group title="読む">

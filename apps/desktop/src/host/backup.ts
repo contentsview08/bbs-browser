@@ -5,7 +5,7 @@ import { pickOpenPath, pickSavePath } from './dialog'
 import { backupFileName } from '../utils/backup'
 
 /** JSON を書き出す。保存先を選ばなかったら false */
-export async function saveJson(kind: 'settings' | 'ng' | 'scheme' | 'theme', data: unknown): Promise<boolean> {
+export async function saveJson(kind: 'settings' | 'ng' | 'scheme' | 'skin', data: unknown): Promise<boolean> {
   const path = await pickSavePath(backupFileName(kind), 'JSON', ['json'])
   if (!path) return false
   await invoke('write_json_file', { path, contents: JSON.stringify(data, null, 2) })

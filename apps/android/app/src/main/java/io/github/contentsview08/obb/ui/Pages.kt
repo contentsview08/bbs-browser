@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -289,6 +290,9 @@ private fun PastTabBar(vm: AppViewModel, current: String, footer: Boolean) {
 
 internal const val PAST_TAB_HEIGHT = 44
 
+/** 履歴の行の補足に出す dat 落ちの字(この部分だけ赤くする) */
+private const val ARCHIVED_LABEL = "dat 落ち"
+
 /** 過去のスレの 1 行(どのタブでも同じ形): スレタイ、下に板と時間、右に レス数と未読。書き込みのタブは、書いた本文を下に */
 @Composable
 private fun PastRow(
@@ -313,9 +317,8 @@ private fun PastRow(
         if (checked != null) androidx.compose.material3.Checkbox(checked, null, Modifier.align(Alignment.CenterVertically).padding(start = 10.dp), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
         // 字を小さくしたら余白も一緒に狭く(スレ一覧の行と同じ)
         Column(Modifier.weight(1f).padding(start = (13 * k).dp, end = (12 * k).dp, top = (10 * k).dp, bottom = (10 * k).dp)) {
-            // dat 落ちは赤い字で分かるように(行を薄くしていたのはやめた)
             Text(
-                t.title.ifEmpty { t.key }, color = if (archived) Palette.markDanger else if (unread > 0 || !dimRead) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
+                t.title.ifEmpty { t.key }, color = if (unread > 0 || !dimRead) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
             if (own != null) Row(Modifier.padding(top = (5 * k).dp), verticalAlignment = Alignment.Top) {
@@ -324,7 +327,19 @@ private fun PastRow(
                 Text(own, color = Palette.textBody, fontSize = (13 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(meta, Modifier.weight(1f), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // dat 落ちは、補足の「dat 落ち」の字だけを赤に(スレタイや行は変えない)
+                Text(
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        val at = meta.indexOf(ARCHIVED_LABEL)
+                        if (at < 0) append(meta)
+                        else {
+                            append(meta.substring(0, at))
+                            withStyle(androidx.compose.ui.text.SpanStyle(color = Palette.markDanger)) { append(ARCHIVED_LABEL) }
+                            append(meta.substring(at + ARCHIVED_LABEL.length))
+                        }
+                    },
+                    Modifier.weight(1f), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 if (total != null) Text("${total}レス", color = Palette.textMuted, fontSize = (11 * k).sp)
                 if (unread > 0) {
                     Spacer(Modifier.width(8.dp))
@@ -418,7 +433,7 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
                 val meta = listOfNotNull(
                     boardName(vm, h.thread.boardUrl),
                     if (h.readAt > 0) "${relativeTime(h.readAt)}に見た" else null,
-                    if (remote == -1) "dat 落ち" else null,
+                    if (remote == -1) ARCHIVED_LABEL else null,
                 ).joinToString(" ・ ")
                 val id = h.thread.id
                 fun toggle() { selected = if (id in selected) selected - id else selected + id }

@@ -1,8 +1,8 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
-// 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・JSON を貼り付け・もとにする配色を選び直す
+// 見本・6 色・細かい色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・JSON を貼り付け・もとにする配色を選び直す
 import { useMemo, useRef, useState } from 'react'
 import { COLOR_SCHEMES, accentKeyOf, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
-import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
+import { CUSTOM_KEYS, CUSTOM_LABELS, EXTRA_COLORS, customOf, customToJson, customVars, extraCount, extraValues, parseCustom, type CustomDef, type ExtraColors, type ExtraKey } from '../../ui/customScheme'
 
 /** 色選びで動かし終えてから、設定に書くまで待つ時間 */
 const COLOR_COMMIT_MS = 150
@@ -26,17 +26,35 @@ export default function CustomSchemeEditor(props: {
   // 色選びの中でつまみを動かしている間は、動くたびに色の値が来る。そのたびに設定へ書くとアプリ全体が描き直されるので、
   // ここで持って見本だけを変え、少し止まってから書く
   const [draft, setDraft] = useState<Partial<CustomDef>>({})
+  const [extraDraft, setExtraDraft] = useState<ExtraColors>({})
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const pick = (k: keyof CustomDef, v: string) => {
-    const next = { ...draft, [k]: v }
-    setDraft(next)
+  const commitLater = (next: Partial<CustomDef>, nextExtra: ExtraColors) => {
     if (draftTimer.current) clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
       setDraft({})
-      save({ ...def, ...next })
+      setExtraDraft({})
+      save({ ...def, ...next, colors: { ...def.colors, ...nextExtra } })
     }, COLOR_COMMIT_MS)
   }
-  const shown: CustomDef = { ...def, ...draft }
+  const pick = (k: keyof CustomDef, v: string) => {
+    const next = { ...draft, [k]: v }
+    setDraft(next)
+    commitLater(next, extraDraft)
+  }
+  const pickExtra = (k: ExtraKey, v: string) => {
+    const next = { ...extraDraft, [k]: v }
+    setExtraDraft(next)
+    commitLater(draft, next)
+  }
+  /** 細かい色を選び直す前に戻す */
+  const resetExtra = (k: ExtraKey) => {
+    const colors = { ...def.colors }
+    delete colors[k]
+    save({ ...def, colors: Object.keys(colors).length ? colors : undefined })
+  }
+  const shown: CustomDef = { ...def, ...draft, colors: { ...def.colors, ...extraDraft } }
+  const extras = useMemo(() => extraValues(shown), [shown])
+  const [moreOpen, setMoreOpen] = useState(extraCount(def) > 0)
   /** コピー・貼り付けの結果 */
   const [notice, setNotice] = useState<string>()
   // 別の端末・別のアプリで「JSON をコピー」したものを取り込む
@@ -141,7 +159,61 @@ export default function CustomSchemeEditor(props: {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 px-4">
+      {/* 細かい色(帯・線・字・印・人気・LINE 風 …)。選んでいなければ 6 色から作った値。ふだんは畳んでおく(選んでいれば開いておく) */}
+      <button type="button" onClick={() => setMoreOpen(!moreOpen)} className="mx-4 mt-3 flex items-center gap-2 py-2 text-left">
+        <span className="flex-1 text-[15px] font-medium text-c-text-strong">細かい色</span>
+        {extraCount(def) > 0 && <span className="text-[12px] text-c-text-muted">{extraCount(def)} 色を選んでいます</span>}
+        <span className="material-symbols-outlined text-[22px] text-c-text-muted">{moreOpen ? 'expand_less' : 'expand_more'}</span>
+      </button>
+      {moreOpen && (
+        <>
+          <p className="px-4 pb-1 text-[12px] text-c-text-muted">選んでいない色は、6 色から作った色(人気・印などは配色の決まりの色)です。選んだ色は「戻す」で元に戻せます</p>
+          {[...new Set(EXTRA_COLORS.map((e) => e.group))].map((g) => (
+            <div key={g}>
+              <p className="px-4 pt-2.5 pb-1 text-[12px] font-bold text-c-text-muted">{g}</p>
+              <div className="mx-4 rounded-lg overflow-hidden bg-c-surface border border-c-border">
+                {EXTRA_COLORS.filter((e) => e.group === g).map((e) => {
+                  const val = extras[e.key]
+                  const picked = !!def.colors?.[e.key]
+                  return (
+                    <label key={e.key} className="flex items-center gap-3 min-h-[46px] pl-3.5 pr-1.5 border-b border-c-border last:border-b-0">
+                      <input
+                        type="color"
+                        value={val}
+                        onChange={(ev) => pickExtra(e.key, ev.target.value)}
+                        className="w-[22px] h-[22px] p-0 rounded-md border border-c-border-strong cursor-pointer"
+                      />
+                      <span className={`flex-1 text-[14px] ${picked ? 'text-c-text-strong' : 'text-c-text-body'}`}>{e.label}</span>
+                      <input
+                        type="text"
+                        defaultValue={val.toUpperCase()}
+                        key={val}
+                        onBlur={(ev) => {
+                          const v = ev.target.value.trim()
+                          if (/^#[0-9a-f]{6}$/i.test(v)) save({ ...def, colors: { ...def.colors, [e.key]: v.toLowerCase() } })
+                        }}
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter') ev.currentTarget.blur()
+                        }}
+                        className="w-[6.5em] bg-transparent border-0 p-0 text-right font-mono text-[12px] text-c-text-muted focus:ring-0"
+                      />
+                      {picked ? (
+                        <button type="button" onClick={() => resetExtra(e.key)} className="px-2 py-2 text-[12px] font-bold text-c-accent">
+                          戻す
+                        </button>
+                      ) : (
+                        <span className="w-[2.9em]" />
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="flex flex-wrap gap-2 px-4 pt-4">
         <button
           type="button"
           disabled={using}
@@ -177,10 +249,10 @@ export default function CustomSchemeEditor(props: {
         </p>
       )}
 
-      <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します</p>
+      <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します(細かい色はそのまま)</p>
       <div className="flex gap-2 px-4 overflow-x-auto no-scrollbar">
         {COLOR_SCHEMES.map((c) => (
-          <button key={c.key} type="button" onClick={() => save(customOf(c.key, isDarkScheme(c.key)))} className="flex-shrink-0 w-14 flex flex-col items-center">
+          <button key={c.key} type="button" onClick={() => save({ ...customOf(c.key, isDarkScheme(c.key)), colors: def.colors })} className="flex-shrink-0 w-14 flex flex-col items-center">
             <span
               data-scheme={c.key}
               className="w-[34px] h-[34px] rounded-md flex items-center justify-center"

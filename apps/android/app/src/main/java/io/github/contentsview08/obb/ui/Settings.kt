@@ -319,9 +319,6 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
 
 @Composable
 private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
-    // スキン(配色・レスの見た目・細かい表示・文字と余白をまとめたもの)が一番上。その下が配色・差し色・スタイル
-    LookThemeGroup(vm)
-    Spacer(Modifier.height(8.dp))
     SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
     HorizontalDivider(color = Palette.border)
     val p = vm.prefs
@@ -347,6 +344,8 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     }
     StyleOptionsGroup(p)
     Group("見本") { SamplePosts(vm) }
+    // ふだんは配色・スタイルから選ぶ。もっと細かく(全部まとめて)扱いたいときに、下まで来るとスキンの保存・切り替えがある
+    LookThemeGroup(vm)
 }
 
 /**

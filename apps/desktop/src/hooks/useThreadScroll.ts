@@ -900,8 +900,9 @@ export function useThreadScroll(o: Options) {
       return
     }
     if (fresh.length === 0) {
-      // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
-      if (!heldJump.current && (pendingUnread.current || (untouched.current && firstGrowth.current))) scrollToUnread(read + 1)
+      // 一番下で未読を待っていた・開いた直後でそれまでを読み終えていたなら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける。
+      // 読み終えていないのに送らない(先頭に置いた読んでいないスレで、既読より前の番号のレスが増えたときに一番下へ落ちていた)
+      if (!heldJump.current && (pendingUnread.current || (untouched.current && firstGrowth.current && read >= prevLastNo))) scrollToUnread(read + 1)
       return
     }
     if (heldJump.current) {

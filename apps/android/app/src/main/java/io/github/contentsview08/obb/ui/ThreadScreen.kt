@@ -157,9 +157,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var query by page::query
     // 下から順に。押した所の高さ・押したレスは、指を置いたときに控えておく
     val popups = remember { mutableStateListOf<PopupEntry>() }
-    // アンカーをたどったレス。ポップアップを閉じたあとも少しのあいだ色を付け、どこだったか分かるようにする
-    var traced by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    LaunchedEffect(popups.isEmpty(), traced) { if (popups.isEmpty() && traced.isNotEmpty()) { delay(1800); traced = emptySet() } }
+    // アンカーをたどったレスに色を付けるのはやめた(スマホはキーボードがなく「今どのレスか」を示す意味がない。PC 版のカーソルの色とは別)
     var popupSeq by remember { mutableIntStateOf(0) }
     var downY by remember { mutableFloatStateOf(0f) }
     var downX by remember { mutableFloatStateOf(-1f) }
@@ -273,7 +271,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     /** アンカー(>>n)を押したのと同じポップアップで、そのレスを出す(ツリーの重ねて出した分を押したとき) */
     fun openAnchor(no: Int) {
         val p = byNo[no] ?: return
-        traced = setOf(no)
         openPopup(listOf(p))
     }
     /** 並んでいる行のレス番号(2 回目以降の出現は 0)。スクロールの覚えとミニマップが使う */
@@ -412,7 +409,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'a' -> {
                     val nos = v.split(',').map { it.toInt() }.toSet()
                     val list = index.posts.filter { it.no in nos }
-                    traced = list.map { it.no }.toSet()
                     openPopup(list)
                 }
                 'r' -> {
@@ -499,7 +495,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
                 } else Modifier)
                 .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = JUMP_FLASH_ALPHA * jumpGlow.value)) } else Modifier)
-                .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(if (Palette.onSky(style)) Palette.selectionWash(style) else Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
                     val f = flash.value
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
@@ -562,7 +557,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     info = null, autoLoad = false, gross = false,
                 ) } else PostItem(
                     it, style = style, id = p.id, iconCount = iconCounts[iconKey(p)] ?: 0, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
-                    onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
+                    onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
                     heat = Palette.heat(index.heatCount[p.no] ?: 0),
                     imagesExpanded = p.no in page.expandedImages,
                     onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },

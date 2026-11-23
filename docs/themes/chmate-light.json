@@ -1,0 +1,60 @@
+{
+  "format": "obb-theme",
+  "version": 1,
+  "name": "ChMate 風(ライト)",
+  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "scheme": {
+    "from": "light-gray",
+    "base": "#EEEEEE",
+    "surface": "#EEEEEE",
+    "text": "#212121",
+    "accent": "#E85DA6",
+    "unread": "#E85DA6",
+    "own": "#D32F2F",
+    "colors": {
+      "bar": "#DADADA",
+      "surface2": "#E4E4E4",
+      "surface3": "#D9D9D9",
+      "border": "#C8C8C8",
+      "borderStrong": "#B0B0B0",
+      "textMuted": "#757575",
+      "threadReadTitle": "#3949AB",
+      "posterName": "#707070",
+      "link": "#1E63C9",
+      "newBadge": "#E85DA6",
+      "newBadgeText": "#FFFFFF",
+      "heatWarm": "#5C6BC0",
+      "heatHot": "#8E24AA",
+      "heatVeryHot": "#D32F2F",
+      "markFav": "#AC8016"
+    }
+  },
+  "accent": "",
+  "settings": {
+    "followOsTheme": false,
+    "postStyle": "classic",
+    "dateStyle": "full",
+    "idPosition": "header",
+    "idStyle": "none",
+    "idShort": false,
+    "heatStyle": "left",
+    "highlightOp": true,
+    "nameSubtle": true,
+    "omitNoname": false,
+    "watchoiShort": false,
+    "iconFromWatchoi": false,
+    "urlShorten": false,
+    "tidyBlankLines": false,
+    "showMinimap": true,
+    "showLinkPreview": false,
+    "listShape": "normal",
+    "unreadFirst": false,
+    "keywordBands": true
+  },
+  "android": {
+    "styleOptions": { "classic": { "tree": false, "treeDepth": 3, "quote": "line", "group": true } }
+  },
+  "pc": {
+    "styleOptions": { "classic": { "tree": false } }
+  }
+}

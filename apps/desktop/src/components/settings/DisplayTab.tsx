@@ -1,6 +1,9 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
+import { LOOK_PRESETS, lookPreset, lookThemeJson, lookThemePatch } from '../../ui/lookTheme'
+import { openJson, saveJson } from '../../host/backup'
 import { useEffect, useState } from 'react'
 import {
+  DEFAULT_SETTINGS,
   ACCENTS,
   COLOR_SCHEMES,
   POST_STYLES,
@@ -23,6 +26,7 @@ import { ManagerDialog, NumberField, OpenRow, Toggle } from '../SettingParts'
 import { BTN_PRIMARY, INPUT } from '../DialogParts'
 import { backgroundImageUrl, importBackgroundImage } from '../../host/backgroundImage'
 import { pickOpenPath } from '../../host/dialog'
+import { isMobile } from '../../utils/platform'
 import { FONT_NOTE } from '../../host/fonts'
 import { FontRows } from './FontRows'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
@@ -238,6 +242,8 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
       <Section advanced title="自分の配色" note="地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます(スマホのアプリと同じ JSON)">
         <OpenRow label={parseCustom(s.customScheme) ? '自分の配色を直す' : '自分の配色を作る'} value={effectiveScheme(s) === 'custom' ? '使っています' : undefined} onOpen={onOpenCustomScheme} />
       </Section>
+      {/* 見た目のテーマ: 配色・レスの見た目・細かい表示・文字と余白をまとめた JSON(ui/lookTheme.ts)。入っている項目だけを上書きする */}
+      <LookThemeSection settings={s} update={update} />
       <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
         <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
         {s.fontFamily === 'custom' && (
@@ -330,5 +336,50 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         )}
       </Section>
     </>
+  )
+}
+
+/** 見た目のテーマ: 同梱のテーマを当てる・JSON をコピー・貼り付け・ファイルに書き出す・読み込む */
+function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  const [notice, setNotice] = useState<string>()
+  const BTN = 'px-3 py-1.5 rounded-md text-sm border border-c-border text-c-text-strong hover:bg-c-surface2'
+  const applyText = (text: string) => {
+    const r = lookThemePatch(text, DEFAULT_SETTINGS)
+    if (typeof r === 'string') return setNotice(r)
+    for (const [k, v] of Object.entries(r.patch)) update(k as keyof AppSettings, v as never)
+    setNotice(`見た目のテーマ「${r.name}」を当てました(${Object.keys(r.patch).length} 項目)`)
+  }
+  return (
+    <Section
+      title="見た目のテーマ"
+      note="配色(自分の配色・差し色)・レスの見た目・細かい表示・文字と余白をまとめた JSON です。入っている項目だけを上書きするので、人が作ったテーマを取り込んで、気に入らない所だけ直せます。スマホのアプリと同じ形"
+    >
+      <div className="flex flex-wrap gap-2">
+        {LOOK_PRESETS.map((p) => (
+          <button key={p.key} type="button" className={BTN} onClick={() => applyText(lookPreset(p.key))}>
+            {p.name} にする
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 pt-2">
+        <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s)).then(() => setNotice('いまの見た目の JSON をコピーしました'))}>
+          JSON をコピー
+        </button>
+        <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
+          JSON を貼り付けて当てる
+        </button>
+        {!isMobile && (
+          <>
+            <button type="button" className={BTN} onClick={() => void saveJson('theme', JSON.parse(lookThemeJson(s)) as unknown).then((ok) => ok && setNotice('書き出しました'))}>
+              ファイルに書き出す
+            </button>
+            <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
+              ファイルを読み込む
+            </button>
+          </>
+        )}
+      </div>
+      {notice && <p className="pt-2 text-xs text-c-text-muted">{notice}</p>}
+    </Section>
   )
 }

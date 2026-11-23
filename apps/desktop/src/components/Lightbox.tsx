@@ -205,6 +205,8 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveTo, onIndex, 
       if (panelRef.current?.contains(e.target as Node)) return // 本文パネルの中は、パネルのスクロール
       if (e.ctrlKey) {
         e.preventDefault()
+        // 画像の拡大・縮小だけにする。窓全体の Ctrl+ホイール(文字の大きさ。hooks/useWheelZoom)へ渡さない(渡すと本文の字まで一緒に変わっていた)
+        e.stopPropagation()
         if (videoRef.current) return // 動画は拡大しない
         const z = zoomRef.current
         setZoom(zoomAt(z, z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY))

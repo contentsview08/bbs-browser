@@ -64,3 +64,7 @@ zbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] 
 windows-native-keyring-store = "1"
 webview2-com = "0.39"
 windows-core = "0.62"
+# OS の通知を直に出す(os_notify.rs。押したときを受け取る・アプリの名前とアイコンで出す)。plugin-notification が使っているものと同じ版
+tauri-winrt-notification = "0.8"
+# アプリの ID(AppUserModelID)の登録。Cargo.lock にあるものと同じ版
+windows-registry = "0.6"

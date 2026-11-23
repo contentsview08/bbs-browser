@@ -281,8 +281,12 @@ export interface AppSettings {
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
   listPadPx: number
   postPadPx: number
-  /** スマホ: 知らせ(お気に入りの新着・キーワード・自分への返信)を、アプリを裏に回しているときは OS の通知でも出す */
+  /** 知らせ(お気に入りの新着・キーワード・自分への返信・新しい版)を、アプリを見ていないときは OS の通知でも出す */
   osNotify: boolean
+  /** PC: 知らせのときに通知音を鳴らす */
+  notifySound: boolean
+  /** PC: 自分で選んだ通知音(アプリのデータフォルダにコピーしたもののパス)。空なら既定の音 */
+  notifySoundPath: string
   /** 通知センターに溜めた知らせ(あなた宛てのレス・お気に入りの新着など。新しいものが後ろ。NOTIFICATION_LOG_MAX まで) */
   notificationLog: StoredNotification[]
   /** スマホ: ヘッダー・フッターの高さ(px)と、中の文字の大きさ(px)。0 なら既定 */
@@ -591,6 +595,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postPadPx: -1,
   postLineHeight: 0,
   osNotify: true,
+  notifySound: true,
+  notifySoundPath: '',
   notificationLog: [],
   headerPx: 0,
   footerPx: 0,

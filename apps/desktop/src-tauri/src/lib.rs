@@ -13,6 +13,8 @@ mod google_auth;
 mod media_cache;
 #[cfg(test)]
 mod oauth_env;
+#[cfg(windows)]
+mod os_notify;
 mod post_http;
 mod save_name;
 mod sql_batch;
@@ -375,6 +377,45 @@ fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPa
     std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
     allow_background_asset(&app, &dest);
     Ok(dest.to_string_lossy().into_owned())
+}
+
+/// 通知音のファイルを、アプリのデータフォルダにコピーしてそのパスを返す(背景画像と同じ考え方。前のコピーは消す)
+#[tauri::command]
+fn set_notify_sound(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, source: String) -> Result<String, String> {
+    let source = chosen.take(&source)?;
+    let dir = data_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    for path in data_files(&dir, "notify-sound-") {
+        let _ = std::fs::remove_file(path);
+    }
+    let ext = Path::new(&source)
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "wav".into());
+    let stamp = since_epoch().as_millis();
+    let dest = dir.join(format!("notify-sound-{stamp}.{ext}"));
+    std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+    allow_background_asset(&app, &dest);
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// OS の通知。Windows はトーストを直に出す(os_notify.rs。押したら os-notify-click で画面に知らせる)。
+/// ほかの OS は画面側が plugin-notification で出すので、Err を返して任せる
+#[tauri::command]
+fn os_notify(app: tauri::AppHandle, title: String, body: Option<String>, link: Option<String>, silent: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    return os_notify::show(&app, &title, body.as_deref(), link, silent);
+    #[cfg(not(windows))]
+    {
+        let _ = (app, title, body, link, silent);
+        Err("この OS では画面側で出す".into())
+    }
+}
+
+/// 置き場にある、名前が prefix で始まるファイル
+fn data_files(dir: &Path, prefix: &str) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    entries.flatten().filter(|e| e.file_name().to_string_lossy().starts_with(prefix)).map(|e| e.path()).collect()
 }
 
 /// 設定に残っているパスから、背景画像のファイル名を取り出す(Windows のパスも Linux のパスも読む)。背景画像でなければ None
@@ -742,14 +783,17 @@ pub fn run() {
             let media_cache = MediaCache::new(data_dir(app.handle())?.join("media-cache"), media_cache::is_auto_loadable)?;
             app.manage(Arc::new(media_cache));
             fonts::prepare(app.handle());
-            // ポータブルでは、前に置いた背景画像もアセットで読めるように許す
+            // ポータブルでは、前に置いた背景画像・通知音もアセットで読めるように許す
             if portable_dir().is_some() {
                 if let Ok(dir) = data_dir(app.handle()) {
-                    for path in background_files(&dir) {
+                    for path in background_files(&dir).into_iter().chain(data_files(&dir, "notify-sound-")) {
                         allow_background_asset(app.handle(), &path);
                     }
                 }
             }
+            // Windows: 通知をアプリの名前とアイコンで出せるように、アプリの ID を登録する
+            #[cfg(windows)]
+            os_notify::register(app.handle());
             #[cfg(target_os = "linux")]
             reload_when_web_process_dies(app);
             #[cfg(windows)]
@@ -771,6 +815,8 @@ pub fn run() {
             media_cache::media_cache_usage,
             media_cache::media_cache_clear,
             set_background_image,
+            set_notify_sound,
+            os_notify,
             current_background_image,
             write_json_file,
             write_text_file,

@@ -1,13 +1,12 @@
 // キーワードの見張り。お気に入り板のスレ一覧を決めた間隔で見に行き、キーワードに合うスレ(スレタイ・立てた人)が新しく立っていたら知らせる。
 // 板ごとに前回確かめた時刻を覚え、それより後に立ったスレだけを見る(初めての板は、境目を覚えるだけ)。
-// アプリが見えていないあいだは休む
+// 窓を小さくしているあいだも見張る(立ったことを OS の通知で知るため。前は見えていないあいだ休み、戻したときに溜まった知らせが一度に出ていた)
 
 import { useEffect, useRef } from 'react'
 import type { Board, ThreadSummary } from '@bbs-browser/connectors'
 import type { AppNotification } from '../components/Notifications'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { keywordHits } from '../utils/watch'
-import { isAppVisible } from '../utils/visibility'
 
 /** 効いているキーワードが 1 つでもある */
 const hasAnyKeyword = (s: AppSettings) => s.keywordRules.some((r) => r.enabled && r.pattern.trim() !== '')
@@ -19,7 +18,7 @@ export function useKeywordWatch(o: {
   favorites: Board[] | undefined
   listForWatch: (b: Board) => Promise<{ at: number; list: ThreadSummary[] }>
   isNgThread: (t: ThreadSummary) => boolean
-  notify: (n: Omit<AppNotification, 'id'>) => void
+  notify: (n: Omit<AppNotification, 'id'> & { keep?: { thread: ThreadSummary; no?: number } | true }) => void
   openThread: (t: ThreadSummary) => void
 }) {
   // 見張りは作り置きの関数から呼ぶので、いつもいまの値を見る
@@ -50,6 +49,8 @@ export function useKeywordWatch(o: {
           title: `${boardName} に「${h.keyword}」のスレが立ちました`,
           body: h.thread.title,
           onClick: () => latest.current.openThread(h.thread),
+          // 通知センターに残し、OS の通知を押したときにも開けるように
+          keep: { thread: h.thread },
         })
       if (hits.length > 3) notify({ icon: 'sell', title: `${boardName} にキーワードのスレがほかに ${hits.length - 3} 件立ちました` })
     }
@@ -63,9 +64,7 @@ export function useKeywordWatch(o: {
   const hasBoards = (o.favorites?.length ?? 0) > 0
   useEffect(() => {
     if (!o.enabled || minutes <= 0 || !hasKeywords || !hasBoards) return
-    const run = () => {
-      if (isAppVisible()) void checkRef.current().catch(() => undefined)
-    }
+    const run = () => void checkRef.current().catch(() => undefined)
     const first = setTimeout(run, 15_000)
     const timer = setInterval(run, minutes * 60_000)
     return () => {

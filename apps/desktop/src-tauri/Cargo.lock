@@ -294,11 +294,13 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-sql",
  "tauri-plugin-updater",
+ "tauri-winrt-notification",
  "tokio",
  "webkit2gtk",
  "webview2-com",
  "windows-core",
  "windows-native-keyring-store",
+ "windows-registry",
  "zbus-secret-service-keyring-store",
  "zip",
 ]

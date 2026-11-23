@@ -33,6 +33,7 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'keywordRulesMigrated',
   'lastBoardUrl',
   'backgroundImage',
+  'notifySoundPath',
   'imageSaveDir',
   'imageSaveName',
   'customFont',

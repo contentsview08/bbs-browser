@@ -89,7 +89,8 @@ import { forgetClosedPosition } from './hooks/useThreadScroll'
 import { droppedTabIds, mergeSyncedHistory, mergeSyncedStates, syncedTabReadNo } from './utils/syncRead'
 import { HISTORY_SHOWN, restoreThreadRead, type DroppedThread } from '@bbs-browser/sync'
 import { useNotifications } from './hooks/useNotifications'
-import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
+import { ensureNotifyPermission, onOsNotifyClick, sendOsNotification } from './utils/osNotify'
+import { playNotifySound } from './host/notifySound'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl, currentBackgroundImage } from './host/backgroundImage'
@@ -365,8 +366,9 @@ export default function App() {
   /** アプリ内の通知(右下)。裏の処理の失敗もここに出る */
   const { notifications, notify: notifyInApp, dismiss } = useNotifications()
   /**
-   * 知らせる。いつもアプリの中(右下)に出し、設定でオンなら OS の通知でも出す
-   * (失敗の知らせは、アプリを見ているときに分かればよいので OS には出さない)
+   * 知らせる。いつもアプリの中(右下)に出す。知らせの種類(お気に入りの新着・キーワード・自分への返信・新しい版)のものは、
+   * 設定でオンなら通知音を鳴らし(PC)、アプリを見ていないときは OS の通知でも出す(押すとそのスレを開く)。
+   * 失敗の知らせや操作の結果(保存した、など)は、アプリを見ているときに分かればよいので OS には出さない
    */
   const notify = useCallback(
     (n: Parameters<typeof notifyInApp>[0] & { keep?: StoredNotification['link'] | true }) => {
@@ -375,7 +377,12 @@ export default function App() {
       const kind = NOTIFY_KIND_BY_ICON[n.icon]
       if (kind && settingsRef.current.notifyKinds[kind] === false) return
       notifyInApp(rest)
-      if (settingsRef.current.osNotify && n.icon !== 'error') void sendOsNotification(n.title, n.body).catch(() => undefined)
+      if (kind) {
+        const s = settingsRef.current
+        const sound = !isMobile && s.notifySound
+        if (sound) void playNotifySound(s.notifySoundPath).catch(() => undefined)
+        if (s.osNotify && (isMobile || !document.hasFocus())) void sendOsNotification(n.title, n.body, keep && keep !== true ? keep : undefined, sound).catch(() => undefined)
+      }
       // あとで見たい知らせ(あなた宛てのレス・お気に入りの新着)は通知センターにも残す
       if (keep) {
         const log = settingsRef.current.notificationLog
@@ -1101,14 +1108,12 @@ export default function App() {
   /** お気に入りのスレ: 「履歴」をお気に入りの絞り込みで開く */
   const openFavThreads = (record = true) => openHistory(record, 'fav')
 
-  // 数分おきに、お気に入りのスレの新着の数だけを確かめる(起動してしばらくしたら一度)
+  // 数分おきに、お気に入りのスレの新着の数だけを確かめる(起動してしばらくしたら一度)。
+  // 窓を小さくしているあいだも確かめる(新着を OS の通知で知るため。前は見えていないあいだ休み、戻したときに溜まった知らせが一度に出ていた)
   const hasFavThreads = favThreads.length > 0
   useEffect(() => {
     if (!store || settings.favCheckMin <= 0 || !hasFavThreads) return
-    // アプリが見えていないあいだは確かめない
-    const check = () => {
-      if (isAppVisible()) void latest.current.checkFavThreads(store, false).catch(() => undefined)
-    }
+    const check = () => void latest.current.checkFavThreads(store, false).catch(() => undefined)
     const first = setTimeout(check, 5000)
     const timer = setInterval(check, settings.favCheckMin * 60_000)
     return () => {
@@ -2934,9 +2939,8 @@ export default function App() {
   // スマホは上の帯(未読・閲覧・お気に入り・書き込み・画像。スマホのアプリと同じ)で切り替え、書き込みと画像は全画面のページ
   const pastView = history !== undefined
   const listTitle = notifView ? '通知' : pastView ? '履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
-  /** 通知の行を押した: そのスレのそのレスへ */
-  const openNotification = (n: StoredNotification) => {
-    const link = n.link
+  /** 通知の行(通知センター)・OS の通知を押した: そのスレのそのレスへ */
+  const openNotificationLink = (link: StoredNotification['link']) => {
     if (!link?.thread?.connectorId || !link.thread.boardUrl || !link.thread.key) return notify({ icon: 'error', title: 'この通知には開く先がありません' })
     const thread = reviveThread(link.thread)
     const no = link.no
@@ -2946,6 +2950,11 @@ export default function App() {
       })
       .catch(backgroundError('通知のスレを開く'))
   }
+  const openNotification = (n: StoredNotification) => openNotificationLink(n.link)
+  // OS の通知(Windows のトースト)を押したら、そのスレを開く(Rust 側が窓を前に出し、押した通知の開く先を送ってくる)
+  const openNotificationLinkRef = useRef(openNotificationLink)
+  openNotificationLinkRef.current = openNotificationLink
+  useEffect(() => onOsNotifyClick((link) => link && openNotificationLinkRef.current(link)), [])
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {
     if (k === 'posts') return void openPostHistory()

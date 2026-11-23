@@ -103,7 +103,7 @@ import io.github.contentsview08.obb.data.parseLicenses
 import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
-    "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
+    "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
@@ -281,7 +281,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         return
     }
     Group("見た目") {
-        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followOsTheme) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "スキンと配色", value = if (p.followOsTheme) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
         NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字", value = io.github.contentsview08.obb.data.Fonts.CHOICES.firstOrNull { it.key == p.fontFamily }?.name ?: "端末の標準") { open("text") }
     }
     Group("画面") {
@@ -319,6 +319,9 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
 
 @Composable
 private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
+    // スキン(配色・レスの見た目・細かい表示・文字と余白をまとめたもの)が一番上。その下が配色・差し色・スタイル
+    LookThemeGroup(vm)
+    Spacer(Modifier.height(8.dp))
     SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
     HorizontalDivider(color = Palette.border)
     val p = vm.prefs
@@ -343,15 +346,13 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
-    // 見た目のテーマ: 配色・レスの見た目・細かい表示・文字と余白をまとめた JSON(data/LookTheme.kt)。入っている項目だけを上書きする
-    LookThemeGroup(vm)
     Group("見本") { SamplePosts(vm) }
 }
 
 /**
- * 見た目のテーマ(data/LookTheme.kt): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
- * ドロップダウンで選んで当てる(同梱のものと、保存したもの)。いまの見た目に名前を付けて保存できる。
- * JSON の貼り付け・コピーは詳細設定(貼り付けたテーマは保存されて、次からドロップダウンに出る)。ファイルの書き出し・読み込みはバックアップから
+ * スキン(data/LookTheme.kt): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
+ * 保存したスキンをドロップダウンで選んで当てる(最初は 1 つもない)。いまの見た目に名前を付けて保存できる。
+ * JSON の貼り付け・コピーは詳細設定(貼り付けたスキンは保存されて、次からドロップダウンに出る)。ファイルの書き出し・読み込みはバックアップから
  */
 @Composable
 private fun LookThemeGroup(vm: AppViewModel) {
@@ -361,19 +362,19 @@ private fun LookThemeGroup(vm: AppViewModel) {
     val saved = remember(p.lookThemes) { lt.saved(p).map { lt.nameOf(it) } }
     var saveDialog by remember { mutableStateOf(false) }
     var removeDialog by remember { mutableStateOf(false) }
-    Group("見た目のテーマ", note = "配色・レスの見た目・細かい表示・文字と余白をまとめて切り替えます。テーマに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。いまの見た目は名前を付けてテーマとして保存できます") {
-        val options = listOf("" to "(選んでいません)") + lt.PRESETS.map { "preset:${it.first}" to it.second } + saved.map { "saved:$it" to it }
-        ChoiceRow("テーマ", p.lookThemeKey.takeIf { k -> options.any { it.first == k } } ?: "", options) { if (it.isNotEmpty()) vm.pickLookTheme(it) }
-        ActionRow("いまの見た目をテーマとして保存…") { saveDialog = true }
-        if (saved.isNotEmpty()) ActionRow("保存したテーマを消す…") { removeDialog = true }
+    Group("スキン", note = "配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
+        val options = (if (saved.isEmpty()) listOf("" to "(スキンがありません)") else listOf("" to "(選んでいません)")) + saved.map { "saved:$it" to it }
+        ChoiceRow("スキン", p.lookThemeKey.takeIf { k -> options.any { it.first == k } } ?: "", options) { if (it.isNotEmpty()) vm.pickLookTheme(it) }
+        ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
+        if (saved.isNotEmpty()) ActionRow("保存したスキンを消す…") { removeDialog = true }
         if (LocalAdvanced.current) {
-            ActionRow("JSON を貼り付けて当てる") {
+            ActionRow("スキンの JSON を貼り付けて当てる") {
                 val clip = runCatching {
                     context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
                 }.getOrNull()
                 if (clip.isNullOrEmpty()) vm.toast = "クリップボードに JSON がありません" else vm.applyLookJsonNow(clip)
             }
-            ActionRow("いまの見た目を JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "見た目のテーマの JSON をコピーしました" }
+            ActionRow("いまのスキンを JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "スキンの JSON をコピーしました" }
         }
     }
     if (saveDialog) {
@@ -381,10 +382,10 @@ private fun LookThemeGroup(vm: AppViewModel) {
         var name by remember { mutableStateOf(current) }
         AlertDialog(
             onDismissRequest = { saveDialog = false },
-            title = { Text("テーマとして保存") },
+            title = { Text("スキンとして保存") },
             text = {
                 Column {
-                    Text("いまの配色・レスの見た目・細かい表示・文字と余白を、この名前で保存します。同じ名前があれば入れ替えます", color = Palette.textMuted, fontSize = 13.sp)
+                    Text("いまの配色・レスの見た目・細かい表示・文字と余白を、この名前のスキンとして保存します。同じ名前があれば入れ替えます", color = Palette.textMuted, fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("名前") })
                 }
@@ -395,10 +396,10 @@ private fun LookThemeGroup(vm: AppViewModel) {
     }
     if (removeDialog) AlertDialog(
         onDismissRequest = { removeDialog = false },
-        title = { Text("保存したテーマを消す") },
+        title = { Text("保存したスキンを消す") },
         text = {
             Column {
-                if (saved.isEmpty()) Text("保存したテーマはありません", color = Palette.textMuted, fontSize = 13.sp)
+                if (saved.isEmpty()) Text("保存したスキンはありません", color = Palette.textMuted, fontSize = 13.sp)
                 for (n in saved) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(n, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
                     IconButton(onClick = { vm.removeLookTheme(n) }) { Icon(Icons.Filled.Delete, "消す", tint = Palette.markDanger) }
@@ -1252,9 +1253,9 @@ private fun BackupPage(vm: AppViewModel) {
         ActionRow("まるごと書き出す") { saveFull.launch("OBB-full-backup.zip") }
         ActionRow("まるごと戻す…", danger = true) { confirmFullRestore = true }
     }
-    Group("見た目のテーマ", note = "配色(自分の配色・差し色)・レスの見た目・細かい表示・文字と余白を 1 つの JSON に書き出します。読み込むと、入っている項目だけを上書きします(自分の配色だけの JSON も読めます。PC 版で書き出したものも同じ形)") {
-        ActionRow("見た目のテーマを書き出す") { saveScheme.launch("OBB-theme.json") }
-        ActionRow("見た目のテーマを読み込む") { loadScheme.launch(arrayOf("application/json", "text/plain", "*/*")) }
+    Group("スキン", note = "いまの見た目(配色・差し色・レスの見た目・細かい表示・文字と余白)を 1 つの JSON に書き出します。読み込むと、入っている項目だけを上書きし、スキンとして保存します(自分の配色だけの JSON も読めます。PC 版で書き出したものも同じ形)") {
+        ActionRow("スキンを書き出す") { saveScheme.launch("OBB-skin.json") }
+        ActionRow("スキンを読み込む") { loadScheme.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
     var confirmReset by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current

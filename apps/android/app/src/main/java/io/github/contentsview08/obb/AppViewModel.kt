@@ -1066,7 +1066,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** バックアップから戻す(今あるものに足す。設定は上書き)。自分の配色のファイルを選んだときは、その配色を取り込んで使う */
     /** 配色のファイルだけを読み込む(「配色を読み込む」。設定・NG のバックアップは読まない。前の版の設定の JSON は importBackup) */
-    /** 見た目のテーマ(JSON)か自分の配色(JSON)のファイルを読んで当てる */
+    /** スキン(JSON)か自分の配色(JSON)のファイルを読んで当てる */
     fun importScheme(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
@@ -1079,8 +1079,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 見た目のテーマ(data/LookTheme.kt)か、自分の配色(ui/CustomScheme.kt)の JSON を当てる。戻り値は知らせの文。
-     * テーマは入っている項目だけを上書きする
+     * スキン(data/LookTheme.kt)か、自分の配色(ui/CustomScheme.kt)の JSON を当てる。戻り値は知らせの文。
+     * スキンは入っている項目だけを上書きする
      */
     suspend fun applyLookJson(text: String, key: String? = null): String {
         val o = runCatching { org.json.JSONObject(text.trim()) }.getOrNull() ?: throw IllegalArgumentException("JSON ではありません")
@@ -1088,10 +1088,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (lt.isTheme(o)) {
             val n = lt.apply(prefs, o)
             prefs.reloadNg()
-            // 貼り付け・ファイルで来たテーマは保存して、次からドロップダウンで選べるように
+            // 貼り付け・ファイルで来たスキンは保存して、次からドロップダウンで選べるように
             if (key == null) lt.save(prefs, o)
             prefs.lookThemeKey = key ?: "saved:${lt.nameOf(o)}"
-            return "見た目のテーマ「${lt.nameOf(o)}」を当てました($n 項目)"
+            return "スキン「${lt.nameOf(o)}」を当てました($n 項目)"
         }
         val d = io.github.contentsview08.obb.ui.CustomDef.parse(o.toString()) ?: throw IllegalArgumentException("配色・テーマのファイルではありません")
         prefs.customScheme = d.copy(accentPick = "").toJson()
@@ -1102,23 +1102,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return "自分の配色を読み込んで、使うようにしました"
     }
 
-    /** 設定の画面から(貼り付け)。key はドロップダウンで選んだテーマのキー(そのときは保存し直さない) */
+    /** 設定の画面から(貼り付け)。key はドロップダウンで選んだスキンのキー(そのときは保存し直さない) */
     fun applyLookJsonNow(text: String, key: String? = null) {
         viewModelScope.launch { toast = runCatching { applyLookJson(text, key) }.getOrElse { it.message ?: "読み込めませんでした" } }
     }
 
-    /** ドロップダウンで選んだテーマを当てる */
+    /** ドロップダウンで選んだスキンを当てる */
     fun pickLookTheme(key: String) {
         val text = io.github.contentsview08.obb.data.LookTheme.byKey(prefs, key) ?: return
         applyLookJsonNow(text, key)
     }
 
-    /** いまの見た目を、名前を付けてテーマとして保存する(同じ名前は入れ替え) */
+    /** いまの見た目を、名前を付けてスキンとして保存する(同じ名前は入れ替え) */
     fun saveLookTheme(name: String) {
         val lt = io.github.contentsview08.obb.data.LookTheme
         lt.save(prefs, lt.export(prefs, name.trim()))
         prefs.lookThemeKey = "saved:${name.trim()}"
-        toast = "テーマ「${name.trim()}」を保存しました"
+        toast = "スキン「${name.trim()}」を保存しました"
     }
 
     fun removeLookTheme(name: String) {
@@ -1126,14 +1126,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (prefs.lookThemeKey == "saved:$name") prefs.lookThemeKey = ""
     }
 
-    /** いまの見た目をテーマの JSON に(名前は選んでいるテーマのもの) */
+    /** いまの見た目をスキンの JSON に(名前は選んでいるスキンのもの) */
     fun themeJson(): String {
         val key = prefs.lookThemeKey
-        val name = if (key.startsWith("saved:")) key.removePrefix("saved:") else io.github.contentsview08.obb.data.LookTheme.PRESETS.firstOrNull { "preset:${it.first}" == key }?.second ?: ""
+        val name = if (key.startsWith("saved:")) key.removePrefix("saved:") else ""
         return io.github.contentsview08.obb.data.LookTheme.export(prefs, name).toString(2)
     }
 
-    /** いまの見た目をテーマの JSON のファイルに書き出す */
+    /** いまの見た目をスキンの JSON のファイルに書き出す */
     fun exportTheme(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
@@ -1141,7 +1141,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                 }
-                toast = "見た目のテーマを保存しました"
+                toast = "スキンを保存しました"
             } catch (e: Exception) {
                 toast = "保存できませんでした: ${e.message ?: e}"
             }
@@ -1948,7 +1948,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** この板の上げ先がサイトの画面ならそのサイト(hono-bbs の板はその掲示板の置き場) */
-    private fun siteFor(r: ReplyState) = if (HonoBbs.isBoardUrl(r.boardUrl)) null else io.github.contentsview08.obb.ui.webUploadSiteFor(prefs.uploadHost)
+    fun siteFor(r: ReplyState) = if (HonoBbs.isBoardUrl(r.boardUrl)) null else io.github.contentsview08.obb.ui.webUploadSiteFor(prefs.uploadHost)
 
     /** 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む */
     private fun uploadFailed(r: ReplyState, item: UploadItem, e: Exception) {

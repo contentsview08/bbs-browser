@@ -780,6 +780,15 @@ article.popup-cursor::after {
   scrollbar-color: var(--c-scrollbar-thumb) transparent;
 }
 
+/* スレ内検索で当たった語(utils/postBody.tsx の highlightNodes)。お気に入りの金を薄く敷き、字の色はそのまま */
+mark.search-hit {
+  background: color-mix(in srgb, var(--c-mark-fav) 42%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  margin: 0 -1px;
+}
+
 /* 意味の色(差し色)。配色の統一感は保ちつつ、ボタンや印を色で見分けられるように、意味のあるところにだけ使う。
    ダーク(.dark)は少し明るく、ライトは少し暗くして、どちらの背景でも浮きすぎないようにする */
 :root {

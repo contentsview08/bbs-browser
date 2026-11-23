@@ -395,6 +395,8 @@ function NgRunRow(props: {
 /** レスの枠すべてに共通の値。どれかが変わったときだけ全部の枠を描き直す */
 interface FrameShared {
   handlers: PostHandlers
+  /** スレ内検索の語(当たる所を目立たせる) */
+  highlight?: readonly string[]
   onPress: (no: number) => void
   onToggleRun: (no: number) => void
   byNo: Map<number, Post>
@@ -433,6 +435,7 @@ function postArticleProps(p: Post, s: FrameShared) {
     post: p,
     reactions: s.reactions?.get(p.ref ?? p.no),
     quotes: s.quotesOf(p.no),
+    highlight: s.highlight,
     blurMedia: s.grossNos?.has(p.no),
     anchorCount: s.anchorCounts.get(p.no) ?? 0,
     heatCount: s.heatCounts.get(p.no) ?? 0,
@@ -1051,9 +1054,11 @@ export default function ThreadView(props: Props) {
   }, [log.posts, matchesFilter, ownNos])
   // 全レスを見るので、打っている間は少し遅らせて入力の反応を止めない
   const deferredQuery = useDeferredValue(query)
+  /** 検索の語(そろえたもの)。レスの本文・名前の当たる所を目立たせるのにも使う */
+  const searchTerms = useMemo(() => normalizeForSearch(deferredQuery.trim()).split(/\s+/).filter(Boolean), [deferredQuery])
   const visibleNos = useMemo(() => {
     // 検索: 空白で区切った言葉はすべて含むもの(AND)。番号・名前・ID・本文から探す
-    const terms = normalizeForSearch(deferredQuery.trim()).split(/\s+/).filter(Boolean)
+    const terms = searchTerms
     if (filters.size === 0 && terms.length === 0) return undefined
     const set = new Set<number>()
     for (const p of log.posts) {
@@ -1067,7 +1072,7 @@ export default function ThreadView(props: Props) {
       set.add(p.no)
     }
     return set
-  }, [log.posts, filters, deferredQuery, matchesFilter])
+  }, [log.posts, filters, searchTerms, matchesFilter])
 
   const visiblePosts = useMemo(
     () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
@@ -2402,6 +2407,7 @@ export default function ThreadView(props: Props) {
   const frameShared = useMemo<FrameShared>(
     () => ({
       handlers: mainHandlers,
+      highlight: searchTerms.length > 0 ? searchTerms : undefined,
       onPress: pressPost,
       onToggleRun: toggleRun,
       byNo,
@@ -2431,7 +2437,7 @@ export default function ThreadView(props: Props) {
       replyToOwn,
       reactions: props.reactions,
     }),
-    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, heatCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+    [mainHandlers, searchTerms, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, heatCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
   const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**

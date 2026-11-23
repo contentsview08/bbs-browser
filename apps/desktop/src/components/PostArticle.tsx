@@ -9,7 +9,7 @@ import { isMobile } from '../utils/platform'
 import {
   anchorTargets,
   displayBody,
-  displayName,
+  displayName, highlightNodes,
   dropLeadingAnchor,
   heatClass,
   heatVar,
@@ -131,6 +131,8 @@ interface Props {
   aiMark?: AiNgHit
   ngMode: NgMode
   showThumbnails: boolean
+  /** スレ内検索の語(normalizeForSearch 済み)。本文・名前の当たる所を目立たせる */
+  highlight?: readonly string[]
   showIdenticon?: boolean
   showLinkPreview?: boolean
   /** 名無しの省略・空行の扱い */
@@ -278,6 +280,7 @@ const PostBodyText = memo(function PostBodyText(props: {
   quotes: Props['quotes']
   imagesExpanded: boolean
   onExpandImages: () => void
+  highlight?: readonly string[]
 }) {
   const { handlers } = props
   return (
@@ -288,6 +291,7 @@ const PostBodyText = memo(function PostBodyText(props: {
           ? { ...handlers, urls: handlers.urls && { ...handlers.urls, omitImages: false, collapseImageRuns: false } }
           : { ...handlers, onExpandImages: props.onExpandImages },
         props.quotes,
+        props.highlight,
       )}
     </>
   )
@@ -639,7 +643,7 @@ function PostArticle(props: Props) {
         onClick={(e) => handlers.onName(post.name, e.currentTarget)}
         title="同じ名前の書き込みを表示"
       >
-        {name}
+        {props.highlight?.length ? highlightNodes(name, props.highlight, 'n') : name}
       </button>
     )
   /** NG のレスを押して中身を出しているときの札。押すとあぼーんに戻す */
@@ -988,7 +992,7 @@ function PostArticle(props: Props) {
             // まとめ風: 返信の多いレスは字を大きく濃く、ほかは小さめに(読み飛ばしながら見どころを拾える)
             style={variant === 'matome' && !isAA ? (heatCount >= 3 ? { fontSize: 'calc(var(--post-body-size, 1rem) * 1.2)', fontWeight: 500, color: 'var(--c-text-strong)' } : { fontSize: 'calc(var(--post-body-size, 1rem) * 0.88)', opacity: 0.85 }) : undefined}
           >
-            <PostBodyText body={body} handlers={handlers} quotes={props.quotes} imagesExpanded={imagesExpanded} onExpandImages={expandImages} />
+            <PostBodyText body={body} handlers={handlers} quotes={props.quotes} imagesExpanded={imagesExpanded} onExpandImages={expandImages} highlight={props.highlight} />
           </p>
 
           {links.length > 0 && (

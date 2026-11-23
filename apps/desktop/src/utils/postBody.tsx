@@ -505,20 +505,72 @@ export function shortUrl(url: string, max = 36): string {
 }
 
 /**
- * 本文を描く。quotes があれば(文章で引用する掲示板)、「>文章」の行を緑の引用にし、引用元が分かれば押せるようにする
- * (押す・乗せると、アンカーと同じく引用元をポップアップで出す)
+ * 検索の語(normalizeForSearch した語)に当たる所を、元の文字の位置で返す(重なりはまとめる)。
+ * 元の文字を 1 字ずつそろえて、そろえた文字列の位置から元の位置へ戻す(全角→半角などで長さが変わっても、元の字を正しく囲める)
  */
-export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<string, number>): ReactNode[] {
-  if (!quotes) return renderTokens(text, handlers, '')
+export function highlightRanges(text: string, terms: readonly string[]): [number, number][] {
+  if (terms.length === 0 || !text) return []
+  const map: number[] = []
+  let norm = ''
+  for (let i = 0; i < text.length; i++) {
+    const n = normalizeForSearch(text[i])
+    for (let j = 0; j < n.length; j++) map.push(i)
+    norm += n
+  }
+  const found: [number, number][] = []
+  for (const t of terms) {
+    if (!t) continue
+    let at = norm.indexOf(t)
+    while (at >= 0) {
+      found.push([map[at], map[at + t.length - 1] + 1])
+      at = norm.indexOf(t, at + t.length)
+    }
+  }
+  found.sort((a, b) => a[0] - b[0])
+  const out: [number, number][] = []
+  for (const r of found) {
+    const last = out[out.length - 1]
+    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1])
+    else out.push([r[0], r[1]])
+  }
+  return out
+}
+
+/** 文字の中の検索の語を <mark> で囲む(スレ内検索の見た目。語がなければそのまま) */
+export function highlightNodes(text: string, terms: readonly string[] | undefined, keyPrefix: string): ReactNode[] {
+  if (!terms || terms.length === 0) return [text]
+  const ranges = highlightRanges(text, terms)
+  if (ranges.length === 0) return [text]
+  const parts: ReactNode[] = []
+  let last = 0
+  for (const [s, e] of ranges) {
+    if (s > last) parts.push(text.slice(last, s))
+    parts.push(
+      <mark key={`${keyPrefix}h${s}`} className="search-hit">
+        {text.slice(s, e)}
+      </mark>,
+    )
+    last = e
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts
+}
+
+/**
+ * 本文を描く。quotes があれば(文章で引用する掲示板)、「>文章」の行を緑の引用にし、引用元が分かれば押せるようにする
+ * (押す・乗せると、アンカーと同じく引用元をポップアップで出す)。highlight はスレ内検索の語(当たる所を <mark> で囲む)
+ */
+export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<string, number>, highlight?: readonly string[]): ReactNode[] {
+  if (!quotes) return renderTokens(text, handlers, '', highlight)
   const parts: ReactNode[] = []
   text.split('\n').forEach((line, i) => {
     if (i > 0) parts.push('\n')
-    if (quotedText(line) === undefined) return void parts.push(...renderTokens(line, handlers, `${i}:`))
+    if (quotedText(line) === undefined) return void parts.push(...renderTokens(line, handlers, `${i}:`, highlight))
     const no = quotes.get(line.trim())
     parts.push(
       no === undefined ? (
         <span key={`q${i}`} className="text-mark-new">
-          {line}
+          {highlightNodes(line, highlight, `q${i}`)}
         </span>
       ) : (
         <span
@@ -529,7 +581,7 @@ export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<st
           onMouseEnter={(e) => handlers.onAnchor([no], e.currentTarget, 'hover')}
           onMouseLeave={handlers.onAnchorLeave}
         >
-          {line}
+          {highlightNodes(line, highlight, `q${i}`)}
         </span>
       ),
     )
@@ -555,16 +607,18 @@ function pressProps(press: (el: HTMLElement) => void) {
   }
 }
 
-function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): ReactNode[] {
+function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string, highlight?: readonly string[]): ReactNode[] {
   const parts: ReactNode[] = []
   let last = 0
   const ud = handlers.urls
   const matches = [...bodyMatches(text)]
+  // ふつうの文字(リンク・アンカー・ID 以外)だけ、検索の語を囲む
+  const plain = (s: string, key: string) => parts.push(...highlightNodes(s, highlight, key))
   for (let mi = 0; mi < matches.length; mi++) {
     const m = matches[mi]
     const start = m.index
     if (start < last) continue // まとめた画像の URL の、2 つ目から先
-    if (start > last) parts.push(text.slice(last, start))
+    if (start > last) plain(text.slice(last, start), `${keyPrefix}p${last}`)
     // 画像の URL: 札にする・続いたものをまとめる(設定)
     if (m[2] && ud && (ud.omitImages || ud.collapseImageRuns) && toImageUrl(normalizeUrl(m[2]))) {
       const run = [normalizeUrl(m[2])]
@@ -606,7 +660,7 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
       const resolve = handlers.toNo ?? sameNo
       const nos = expandList(m[1]).map(resolve).filter((n): n is number => n !== undefined)
       if (nos.length === 0) {
-        parts.push(m[0])
+        plain(m[0], `${keyPrefix}p${start}`)
         last = start + m[0].length
         continue
       }
@@ -654,7 +708,7 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
     }
     last = start + m[0].length
   }
-  if (last < text.length) parts.push(text.slice(last))
+  if (last < text.length) plain(text.slice(last), `${keyPrefix}p${last}`)
   return parts
 }
 

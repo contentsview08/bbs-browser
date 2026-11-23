@@ -33,6 +33,7 @@ import io.github.contentsview08.obb.data.shownPastTabs
 import io.github.contentsview08.obb.data.Prefs
 import io.github.contentsview08.obb.data.ThreadState
 import io.github.contentsview08.obb.data.unreadEntries
+import io.github.contentsview08.obb.data.unreadTotalOf
 import io.github.contentsview08.obb.data.favoriteChange
 import io.github.contentsview08.obb.data.isFavoriteIn
 import io.github.contentsview08.obb.ui.Palette
@@ -263,6 +264,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun closeSettings() {
         settingsOpen = false
     }
+
+    /**
+     * 未読のパネル。設定と同じく画面の積み重ねに入れず上に重ねる(閉じる・戻る・なぞって戻ると、見ていたスレ・板がそのまま出てくる)。
+     * 開いたときは覚えている数ですぐ出し、掲示板の数を確かめて足していく(loadAllUnread)
+     */
+    var unreadOpen by mutableStateOf(false)
+        private set
+
+    fun openUnread() {
+        drawerOpen = false
+        unreadOpen = true
+        loadAllUnread()
+    }
+
+    fun closeUnread() {
+        unreadOpen = false
+    }
     /** 画面の下に一瞬出す知らせ */
     var toast by mutableStateOf<String?>(null)
 
@@ -366,6 +384,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * 端末にも残し、アプリを開き直しても同じ所から読めるようにする
      */
     private val positionStore = app.getSharedPreferences("positions", android.content.Context.MODE_PRIVATE)
+    /** 掲示板で分かったレス数の覚え(remoteCounts) */
+    private val countStore = app.getSharedPreferences("known_counts", android.content.Context.MODE_PRIVATE)
     private val positionCache = HashMap<String, ScrollPos?>()
 
     fun position(id: String): ScrollPos? = positionCache.getOrPut(id) {
@@ -390,15 +410,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 掲示板のスレ一覧で分かった、いまのレス数(スレの id → 数)。閲覧履歴・お気に入りのスレの新着に使う。-1 は dat 落ち */
-    var remoteCounts by mutableStateOf<Map<String, Int>>(emptyMap())
+    /**
+     * 掲示板で分かったスレのレス数(スレの id → 数。-1 は dat 落ち)。未読の一覧・札・履歴の行の数のもと。
+     * 端末に覚えておき(known_counts)、起動したときから前回までに分かっていた数で未読を出す(前は起きるたびに空から始まり、
+     * 未読の画面を開いても確かめが終わるまで何も出なかった)。確かめるたびに updateRemoteCounts で書く
+     */
+    var remoteCounts by mutableStateOf<Map<String, Int>>(loadKnownCounts())
         private set
+
+    private fun loadKnownCounts(): Map<String, Int> = runCatching {
+        val o = org.json.JSONObject(countStore.getString("v", null) ?: return emptyMap())
+        buildMap { for (k in o.keys()) put(k, o.getInt(k)) }
+    }.getOrDefault(emptyMap())
+
+    /** 掲示板で分かった数を入れ替えて覚える。覚えるのは履歴・お気に入りのスレの分だけ(増え続けないように) */
+    fun updateRemoteCounts(next: Map<String, Int>) {
+        remoteCounts = next
+        val keep = HashSet<String>().apply { history.forEach { add(it.thread.id) }; favThreads.forEach { add(it.thread.id) }; allUnread.forEach { add(it.thread.id) } }
+        val save = if (keep.isEmpty()) next else next.filterKeys { it in keep }
+        countStore.edit().putString("v", org.json.JSONObject(save).toString()).apply()
+    }
     var checking by mutableStateOf(false)
         private set
 
     /** 未読のスレ(閲覧履歴のうち、新着のあるもの) */
     var allUnread by mutableStateOf<List<HistoryEntry>>(emptyList())
     /** 未読のレスの数の合計(札に出す数。スレの数ではなく、スレごとの新着を足したもの) */
-    val unreadTotal: Int get() = allUnread.sumOf { maxOf(0, maxOf(it.thread.postCount, remoteCounts[it.thread.id] ?: 0) - it.readNo) }
+    val unreadTotal: Int get() = allUnread.sumOf { maxOf(0, unreadTotalOf(it, remoteCounts) - it.readNo) }
     /**
      * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味)。
      * 板ごとにスレ一覧を 1 回だけ取り、載っていればそのレス数を新しい数にする(dat を 1 つずつ取りに行かない)
@@ -426,7 +464,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         if (t != null) counts[h.thread.id] = t.postCount
                     }
                 }
-                remoteCounts = counts
+                updateRemoteCounts(counts)
                 allUnread = unreadEntries(hist, counts)
             } finally {
                 checking = false
@@ -443,7 +481,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 同期が書いた最新を出す
         viewModelScope.launch { reflectSyncedReads(); postHistory = db.postHistory() }
         when (open) {
-            "unread" -> { openRoot(Page.AllUnread()); loadAllUnread() }
+            // 未読は画面の積み重ねに入れず、上に重ねるパネルで(閉じると見ていた所に戻る)
+            "unread" -> openUnread()
             "fav" -> openRoot(Page.FavThreads())
             "posts" -> openRoot(Page.PostHistory())
             "uploads" -> openRoot(Page.Uploads())
@@ -501,7 +540,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val counts = threads.associate { it.key to it.postCount }
                     for (e in list) next[e.thread.id] = counts[e.thread.key] ?: -1
                 }
-                remoteCounts = next
+                updateRemoteCounts(next)
             } finally {
                 checking = false
             }
@@ -785,6 +824,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val p = forwardPage ?: run { toast = "進む先がありません"; return }
         forwardPage = null
         settingsOpen = false
+        unreadOpen = false
         navDir = 1
         stack.add(p)
     }
@@ -793,6 +833,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openRoot(page: Page) {
         drawerOpen = false
         settingsOpen = false
+        unreadOpen = false
         for (p in stack) flushRead(p)
         navDir = 0
         stack.clear()
@@ -1210,6 +1251,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openBoard(board: Board, root: Boolean = true) {
         drawerOpen = false
         settingsOpen = false
+        unreadOpen = false
         syncScheduler.activity()
         val page = Page.Threads(board)
         navDir = if (root) 0 else 1
@@ -1256,6 +1298,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
         settingsOpen = false
+        unreadOpen = false
         syncScheduler.activity()
         // このスレの知らせ(新着・あなた宛てのレス)は、開いたら用済みなので通知の欄から消す
         runCatching { io.github.contentsview08.obb.data.Notifier.cancelFor(getApplication(), TwoCh.webUrl(t)) }
@@ -1557,7 +1600,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun noteThreadCount(t: ThreadSummary, count: Int, readNo: Int) {
         if (count <= 0) return
-        if ((remoteCounts[t.id] ?: 0) != count) remoteCounts = remoteCounts + (t.id to count)
+        if ((remoteCounts[t.id] ?: 0) < count) updateRemoteCounts(remoteCounts + (t.id to count))
         val entry = allUnread.firstOrNull { it.thread.id == t.id } ?: history.firstOrNull { it.thread.id == t.id }
         val fresh = HistoryEntry((entry?.thread ?: t).copy(postCount = count), maxOf(entry?.readNo ?: 0, readNo), entry?.readAt ?: System.currentTimeMillis())
         val next = unreadEntries(allUnread.filter { it.thread.id != t.id } + fresh, remoteCounts)
@@ -1571,7 +1614,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun nextUnread(page: Page.Thread): Triple<String, ThreadSummary, Int>? {
         val i = stack.indexOf(page)
         val under = stack.getOrNull(i - 1) ?: return null
-        fun unreadOf(h: HistoryEntry) = h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo)
+        fun unreadOf(h: HistoryEntry) = h.thread to maxOf(0, unreadTotalOf(h, remoteCounts) - h.readNo)
         val (name, list) = when (under) {
             is Page.Threads -> under.board.name to under.threads.map { t -> t to (under.states[t.key]?.let { maxOf(0, t.postCount - it.readNo) } ?: 0) }
             is Page.History -> "閲覧履歴" to history.map(::unreadOf)
@@ -2064,7 +2107,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && prefs.keywordRules.any { it.enabled }) prefs.keywordWatchMin else 0
                 clock.due(System.currentTimeMillis(), prefs.historyCheckMin, prefs.favCheckMin, keywordMin)?.let { scope ->
                     // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
-                    runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { remoteCounts = remoteCounts + it }
+                    runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { updateRemoteCounts(remoteCounts + it) }
                 }
                 kotlinx.coroutines.delay(60_000)
             }

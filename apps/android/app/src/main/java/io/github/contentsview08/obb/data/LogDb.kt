@@ -31,9 +31,18 @@ data class PostHistoryEntry(val id: Long, val thread: ThreadSummary, val no: Int
 /** 閲覧履歴の 1 行 */
 data class HistoryEntry(val thread: ThreadSummary, val readNo: Int, val readAt: Long)
 
-/** 新着のあるスレだけを未読の多い順に。手元のレス数は取得するまで増えないので、掲示板のレス数を確かめてあればその数で比べる */
+/**
+ * 新着のあるスレだけを未読の多い順に。レス数は、掲示板で分かった数(counts)と手元の数の大きい方
+ * (手元の数は取得するまで増えないが、取得した直後は掲示板の一覧より手元が先に進んでいることがある)。
+ * -1(dat 落ち)なら手元の数で(読み残しがあれば未読に残す)。行の表示・札の数(unreadTotal)も同じ数え方
+ */
+internal fun unreadTotalOf(e: HistoryEntry, counts: Map<String, Int>): Int {
+    val remote = counts[e.thread.id]
+    return if (remote == null || remote < 0) e.thread.postCount else maxOf(e.thread.postCount, remote)
+}
+
 internal fun unreadEntries(entries: List<HistoryEntry>, counts: Map<String, Int>): List<HistoryEntry> {
-    fun total(e: HistoryEntry) = counts[e.thread.id] ?: e.thread.postCount
+    fun total(e: HistoryEntry) = unreadTotalOf(e, counts)
     return entries.filter { total(it) > it.readNo }.sortedByDescending { total(it) - it.readNo }
 }
 

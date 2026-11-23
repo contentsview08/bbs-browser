@@ -23,6 +23,20 @@ class UnreadEntriesTest {
         assertEquals(emptyList<String>(), keys(unreadEntries(listOf(e), mapOf(e.thread.id to 60))))
     }
 
+    @Test fun local_count_wins_when_ahead_of_remote() {
+        // 取得した直後は手元が掲示板の一覧より先に進んでいることがある。大きい方で数える(行・札と同じ)
+        val e = entry("1", 70, 60)
+        assertEquals(listOf("1"), keys(unreadEntries(listOf(e), mapOf(e.thread.id to 65))))
+        assertEquals(70, unreadTotalOf(e, mapOf(e.thread.id to 65)))
+    }
+
+    @Test fun archived_uses_local_count() {
+        // dat 落ち(-1)でも、手元に読み残しがあれば未読に残す。読み切っていれば外す
+        val a = entry("a", 50, 40)
+        val b = entry("b", 50, 50)
+        assertEquals(listOf("a"), keys(unreadEntries(listOf(a, b), mapOf(a.thread.id to -1, b.thread.id to -1))))
+    }
+
     @Test fun sorted_by_remote_unread() {
         val a = entry("a", 50, 50)
         val b = entry("b", 50, 45)

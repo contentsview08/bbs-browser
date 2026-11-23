@@ -200,17 +200,23 @@ private fun PastFrame(
     actions: @Composable () -> Unit = {},
     headerOverlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     belowHeader: @Composable () -> Unit = {},
+    /** 上に重ねるパネル(未読)として出す: 題は「未読」、左の戻ると右の × で閉じる、履歴のタブは出さない */
+    panel: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val footer = vm.prefs.pastTabsPosition == "footer"
+    val footer = vm.prefs.pastTabsPosition == "footer" && !panel
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         Box {
             Column {
-                HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
+                if (panel) HeaderBar("未読", onNav = { vm.closeUnread() }, navIsBack = true) {
+                    actions()
+                    if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+                    BarIcon(Icons.Filled.Close, "閉じる") { vm.closeUnread() }
+                } else HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
                     actions()
                     if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
                 }
-                if (!footer) PastTabBar(vm, current, footer = false)
+                if (!footer && !panel) PastTabBar(vm, current, footer = false)
                 HorizontalDivider(color = Palette.border)
             }
             headerOverlay()
@@ -281,7 +287,10 @@ internal const val PAST_TAB_HEIGHT = 44
 @Composable
 private fun PastRow(
     vm: AppViewModel, t: io.github.contentsview08.obb.bbs.ThreadSummary, meta: String, total: Int?, unread: Int,
-    archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null, onLongClick: ((androidx.compose.ui.geometry.Rect?) -> Unit)? = null, onClick: (() -> Unit)? = null,
+    archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null,
+    /** 読んだスレ(未読なし)のスレタイを薄くするか。閲覧履歴では読んだものが混ざるので薄くし、お気に入り・未読ではほとんど読んだものなので薄くしない */
+    dimRead: Boolean = true,
+    onLongClick: ((androidx.compose.ui.geometry.Rect?) -> Unit)? = null, onClick: (() -> Unit)? = null,
 ) = WithoutBaseFont {
     // のぞく窓をこの行の位置から広げる
     val anchor = rememberPeekAnchor()
@@ -290,7 +299,7 @@ private fun PastRow(
     val k = vm.prefs.listFontScale
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).peekAnchor(anchor).combinedClickable(onLongClick = onLongClick?.let { f -> { f(anchor.screenRect(view)) } }) { if (onClick != null) onClick() else vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).peekAnchor(anchor).combinedClickable(onLongClick = onLongClick?.let { f -> { f(anchor.screenRect(view)) } }) { if (onClick != null) onClick() else vm.openThread(t) },
     ) {
         // 左の帯: 未読があれば未読の色(未読が多いほど濃く)
         Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread.copy(alpha = 0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f)) else Color.Transparent))
@@ -298,8 +307,9 @@ private fun PastRow(
         if (checked != null) androidx.compose.material3.Checkbox(checked, null, Modifier.align(Alignment.CenterVertically).padding(start = 10.dp), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
         // 字を小さくしたら余白も一緒に狭く(スレ一覧の行と同じ)
         Column(Modifier.weight(1f).padding(start = (13 * k).dp, end = (12 * k).dp, top = (10 * k).dp, bottom = (10 * k).dp)) {
+            // dat 落ちは赤い字で分かるように(行を薄くしていたのはやめた)
             Text(
-                t.title.ifEmpty { t.key }, color = if (unread > 0) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
+                t.title.ifEmpty { t.key }, color = if (archived) Palette.markDanger else if (unread > 0 || !dimRead) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
             if (own != null) Row(Modifier.padding(top = (5 * k).dp), verticalAlignment = Alignment.Top) {
@@ -334,7 +344,7 @@ internal fun postedHeadLine(body: String): String? = body.lines().firstOrNull { 
 /** 過去のスレの「未読」「閲覧」「お気に入り」のタブ。読んだ位置と、手元で分かっている未読の数 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
+fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null, panel: Boolean = false) {
     val refresh = onRefresh ?: { vm.checkNew(entries) }
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
@@ -361,9 +371,11 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     fun stopSelecting() { selecting = false; selected = emptySet() }
     androidx.activity.compose.BackHandler(enabled = selecting) { stopSelecting() }
     if (confirmDel) ConfirmDeleteDialog(vm.prefs, count = picked.size, onDelete = { vm.deleteLogsOf(picked); stopSelecting() }) { confirmDel = false }
-    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
+    // パネルでは、横になぞってタブを切り替える操作はない(タブがない)
+    Box(Modifier.fillMaxSize().then(if (panel) Modifier else pastGestures(vm, listState, refresh, swipe))) {
     PastFrame(
         vm, tab, refresh,
+        panel = panel,
         actions = {
             BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
             if (tab == "history" && entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
@@ -387,10 +399,12 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
         else if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
         else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(shown, key = { it.thread.id }) { h ->
-                // 掲示板で分かったレス数があれば、そちらで未読を数える(-1 は dat 落ち)
+                // 掲示板で分かったレス数と手元の数の大きい方で未読を数える(-1 は dat 落ち。未読の一覧・札と同じ数え方)
                 val remote = vm.remoteCounts[h.thread.id]
-                val total = maxOf(h.thread.postCount, remote ?: 0)
+                val total = io.github.contentsview08.obb.data.unreadTotalOf(h, vm.remoteCounts)
                 val unread = maxOf(0, total - h.readNo)
+                // 読んだスレのスレタイを薄くするのは閲覧履歴だけ(お気に入り・未読は、ほとんどが読んだスレなので全部薄くなって読みにくかった)
+                val dim = tab == "history"
                 val meta = listOfNotNull(
                     boardName(vm, h.thread.boardUrl),
                     if (h.readAt > 0) "${relativeTime(h.readAt)}に見た" else null,
@@ -398,9 +412,9 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
                 ).joinToString(" ・ ")
                 val id = h.thread.id
                 fun toggle() { selected = if (id in selected) selected - id else selected + id }
-                if (selecting) PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, checked = id in selected, onLongClick = { toggle() }, onClick = { toggle() })
+                if (selecting) PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, checked = id in selected, dimRead = dim, onLongClick = { toggle() }, onClick = { toggle() })
                 // のぞく窓が掲示板で分かったレス数を使えるように(新着を取りに行くかの目安)
-                else PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, onLongClick = { from -> Haptics.longPress(hv); menuFor = PeekTarget(h.thread, from, knownCount = total) })
+                else PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, dimRead = dim, onLongClick = { from -> Haptics.longPress(hv); menuFor = PeekTarget(h.thread, from, knownCount = total) })
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }}
@@ -546,4 +560,15 @@ private fun pastGestures(vm: AppViewModel, toBottom: suspend () -> Unit, toTop: 
         },
     )
     return Modifier.swipeGestures(swipe, g, sensitivity = prefs.gestureSensitivity)
+}
+
+
+/** 未読のパネル: 設定と同じく今の画面の上に重ねる(閉じると見ていたスレ・板がそのまま出てくる)。中身は履歴の未読のタブと同じ一覧 */
+@Composable
+fun UnreadPanel(vm: AppViewModel) {
+    OverlayPanel(visible = vm.unreadOpen, onClose = { vm.closeUnread() }) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null) {
+            ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() }, panel = true)
+        }
+    }
 }

@@ -117,22 +117,35 @@ private val LocalAdvanced = androidx.compose.runtime.compositionLocalOf { false 
  */
 @Composable
 fun SettingsPanel(vm: AppViewModel) {
+    OverlayPanel(visible = vm.settingsOpen, onClose = { vm.closeSettings() }) {
+        // 帯の左の長押し(たどってきた画面の一覧)は、下の画面のものなので出さない
+        androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null) {
+            androidx.compose.runtime.key(vm.settingsKey) { SettingsScreen(vm, vm.settingsStart) }
+        }
+    }
+}
+
+/**
+ * 上に重ねるパネルの殻(設定・未読)。下からせり上がり、戻るのジェスチャーで指に合わせて少し下がって縮み、離すと閉じる。
+ * 開いたときに組み込むので、下の画面(スレの検索・ポップアップなど)の戻るより先に受ける
+ */
+@Composable
+fun OverlayPanel(visible: Boolean, onClose: () -> Unit, content: @Composable () -> Unit) {
     val ease = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
     androidx.compose.animation.AnimatedVisibility(
-        visible = vm.settingsOpen,
+        visible = visible,
         enter = if (Motion.reduced) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(90))
         else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(320, easing = ease)) { it },
         exit = if (Motion.reduced) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90))
         else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(240, easing = ease)) { it },
     ) {
-        // 戻るのジェスチャーの途中の量(0〜1)。指に合わせてパネルが少し下がって縮み、離すと閉じる
+        // 戻るのジェスチャーの途中の量(0〜1)
         var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-        // 開いたときに組み込むので、下の画面(スレの検索・ポップアップなど)の戻るより先に受ける。
-        // 中のページにいるときは SettingsScreen の戻るが後から足されて先に受け、1 つ上のページへ戻る
-        androidx.activity.compose.PredictiveBackHandler(enabled = vm.settingsOpen) { progress ->
+        // 中のページにいるときは中の画面の戻るが後から足されて先に受け、1 つ上のページへ戻る
+        androidx.activity.compose.PredictiveBackHandler(enabled = visible) { progress ->
             try {
                 progress.collect { drag = it.progress }
-                vm.closeSettings()
+                onClose()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 androidx.compose.animation.core.Animatable(drag).animateTo(0f, androidx.compose.animation.core.tween(160)) { drag = value }
                 throw e
@@ -151,10 +164,7 @@ fun SettingsPanel(vm: AppViewModel) {
                 // 下の画面に指が抜けないようにする
                 .pointerInput(Unit) {},
         ) {
-            // 帯の左の長押し(たどってきた画面の一覧)は、下の画面のものなので出さない
-            androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null) {
-                androidx.compose.runtime.key(vm.settingsKey) { SettingsScreen(vm, vm.settingsStart) }
-            }
+            content()
         }
     }
 }

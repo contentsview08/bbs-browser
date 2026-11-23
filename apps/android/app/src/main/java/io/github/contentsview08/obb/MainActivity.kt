@@ -253,7 +253,8 @@ class MainActivity : ComponentActivity() {
                                 contentKey = { it?.hashCode() },
                                 label = "page",
                             ) { page -> pageContent(page) }
-                            // 設定は今の画面の上に重ねる(閉じると元の画面にそのまま戻る)
+                            // 未読・設定は今の画面の上に重ねる(閉じると元の画面にそのまま戻る)。設定の方が上
+                            io.github.contentsview08.obb.ui.UnreadPanel(vm)
                             SettingsPanel(vm)
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
                             // 一瞬出す知らせ

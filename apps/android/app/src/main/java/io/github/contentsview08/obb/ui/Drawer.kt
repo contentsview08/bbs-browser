@@ -94,7 +94,7 @@ fun DrawerContent(vm: AppViewModel) {
                     else -> Icons.Filled.PhotoLibrary to "上げた画像"
                 }
                 val active = when (k) {
-                    "unread" -> current is Page.AllUnread
+                    "unread" -> vm.unreadOpen
                     "history" -> current is Page.History
                     "fav" -> current is Page.FavThreads
                     "posts" -> current is Page.PostHistory

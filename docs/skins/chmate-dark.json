@@ -2,7 +2,7 @@
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ダーク)",
-  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色(紫 → 桃 → 赤)、自分のレス・自分への返信は左の帯",
+  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、カードのレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色(紫 → 桃 → 赤)、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "gray",
     "base": "#313131",
@@ -32,7 +32,7 @@
   "accent": "",
   "settings": {
     "followOsTheme": false,
-    "postStyle": "classic",
+    "postStyle": "card",
     "dateStyle": "full",
     "idPosition": "header",
     "idStyle": "none",
@@ -52,9 +52,9 @@
     "keywordBands": true
   },
   "android": {
-    "styleOptions": { "classic": { "tree": false, "treeDepth": 3, "quote": "line", "group": true } }
+    "styleOptions": { "card": { "tree": false, "treeDepth": 3, "quote": "line", "group": true } }
   },
   "pc": {
-    "styleOptions": { "classic": { "tree": false } }
+    "styleOptions": { "card": { "tree": false } }
   }
 }

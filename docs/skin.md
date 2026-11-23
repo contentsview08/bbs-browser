@@ -9,7 +9,7 @@ OBB(PC 版・Android 版)の見た目(配色・レスの見た目・細かい表
 **入っている項目だけを上書きします。** 一部の項目だけの JSON でも読めるので、配ってもらったスキンを当ててから、気に入らない所だけ設定で直せます。
 自分の配色だけの JSON(`docs/color-scheme.md`)も、同じ所から読めます。
 
-配布しているスキン: `docs/skins/chmate-dark.json`・`docs/skins/chmate-light.json`(ChMate 風。人気のレスは本文の色で紫 → 桃 → 赤、自分のレス・自分への返信は左の帯)。JSON をコピーして「JSON を貼り付けて当てる」で入ります。
+配布しているスキン: `docs/skins/chmate-dark.json`・`docs/skins/chmate-light.json`(ChMate 風。カードのレス、人気のレスは本文の色で紫 → 桃 → 赤、自分のレス・自分への返信は左の帯)。JSON をコピーして「JSON を貼り付けて当てる」で入ります。
 
 ```json
 {
@@ -24,6 +24,12 @@ OBB(PC 版・Android 版)の見た目(配色・レスの見た目・細かい表
   "pc": { "styleOptions": { "classic": { "tree": false } } }
 }
 ```
+
+## 自分の配色との関係
+
+`scheme` の中身は、設定 → 自分の配色 の「JSON をコピー」で取れる JSON(`docs/color-scheme.md`)そのものです。
+つまりスキン = 自分の配色の JSON + 見た目の項目。自分の配色だけの JSON を「スキンの JSON を貼り付けて当てる」に貼っても読め、配色だけが変わります。
+逆に、スキンの `scheme` だけを取り出せば自分の配色として使えます。
 
 ## 項目
 

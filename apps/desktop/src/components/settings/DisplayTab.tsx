@@ -181,8 +181,6 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
   return (
     <>
       <StickySample settings={s} />
-      {/* スキン: 配色・レスの見た目・細かい表示・文字と余白をまとめたもの(ui/lookTheme.ts)。入っている項目だけを上書きする */}
-      <LookThemeSection settings={s} update={update} />
       <Section title="配色">
         <Toggle
           checked={s.followOsTheme}
@@ -335,6 +333,8 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         />
         )}
       </Section>
+      {/* スキン: 配色・レスの見た目・細かい表示・文字と余白をまとめたもの(ui/lookTheme.ts)。ふだんは上の配色・スタイルから選び、全部まとめて扱いたいときにここへ */}
+      <LookThemeSection settings={s} update={update} />
     </>
   )
 }

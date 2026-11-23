@@ -385,8 +385,9 @@ class ThreadScroller(
         val fresh = posts.filter { it.no > prevLastNo && it.no > read }.map { it.no }
         val head = maxOf(prevLastNo, read) + 1
         if (fresh.isEmpty()) {
-            // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
-            if (!ctl.keepJump && !tree() && (ctl.pendingUnread || (ctl.untouched && ctl.firstGrowth))) toUnread(head)
+            // 一番下で未読を待っていた・開いた直後でそれまでを読み終えていたなら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける。
+            // 読み終えていないのに送らない(先頭に置いた読んでいないスレで、既読より前の番号のレスが増えたときに一番下へ落ちていた)
+            if (!ctl.keepJump && !tree() && (ctl.pendingUnread || (ctl.untouched && ctl.firstGrowth && read >= prevLastNo))) toUnread(head)
             return
         }
         ctl.flashAt = System.currentTimeMillis()

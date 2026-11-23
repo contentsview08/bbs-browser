@@ -1,7 +1,7 @@
 //! メインの窓の位置と大きさを、データフォルダに覚える。
 //! tauri-plugin-window-state は置き場が決め打ちで、ZIP 版の data\ に置けないので自前で持つ。
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -142,9 +142,15 @@ pub fn setup(app: &tauri::AppHandle) {
     let Some(path) = path_of(&window) else { return };
     let current = Arc::new(Mutex::new(read(&path)));
     let generation = Arc::new(AtomicU64::new(0));
+    // 閉じると決まったあとの動き・大きさの変化は見ない。Windows は窓を壊す途中で「最大化を解いた大きさ」の Resized を送ってくるので、
+    // それを拾うと最大化したまま閉じたのに maximized=false で上書きされ、次の起動で最大化に戻らなかった
+    let closing = Arc::new(AtomicBool::new(false));
     let watched = window.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+            if closing.load(Ordering::SeqCst) {
+                return;
+            }
             let Some(next) = capture(&watched, &current) else { return };
             // 動かしている間は書かず、止まってから 1 回だけ書く
             let mine = generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -157,7 +163,9 @@ pub fn setup(app: &tauri::AppHandle) {
             });
         }
         WindowEvent::CloseRequested { .. } => {
+            closing.store(true, Ordering::SeqCst);
             if let Some(next) = capture(&watched, &current) {
+                // 待っている書き込みは取り消し、今の状態を最後の 1 回として書く
                 generation.fetch_add(1, Ordering::SeqCst);
                 write(&path, &next);
             }

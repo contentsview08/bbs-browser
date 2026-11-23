@@ -60,6 +60,33 @@ object LookTheme {
         return merged.length()
     }
 
+    // ── 保存したテーマ(設定 lookThemes。JSON の配列。名前で見分ける) ──
+
+    fun saved(prefs: Prefs): List<JSONObject> = runCatching {
+        val a = org.json.JSONArray(prefs.lookThemes)
+        List(a.length()) { a.getJSONObject(it) }
+    }.getOrDefault(emptyList())
+
+    fun nameOf(o: JSONObject): String = o.optString("name").ifEmpty { "名前なし" }
+
+    /** 保存する(同じ名前があれば入れ替える) */
+    fun save(prefs: Prefs, theme: JSONObject) {
+        val name = nameOf(theme)
+        val list = saved(prefs).filter { nameOf(it) != name } + theme
+        prefs.lookThemes = org.json.JSONArray(list).toString()
+    }
+
+    fun remove(prefs: Prefs, name: String) {
+        prefs.lookThemes = org.json.JSONArray(saved(prefs).filter { nameOf(it) != name }).toString()
+    }
+
+    /** ドロップダウンのキー("preset:…" か "saved:名前")からテーマの JSON を。なければ null */
+    fun byKey(prefs: Prefs, key: String): String? = when {
+        key.startsWith("preset:") -> PRESETS.firstOrNull { it.first == key.removePrefix("preset:") }?.let { preset(it.first) }
+        key.startsWith("saved:") -> saved(prefs).firstOrNull { nameOf(it) == key.removePrefix("saved:") }?.toString()
+        else -> null
+    }
+
     /** 同梱のテーマ(キーと名前)。中身は bbs-browser の docs/themes にある JSON と同じ */
     val PRESETS = listOf("chmate-dark" to "ChMate 風(ダーク)", "chmate-light" to "ChMate 風(ライト)")
 
@@ -73,7 +100,7 @@ object LookTheme {
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ダーク)",
-  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "gray",
     "base": "#313131",
@@ -108,7 +135,7 @@ object LookTheme {
     "idPosition": "header",
     "idStyle": "none",
     "idShort": false,
-    "heatStyle": "left",
+    "heatStyle": "text",
     "highlightOp": true,
     "nameSubtle": true,
     "omitNoname": false,
@@ -136,7 +163,7 @@ object LookTheme {
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ライト)",
-  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "light-gray",
     "base": "#EEEEEE",
@@ -171,7 +198,7 @@ object LookTheme {
     "idPosition": "header",
     "idStyle": "none",
     "idShort": false,
-    "heatStyle": "left",
+    "heatStyle": "text",
     "highlightOp": true,
     "nameSubtle": true,
     "omitNoname": false,

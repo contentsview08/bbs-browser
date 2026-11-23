@@ -361,6 +361,10 @@ class Prefs(context: Context) {
     var fontFamily by pref("fontFamily", Fonts.SYSTEM)
     /** 自分で作った配色(CustomDef の JSON)。空なら作っていない */
     var customScheme by pref("customScheme", "")
+    /** 保存した見た目のテーマ(JSON の配列。data/LookTheme.kt) */
+    var lookThemes by pref("lookThemes", "[]")
+    /** 選んでいる見た目のテーマのキー("preset:…"・"saved:名前"。見た目を変えると外れる) */
+    var lookThemeKey by pref("lookThemeKey", "")
     /** 設定で、詳しい項目も出す */
     var showAdvanced by pref("showAdvanced", false)
     /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
@@ -696,7 +700,7 @@ class Prefs(context: Context) {
             "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "keywordRules", "grossWords", "quickPhrases",
             "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
             // 見た目ごとの設定(ツリー表示など)。見た目のテーマで読み書きするので JSON のまま
-            "styleOptions",
+            "styleOptions", "lookThemes",
         )
 
         /** なぞる操作の既定 */

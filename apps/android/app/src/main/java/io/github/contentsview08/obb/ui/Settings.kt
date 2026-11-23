@@ -344,18 +344,69 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     }
     StyleOptionsGroup(p)
     // 見た目のテーマ: 配色・レスの見た目・細かい表示・文字と余白をまとめた JSON(data/LookTheme.kt)。入っている項目だけを上書きする
-    Group("見た目のテーマ", note = "配色・レスの見た目・細かい表示・文字と余白をまとめた JSON です。入っている項目だけを上書きするので、人が作ったテーマを取り込んで、気に入らない所だけ直せます。ファイルの書き出し・読み込みは設定 → バックアップ から") {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        for ((key, name) in io.github.contentsview08.obb.data.LookTheme.PRESETS) ActionRow("$name にする") { vm.applyLookJsonNow(io.github.contentsview08.obb.data.LookTheme.preset(key)) }
-        ActionRow("いまの見た目を JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "見た目のテーマの JSON をコピーしました" }
-        ActionRow("JSON を貼り付けて当てる") {
-            val clip = runCatching {
-                context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
-            }.getOrNull()
-            if (clip.isNullOrEmpty()) vm.toast = "クリップボードに JSON がありません" else vm.applyLookJsonNow(clip)
+    LookThemeGroup(vm)
+    Group("見本") { SamplePosts(vm) }
+}
+
+/**
+ * 見た目のテーマ(data/LookTheme.kt): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
+ * ドロップダウンで選んで当てる(同梱のものと、保存したもの)。いまの見た目に名前を付けて保存できる。
+ * JSON の貼り付け・コピーは詳細設定(貼り付けたテーマは保存されて、次からドロップダウンに出る)。ファイルの書き出し・読み込みはバックアップから
+ */
+@Composable
+private fun LookThemeGroup(vm: AppViewModel) {
+    val p = vm.prefs
+    val lt = io.github.contentsview08.obb.data.LookTheme
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val saved = remember(p.lookThemes) { lt.saved(p).map { lt.nameOf(it) } }
+    var saveDialog by remember { mutableStateOf(false) }
+    var removeDialog by remember { mutableStateOf(false) }
+    Group("見た目のテーマ", note = "配色・レスの見た目・細かい表示・文字と余白をまとめて切り替えます。テーマに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。いまの見た目は名前を付けてテーマとして保存できます") {
+        val options = listOf("" to "(選んでいません)") + lt.PRESETS.map { "preset:${it.first}" to it.second } + saved.map { "saved:$it" to it }
+        ChoiceRow("テーマ", p.lookThemeKey.takeIf { k -> options.any { it.first == k } } ?: "", options) { if (it.isNotEmpty()) vm.pickLookTheme(it) }
+        ActionRow("いまの見た目をテーマとして保存…") { saveDialog = true }
+        if (saved.isNotEmpty()) ActionRow("保存したテーマを消す…") { removeDialog = true }
+        if (LocalAdvanced.current) {
+            ActionRow("JSON を貼り付けて当てる") {
+                val clip = runCatching {
+                    context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+                }.getOrNull()
+                if (clip.isNullOrEmpty()) vm.toast = "クリップボードに JSON がありません" else vm.applyLookJsonNow(clip)
+            }
+            ActionRow("いまの見た目を JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "見た目のテーマの JSON をコピーしました" }
         }
     }
-    Group("見本") { SamplePosts(vm) }
+    if (saveDialog) {
+        val current = p.lookThemeKey.takeIf { it.startsWith("saved:") }?.removePrefix("saved:") ?: ""
+        var name by remember { mutableStateOf(current) }
+        AlertDialog(
+            onDismissRequest = { saveDialog = false },
+            title = { Text("テーマとして保存") },
+            text = {
+                Column {
+                    Text("いまの配色・レスの見た目・細かい表示・文字と余白を、この名前で保存します。同じ名前があれば入れ替えます", color = Palette.textMuted, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("名前") })
+                }
+            },
+            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { vm.saveLookTheme(name); saveDialog = false }) { Text("保存") } },
+            dismissButton = { TextButton(onClick = { saveDialog = false }) { Text("やめる") } },
+        )
+    }
+    if (removeDialog) AlertDialog(
+        onDismissRequest = { removeDialog = false },
+        title = { Text("保存したテーマを消す") },
+        text = {
+            Column {
+                if (saved.isEmpty()) Text("保存したテーマはありません", color = Palette.textMuted, fontSize = 13.sp)
+                for (n in saved) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(n, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+                    IconButton(onClick = { vm.removeLookTheme(n) }) { Icon(Icons.Filled.Delete, "消す", tint = Palette.markDanger) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { removeDialog = false }) { Text("閉じる") } },
+    )
 }
 
 /** 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。表示スタイルのシートの「スタイル」と同じ言葉・同じ並び。値は見た目ごとに別々に覚える */

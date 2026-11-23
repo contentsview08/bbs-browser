@@ -1,7 +1,7 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
-import { LOOK_PRESETS, lookPreset, lookThemeJson, lookThemePatch } from '../../ui/lookTheme'
+import { LOOK_PRESETS, lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
 import { openJson, saveJson } from '../../host/backup'
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import {
   DEFAULT_SETTINGS,
   ACCENTS,
@@ -29,7 +29,7 @@ import { pickOpenPath } from '../../host/dialog'
 import { isMobile } from '../../utils/platform'
 import { FONT_NOTE } from '../../host/fonts'
 import { FontRows } from './FontRows'
-import { type SettingsProps, Section, StickySample, Choice } from './common'
+import { type SettingsProps, AdvancedContext, Section, StickySample, Choice } from './common'
 import { SearchInput } from '../ClearButton'
 
 /**
@@ -339,46 +339,111 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
   )
 }
 
-/** 見た目のテーマ: 同梱のテーマを当てる・JSON をコピー・貼り付け・ファイルに書き出す・読み込む */
+/**
+ * 見た目のテーマ(ui/lookTheme.ts): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
+ * ドロップダウンで選んで当てる(同梱のものと、保存したもの)。いまの見た目に名前を付けて保存できる。
+ * JSON の貼り付け・コピー・ファイルは詳細設定(貼り付けたテーマは保存されて、次からドロップダウンに出る)
+ */
 function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const [notice, setNotice] = useState<string>()
+  const [saveName, setSaveName] = useState('')
+  const showAdvanced = useContext(AdvancedContext)
   const BTN = 'px-3 py-1.5 rounded-md text-sm border border-c-border text-c-text-strong hover:bg-c-surface2'
-  const applyText = (text: string) => {
+  /** テーマの JSON を当てる。key はドロップダウンで選んだときのキー(貼り付け・ファイルのときは保存して、そのキーを選んだことにする) */
+  const applyText = (text: string, key?: string) => {
     const r = lookThemePatch(text, DEFAULT_SETTINGS)
     if (typeof r === 'string') return setNotice(r)
     for (const [k, v] of Object.entries(r.patch)) update(k as keyof AppSettings, v as never)
+    if (r.theme) {
+      if (!key) update('lookThemes', withSavedTheme(s.lookThemes, r.theme))
+      update('lookThemeKey', key ?? `saved:${r.name}`)
+    }
     setNotice(`見た目のテーマ「${r.name}」を当てました(${Object.keys(r.patch).length} 項目)`)
   }
+  const saveCurrent = () => {
+    const name = saveName.trim()
+    if (!name) return
+    update('lookThemes', withSavedTheme(s.lookThemes, lookThemeOf(s, name)))
+    update('lookThemeKey', `saved:${name}`)
+    setSaveName('')
+    setNotice(`テーマ「${name}」を保存しました`)
+  }
+  const options = [
+    { key: '', name: '(選んでいません)' },
+    ...LOOK_PRESETS.map((p) => ({ key: `preset:${p.key}`, name: p.name })),
+    ...s.lookThemes.map((t) => ({ key: `saved:${lookThemeName(t)}`, name: lookThemeName(t) })),
+  ]
   return (
     <Section
       title="見た目のテーマ"
-      note="配色(自分の配色・差し色)・レスの見た目・細かい表示・文字と余白をまとめた JSON です。入っている項目だけを上書きするので、人が作ったテーマを取り込んで、気に入らない所だけ直せます。スマホのアプリと同じ形"
+      note="配色・レスの見た目・細かい表示・文字と余白をまとめて切り替えます。テーマに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。いまの見た目は名前を付けてテーマとして保存できます(スマホのアプリと同じ形)"
     >
-      <div className="flex flex-wrap gap-2">
-        {LOOK_PRESETS.map((p) => (
-          <button key={p.key} type="button" className={BTN} onClick={() => applyText(lookPreset(p.key))}>
-            {p.name} にする
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-c-text-body">テーマ</span>
+        <Choice
+          value={options.some((o) => o.key === s.lookThemeKey) ? s.lookThemeKey : ''}
+          options={options}
+          onChange={(k) => {
+            const text = lookThemeByKey(s, k)
+            if (text) applyText(text, k)
+          }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <input
+          type="text"
+          value={saveName}
+          placeholder={lookThemeKeyName(s.lookThemeKey) || 'テーマの名前'}
+          onChange={(e) => setSaveName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveCurrent()
+          }}
+          className={`${INPUT} w-[14em]`}
+        />
+        <button type="button" className={BTN} disabled={!saveName.trim()} onClick={saveCurrent}>
+          いまの見た目をテーマとして保存
+        </button>
+      </div>
+      {s.lookThemes.length > 0 && (
+        <div className="pt-2 flex flex-wrap gap-1.5">
+          {s.lookThemes.map((t) => (
+            <span key={lookThemeName(t)} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full border border-c-border text-xs text-c-text-body">
+              {lookThemeName(t)}
+              <button
+                type="button"
+                className="material-symbols-outlined text-[16px] text-c-text-muted hover:text-c-mark-danger"
+                title={`「${lookThemeName(t)}」を消す`}
+                onClick={() => {
+                  update('lookThemes', withoutSavedTheme(s.lookThemes, lookThemeName(t)))
+                  if (s.lookThemeKey === `saved:${lookThemeName(t)}`) update('lookThemeKey', '')
+                }}
+              >
+                close
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {showAdvanced && (
+        <div className="flex flex-wrap gap-2 pt-3">
+          <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
+            JSON を貼り付けて当てる
           </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2 pt-2">
-        <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s)).then(() => setNotice('いまの見た目の JSON をコピーしました'))}>
-          JSON をコピー
-        </button>
-        <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
-          JSON を貼り付けて当てる
-        </button>
-        {!isMobile && (
-          <>
-            <button type="button" className={BTN} onClick={() => void saveJson('theme', JSON.parse(lookThemeJson(s)) as unknown).then((ok) => ok && setNotice('書き出しました'))}>
-              ファイルに書き出す
-            </button>
-            <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
-              ファイルを読み込む
-            </button>
-          </>
-        )}
-      </div>
+          <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまの見た目の JSON をコピーしました'))}>
+            いまの見た目を JSON でコピー
+          </button>
+          {!isMobile && (
+            <>
+              <button type="button" className={BTN} onClick={() => void saveJson('theme', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
+                ファイルに書き出す
+              </button>
+              <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
+                ファイルを読み込む
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {notice && <p className="pt-2 text-xs text-c-text-muted">{notice}</p>}
     </Section>
   )

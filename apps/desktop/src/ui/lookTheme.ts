@@ -63,7 +63,7 @@ export const lookThemeJson = (s: AppSettings, name = '') => JSON.stringify(lookT
  * テーマか自分の配色の JSON を読み、設定に当てる差分を返す(入っている項目だけ)。読めなければ理由の文。
  * 値の形の確かめ・古い形の読み替えはバックアップの読み込み(importableSettings)と同じ
  */
-export function lookThemePatch(text: string, defaults: AppSettings): { patch: Partial<AppSettings>; name: string } | string {
+export function lookThemePatch(text: string, defaults: AppSettings): { patch: Partial<AppSettings>; name: string; theme?: LookTheme } | string {
   let o: Record<string, unknown>
   try {
     o = JSON.parse(text.trim()) as Record<string, unknown>
@@ -96,10 +96,37 @@ export function lookThemePatch(text: string, defaults: AppSettings): { patch: Pa
     }
   }
   if (typeof o.accent === 'string') patch.accent = accentKeyOf(o.accent)
-  return { patch, name: typeof o.name === 'string' && o.name ? o.name : '名前なし' }
+  const theme = o as LookTheme
+  return { patch, name: lookThemeName(theme), theme }
 }
 
-/** 同梱のテーマ(キーと名前)。中身は docs/themes/*.json と同じ */
+// ── 保存したテーマ(設定 lookThemes。名前で見分ける) ──
+
+export const lookThemeName = (t: LookTheme) => (typeof t.name === 'string' && t.name ? t.name : '名前なし')
+
+/** 保存する(同じ名前があれば入れ替える) */
+export const withSavedTheme = (list: LookTheme[], t: LookTheme): LookTheme[] => [...list.filter((x) => lookThemeName(x) !== lookThemeName(t)), t]
+
+export const withoutSavedTheme = (list: LookTheme[], name: string): LookTheme[] => list.filter((x) => lookThemeName(x) !== name)
+
+/** ドロップダウンのキー("preset:…" か "saved:名前")からテーマの JSON を。なければ undefined */
+export function lookThemeByKey(s: AppSettings, key: string): string | undefined {
+  if (key.startsWith('preset:')) return LOOK_PRESETS.some((p) => p.key === key.slice(7)) ? lookPreset(key.slice(7)) : undefined
+  if (key.startsWith('saved:')) {
+    const t = s.lookThemes.find((x) => lookThemeName(x) === key.slice(6))
+    return t ? JSON.stringify(t) : undefined
+  }
+  return undefined
+}
+
+/** 選んでいるテーマのキーから名前(保存するとき・JSON をコピーするときの既定の名前) */
+export function lookThemeKeyName(key: string): string {
+  if (key.startsWith('saved:')) return key.slice(6)
+  if (key.startsWith('preset:')) return LOOK_PRESETS.find((p) => p.key === key.slice(7))?.name ?? ''
+  return ''
+}
+
+/** 同梱のテーマ(キーと名前)。中身は docs/themes にある JSON と同じ */
 export const LOOK_PRESETS = [
   { key: 'chmate-dark', name: 'ChMate 風(ダーク)' },
   { key: 'chmate-light', name: 'ChMate 風(ライト)' },
@@ -114,7 +141,7 @@ const CHMATE_DARK = String.raw`
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ダーク)",
-  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "note": "ChMate のダークに寄せた見た目。濃い灰色の地、紫の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "gray",
     "base": "#313131",
@@ -149,7 +176,7 @@ const CHMATE_DARK = String.raw`
     "idPosition": "header",
     "idStyle": "none",
     "idShort": false,
-    "heatStyle": "left",
+    "heatStyle": "text",
     "highlightOp": true,
     "nameSubtle": true,
     "omitNoname": false,
@@ -177,7 +204,7 @@ const CHMATE_LIGHT = String.raw`
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ライト)",
-  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "light-gray",
     "base": "#EEEEEE",
@@ -212,7 +239,7 @@ const CHMATE_LIGHT = String.raw`
     "idPosition": "header",
     "idStyle": "none",
     "idShort": false,
-    "heatStyle": "left",
+    "heatStyle": "text",
     "highlightOp": true,
     "nameSubtle": true,
     "omitNoname": false,

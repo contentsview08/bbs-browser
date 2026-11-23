@@ -5,6 +5,7 @@ import type { TabGroup } from '../utils/tabs'
 import { AI_NG_SAMPLES, type AiNgOverride, type AiNgRule } from '../utils/aiNg'
 import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './customScheme'
+import type { LookTheme } from './lookTheme'
 import type { DateStyle } from '../utils/displayDate'
 import { isMobile } from '../utils/platform'
 import { ensureFont, onFontSwitch } from '../host/fonts'
@@ -533,6 +534,10 @@ export interface AppSettings {
   haptics: boolean
   /** 自分の配色(地・面・字・強調・未読・自分の 6 色。CustomScheme の JSON)。空なら作っていない */
   customScheme: string
+  /** 保存した見た目のテーマ(ui/lookTheme.ts) */
+  lookThemes: LookTheme[]
+  /** 選んでいる見た目のテーマのキー("preset:…"・"saved:名前") */
+  lookThemeKey: string
   /** レスの頭の日時の出し方(utils/displayDate.ts) */
   dateStyle: DateStyle
   /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
@@ -724,6 +729,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postDoubleClick: 'none',
   haptics: true,
   customScheme: '',
+  lookThemes: [],
+  lookThemeKey: '',
   // スマホは頭を短く(スマホ版と同じ。年と秒の下の桁を省く・ID は 6 文字)
   dateStyle: isMobile ? 'md_hm' : 'full',
   idShort: false,

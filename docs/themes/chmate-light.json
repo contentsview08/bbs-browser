@@ -2,7 +2,7 @@
   "format": "obb-theme",
   "version": 1,
   "name": "ChMate 風(ライト)",
-  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ",
+  "note": "ChMate のライトに寄せた見た目。薄い灰色の地、桃色の新着の札、専ブラ風のレス(番号・名前・日時・ID を 1 行に)、右にミニマップ。人気のレスは本文の色、自分のレス・自分への返信は左の帯",
   "scheme": {
     "from": "light-gray",
     "base": "#EEEEEE",
@@ -37,7 +37,7 @@
     "idPosition": "header",
     "idStyle": "none",
     "idShort": false,
-    "heatStyle": "left",
+    "heatStyle": "text",
     "highlightOp": true,
     "nameSubtle": true,
     "omitNoname": false,

@@ -1082,12 +1082,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * 見た目のテーマ(data/LookTheme.kt)か、自分の配色(ui/CustomScheme.kt)の JSON を当てる。戻り値は知らせの文。
      * テーマは入っている項目だけを上書きする
      */
-    suspend fun applyLookJson(text: String): String {
+    suspend fun applyLookJson(text: String, key: String? = null): String {
         val o = runCatching { org.json.JSONObject(text.trim()) }.getOrNull() ?: throw IllegalArgumentException("JSON ではありません")
-        if (io.github.contentsview08.obb.data.LookTheme.isTheme(o)) {
-            val n = io.github.contentsview08.obb.data.LookTheme.apply(prefs, o)
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        if (lt.isTheme(o)) {
+            val n = lt.apply(prefs, o)
             prefs.reloadNg()
-            return "見た目のテーマ「${o.optString("name").ifEmpty { "名前なし" }}」を当てました($n 項目)"
+            // 貼り付け・ファイルで来たテーマは保存して、次からドロップダウンで選べるように
+            if (key == null) lt.save(prefs, o)
+            prefs.lookThemeKey = key ?: "saved:${lt.nameOf(o)}"
+            return "見た目のテーマ「${lt.nameOf(o)}」を当てました($n 項目)"
         }
         val d = io.github.contentsview08.obb.ui.CustomDef.parse(o.toString()) ?: throw IllegalArgumentException("配色・テーマのファイルではありません")
         prefs.customScheme = d.copy(accentPick = "").toJson()
@@ -1098,13 +1102,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return "自分の配色を読み込んで、使うようにしました"
     }
 
-    /** 設定の画面から(貼り付け・同梱のテーマ) */
-    fun applyLookJsonNow(text: String) {
-        viewModelScope.launch { toast = runCatching { applyLookJson(text) }.getOrElse { it.message ?: "読み込めませんでした" } }
+    /** 設定の画面から(貼り付け)。key はドロップダウンで選んだテーマのキー(そのときは保存し直さない) */
+    fun applyLookJsonNow(text: String, key: String? = null) {
+        viewModelScope.launch { toast = runCatching { applyLookJson(text, key) }.getOrElse { it.message ?: "読み込めませんでした" } }
     }
 
-    /** いまの見た目をテーマの JSON に */
-    fun themeJson(): String = io.github.contentsview08.obb.data.LookTheme.export(prefs).toString(2)
+    /** ドロップダウンで選んだテーマを当てる */
+    fun pickLookTheme(key: String) {
+        val text = io.github.contentsview08.obb.data.LookTheme.byKey(prefs, key) ?: return
+        applyLookJsonNow(text, key)
+    }
+
+    /** いまの見た目を、名前を付けてテーマとして保存する(同じ名前は入れ替え) */
+    fun saveLookTheme(name: String) {
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        lt.save(prefs, lt.export(prefs, name.trim()))
+        prefs.lookThemeKey = "saved:${name.trim()}"
+        toast = "テーマ「${name.trim()}」を保存しました"
+    }
+
+    fun removeLookTheme(name: String) {
+        io.github.contentsview08.obb.data.LookTheme.remove(prefs, name)
+        if (prefs.lookThemeKey == "saved:$name") prefs.lookThemeKey = ""
+    }
+
+    /** いまの見た目をテーマの JSON に(名前は選んでいるテーマのもの) */
+    fun themeJson(): String {
+        val key = prefs.lookThemeKey
+        val name = if (key.startsWith("saved:")) key.removePrefix("saved:") else io.github.contentsview08.obb.data.LookTheme.PRESETS.firstOrNull { "preset:${it.first}" == key }?.second ?: ""
+        return io.github.contentsview08.obb.data.LookTheme.export(prefs, name).toString(2)
+    }
 
     /** いまの見た目をテーマの JSON のファイルに書き出す */
     fun exportTheme(uri: android.net.Uri) {

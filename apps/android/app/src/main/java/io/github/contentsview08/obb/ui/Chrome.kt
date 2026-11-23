@@ -210,6 +210,13 @@ fun BarIcon(icon: ImageVector, label: String, tint: Color = Palette.textMuted, o
     ) { Icon(icon, label, tint = tint, modifier = Modifier.size(minOf(26, h - 6).dp)) }
 }
 
+/** 回っている更新のボタン(確かめている間。BarIcon と同じ大きさで、並びがずれない) */
+@Composable
+fun SpinningBarIcon(label: String, tint: Color = Palette.textMuted) {
+    val h = LocalPrefs.current.headerHeight
+    Box(Modifier.size(barButtonSize(h).dp), contentAlignment = Alignment.Center) { SpinningRefreshIcon(label, tint, minOf(26, h - 6).dp) }
+}
+
 @Composable
 fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他", onClick = onClick)
 

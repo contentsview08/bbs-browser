@@ -200,23 +200,29 @@ private fun PastFrame(
     actions: @Composable () -> Unit = {},
     headerOverlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     belowHeader: @Composable () -> Unit = {},
-    /** 上に重ねるパネル(未読)として出す: 題は「未読」、左の戻ると右の × で閉じる、履歴のタブは出さない */
+    /** 上に重ねるパネルとして出す: 題はタブの名前、左はメニュー、右の × で閉じる、タブはいつも下 */
     panel: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val footer = vm.prefs.pastTabsPosition == "footer" && !panel
+    val footer = panel || vm.prefs.pastTabsPosition == "footer"
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         Box {
             Column {
-                if (panel) HeaderBar("未読", onNav = { vm.closeUnread() }, navIsBack = true) {
+                // 確かめている間は更新のボタンを回す(一覧の上にくるくるを重ねない)
+                val refreshButton: @Composable () -> Unit = {
+                    if (onRefresh != null) {
+                        if (vm.checking) SpinningBarIcon("新着を確かめています") else BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+                    }
+                }
+                if (panel) HeaderBar(PAST_TABS.firstOrNull { it.first == current }?.second ?: "未読", onNav = { vm.drawerOpen = true }) {
                     actions()
-                    if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+                    refreshButton()
                     BarIcon(Icons.Filled.Close, "閉じる") { vm.closeUnread() }
                 } else HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
                     actions()
-                    if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+                    refreshButton()
                 }
-                if (!footer && !panel) PastTabBar(vm, current, footer = false)
+                if (!footer) PastTabBar(vm, current, footer = false)
                 HorizontalDivider(color = Palette.border)
             }
             headerOverlay()
@@ -352,6 +358,7 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     // お気に入りのスレは、開いたときに新着を確かめる(開いた直後は一覧がまだ空なので、そろったときにも)
     androidx.compose.runtime.LaunchedEffect(tab, entries.size) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
     val swipe = rememberSwipeState()
     // スレタイ検索(未読・閲覧・お気に入りのどのタブでも)。閲覧のふだんの一覧は 300 件までなので、探すあいだは全部から探す
     var searching by remember(tab) { mutableStateOf(false) }
@@ -371,8 +378,7 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     fun stopSelecting() { selecting = false; selected = emptySet() }
     androidx.activity.compose.BackHandler(enabled = selecting) { stopSelecting() }
     if (confirmDel) ConfirmDeleteDialog(vm.prefs, count = picked.size, onDelete = { vm.deleteLogsOf(picked); stopSelecting() }) { confirmDel = false }
-    // パネルでは、横になぞってタブを切り替える操作はない(タブがない)
-    Box(Modifier.fillMaxSize().then(if (panel) Modifier else pastGestures(vm, listState, refresh, swipe))) {
+    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
     PastFrame(
         vm, tab, refresh,
         panel = panel,
@@ -397,7 +403,11 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     ) {
         if (searching && shown.isEmpty() && pool != null) Hint("見つかりませんでした")
         else if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
-        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize(), state = pullState,
+            // パネルでは一覧の上にくるくるを重ねない(ヘッダーの更新のボタンが回る)
+            indicator = { if (!panel) androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(state = pullState, isRefreshing = vm.checking, modifier = Modifier.align(Alignment.TopCenter)) },
+        ) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(shown, key = { it.thread.id }) { h ->
                 // 掲示板で分かったレス数と手元の数の大きい方で未読を数える(-1 は dat 落ち。未読の一覧・札と同じ数え方)
                 val remote = vm.remoteCounts[h.thread.id]
@@ -425,7 +435,7 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
 
 /** 履歴の「書き込み」のタブ(新しい順)。行の形はほかのタブと同じで、書いた本文を足す。押すとスレを開いてそのレスへ、長押しでメニュー */
 @Composable
-fun PostHistoryScreen(vm: AppViewModel) {
+fun PostHistoryScreen(vm: AppViewModel, panel: Boolean = false) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -454,6 +464,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
     PastFrame(
         vm, "posts", null,
+        panel = panel,
         actions = { BarIcon(Icons.Filled.Search, "書き込みを探す") { searching = true } },
         belowHeader = { if (searching) SearchBar(query, { query = it }, "書き込みを探す(本文・スレタイ)") { searching = false; query = "" } },
     ) {
@@ -477,7 +488,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
 
 /** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・置き場の削除ページ(imgbb)・履歴から消す */
 @Composable
-fun UploadsScreen(vm: AppViewModel) {
+fun UploadsScreen(vm: AppViewModel, panel: Boolean = false) {
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val swipe = rememberSwipeState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -506,7 +517,7 @@ fun UploadsScreen(vm: AppViewModel) {
     }
     val toBottom: suspend () -> Unit = { gridState.scrollToItem(maxOf(0, gridState.layoutInfo.totalItemsCount - 1)) }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, toBottom, { gridState.scrollToItem(0) }, null, swipe))) {
-    PastFrame(vm, "uploads", null) {
+    PastFrame(vm, "uploads", null, panel = panel) {
         if (ups.isEmpty()) Hint("まだありません(書き込み欄の ＋ の「画像」から上げた画像が並びます)")
         else {
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -563,12 +574,21 @@ private fun pastGestures(vm: AppViewModel, toBottom: suspend () -> Unit, toTop: 
 }
 
 
-/** 未読のパネル: 設定と同じく今の画面の上に重ねる(閉じると見ていたスレ・板がそのまま出てくる)。中身は履歴の未読のタブと同じ一覧 */
+/**
+ * 未読(履歴)のパネル: 設定と同じく今の画面の上に重ねる(閉じると見ていたスレ・板がそのまま出てくる)。
+ * 下のタブで未読・閲覧・お気に入り・書き込み・画像を切り替える(中身は履歴の画面と同じ)
+ */
 @Composable
 fun UnreadPanel(vm: AppViewModel) {
     OverlayPanel(visible = vm.unreadOpen, onClose = { vm.closeUnread() }) {
         androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null) {
-            ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() }, panel = true)
+            when (vm.panelTab) {
+                "history" -> ThreadEntryList(vm, "history", vm.history, "閲覧履歴はありません", panel = true)
+                "fav" -> ThreadEntryList(vm, "fav", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)", panel = true)
+                "posts" -> PostHistoryScreen(vm, panel = true)
+                "uploads" -> UploadsScreen(vm, panel = true)
+                else -> ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() }, panel = true)
+            }
         }
     }
 }

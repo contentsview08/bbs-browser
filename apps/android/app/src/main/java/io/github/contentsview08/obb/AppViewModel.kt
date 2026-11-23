@@ -271,11 +271,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     var unreadOpen by mutableStateOf(false)
         private set
+    /** パネルで出している履歴のタブ(unread・history・fav・posts・uploads)。パネルの下のタブで切り替える */
+    var panelTab by mutableStateOf("unread")
+        private set
 
-    fun openUnread() {
+    fun openUnread() = openPanel("unread")
+
+    fun openPanel(tab: String) {
         drawerOpen = false
+        panelTab = tab
         unreadOpen = true
-        loadAllUnread()
+        if (tab == "unread") loadAllUnread()
     }
 
     fun closeUnread() {
@@ -480,6 +486,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.pastTab = open
         // 同期が書いた最新を出す
         viewModelScope.launch { reflectSyncedReads(); postHistory = db.postHistory() }
+        // パネルを開いているあいだは、パネルの中でタブを切り替える(下のタブ・ドロワーのどちらから選んでも)
+        if (unreadOpen) { openPanel(open); return }
         when (open) {
             // 未読は画面の積み重ねに入れず、上に重ねるパネルで(閉じると見ていた所に戻る)
             "unread" -> openUnread()
@@ -1282,6 +1290,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.setBoardVisit(page.board.url, System.currentTimeMillis())
                 page.threads = list
                 page.refreshed++
+                noteBoardCounts(page.board.url, list)
             } catch (e: Exception) {
                 page.error = loadErrorText(e)
             } finally {
@@ -1605,6 +1614,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val fresh = HistoryEntry((entry?.thread ?: t).copy(postCount = count), maxOf(entry?.readNo ?: 0, readNo), entry?.readAt ?: System.currentTimeMillis())
         val next = unreadEntries(allUnread.filter { it.thread.id != t.id } + fresh, remoteCounts)
         if (next != allUnread) allUnread = next
+    }
+
+    /**
+     * 板のスレ一覧を取ったら、その板の履歴・お気に入りのスレの掲示板のレス数を覚え、未読の一覧と札をその場で直す
+     * (板の一覧で新着の札が見えているのに、ドロワーの未読の札には出ていなかった)。板の URL の書き方の揺れはそろえて比べる
+     */
+    private fun noteBoardCounts(boardUrl: String, list: List<ThreadSummary>) {
+        fun norm(u: String) = io.github.contentsview08.obb.sync.normalizeBoardUrl(u) ?: u
+        val board = norm(boardUrl)
+        val mine = (allUnread + history + favThreads).filter { norm(it.thread.boardUrl) == board }.distinctBy { it.thread.id }
+        if (mine.isEmpty()) return
+        val byKey = list.associateBy { it.key }
+        val next = remoteCounts.toMutableMap()
+        var changed = false
+        for (e in mine) {
+            val t = byKey[e.thread.key] ?: continue
+            if (next[e.thread.id] != t.postCount) { next[e.thread.id] = t.postCount; changed = true }
+        }
+        if (!changed) return
+        updateRemoteCounts(next)
+        allUnread = unreadEntries((allUnread + mine).distinctBy { it.thread.id }, next)
     }
 
     /**
@@ -2063,6 +2093,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // 立てたあとの一覧の取り直しに失敗しても、立てられなかったとは出さない
                         runCatching { TwoCh.listThreads(page.board) }.onSuccess { list ->
                             page.threads = list
+                            noteBoardCounts(page.board.url, list)
                             list.firstOrNull { it.title.trim() == title }?.let { openThread(it) }
                         }
                     }

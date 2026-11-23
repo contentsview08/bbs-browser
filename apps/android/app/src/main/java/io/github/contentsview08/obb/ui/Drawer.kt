@@ -93,8 +93,9 @@ fun DrawerContent(vm: AppViewModel) {
                     "posts" -> Icons.Filled.EditNote to "書き込み履歴"
                     else -> Icons.Filled.PhotoLibrary to "上げた画像"
                 }
-                val active = when (k) {
-                    "unread" -> vm.unreadOpen
+                // パネルで出しているタブか、積み重ねの中のその画面なら「今いる所」
+                val active = (vm.unreadOpen && vm.panelTab == k) || when (k) {
+                    "unread" -> false
                     "history" -> current is Page.History
                     "fav" -> current is Page.FavThreads
                     "posts" -> current is Page.PostHistory

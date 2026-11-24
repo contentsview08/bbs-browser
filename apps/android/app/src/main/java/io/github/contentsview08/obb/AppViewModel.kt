@@ -181,6 +181,8 @@ sealed interface Page {
     }
 
     class Thread(val summary: ThreadSummary) : Page {
+        /** 未読(履歴)のパネルから開いた。戻るとパネルを開き直す(未読を続けて消化できるように。板の一覧へは戻さない) */
+        var fromPanel = false
         // 画面の状態(スクロールの位置・絞り込み・検索・読んだところの覚え)はここに持つ。一覧へ戻って「進む」で開き直しても、そのまま残るように
         val listState = androidx.compose.foundation.lazy.LazyListState()
         val scroll = io.github.contentsview08.obb.ui.ThreadScrollCtl(this)
@@ -785,8 +787,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (stack.size <= 1) return false
         flushRead(stack.last())
         navDir = -1
-        forwardPage = stack.removeAt(stack.lastIndex) as? Page.Thread
+        val left = stack.removeAt(stack.lastIndex) as? Page.Thread
+        forwardPage = left
         refreshTopAfterBack()
+        // パネルから開いたスレなら、戻ったときにパネルを開き直す(未読を続けて消化できるように)
+        if (left?.fromPanel == true) { unreadOpen = true; if (panelTab == "unread") recountAllUnread() }
         return true
     }
 
@@ -1373,11 +1378,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
         settingsOpen = false
+        val fromPanel = unreadOpen
         unreadOpen = false
         syncScheduler.activity()
         // このスレの知らせ(新着・あなた宛てのレス)は、開いたら用済みなので通知の欄から消す
         runCatching { io.github.contentsview08.obb.data.Notifier.cancelFor(getApplication(), TwoCh.webUrl(t)) }
         val page = Page.Thread(t)
+        page.fromPanel = fromPanel
         page.jumpNo = no
         forwardPage = null
         navDir = 1

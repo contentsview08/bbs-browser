@@ -61,6 +61,20 @@ object LookTheme {
         return merged.length()
     }
 
+    /**
+     * スキンの代表の色(地・面・強調・未読・字)。設定の一覧の札に出す。
+     * 自分の配色が入っていればそれから、なければ settings の配色のキーから。どちらもなければ null(今の配色で描く)
+     */
+    fun swatch(o: JSONObject): List<androidx.compose.ui.graphics.Color>? {
+        o.optJSONObject("scheme")?.let { sc -> CustomDef.parse(sc.toString()) }?.let { d ->
+            val s = io.github.contentsview08.obb.ui.buildScheme(d)
+            return listOf(s.base, s.surface, s.accent, s.unread, s.textStrong)
+        }
+        val key = o.optJSONObject("settings")?.optString("scheme").orEmpty()
+        val s = io.github.contentsview08.obb.ui.SCHEMES.firstOrNull { it.key == key } ?: return null
+        return listOf(s.base, s.surface, s.accent, s.unread, s.textStrong)
+    }
+
     // ── 保存したスキン(設定 lookThemes。JSON の配列。名前で見分ける) ──
 
     fun saved(prefs: Prefs): List<JSONObject> = runCatching {

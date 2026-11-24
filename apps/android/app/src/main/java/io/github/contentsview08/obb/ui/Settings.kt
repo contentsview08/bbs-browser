@@ -358,12 +358,14 @@ private fun LookThemeGroup(vm: AppViewModel) {
     val p = vm.prefs
     val lt = io.github.contentsview08.obb.data.LookTheme
     val context = androidx.compose.ui.platform.LocalContext.current
-    val saved = remember(p.lookThemes) { lt.saved(p).map { lt.nameOf(it) } }
+    val savedThemes = remember(p.lookThemes) { lt.saved(p) }
+    val saved = remember(savedThemes) { savedThemes.map { lt.nameOf(it) } }
     var saveDialog by remember { mutableStateOf(false) }
     var removeDialog by remember { mutableStateOf(false) }
     Group("スキン", note = "配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
-        val options = (if (saved.isEmpty()) listOf("" to "(スキンがありません)") else listOf("" to "(選んでいません)")) + saved.map { "saved:$it" to it }
-        ChoiceRow("スキン", p.lookThemeKey.takeIf { k -> options.any { it.first == k } } ?: "", options) { if (it.isNotEmpty()) vm.pickLookTheme(it) }
+        // 配色の札と同じ形で並べ、代表の色(地・面・強調・未読・字)でどんな色味か分かるように
+        if (savedThemes.isEmpty()) Text("スキンはまだありません。下の「いまの見た目をスキンとして保存…」で作れます", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Palette.textMuted, fontSize = 13.sp)
+        else SkinGrid(savedThemes, p.lookThemeKey) { vm.pickLookTheme(it) }
         ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
         if (saved.isNotEmpty()) ActionRow("保存したスキンを消す…") { removeDialog = true }
         if (LocalAdvanced.current) {
@@ -425,6 +427,35 @@ private fun StyleOptionsGroup(p: io.github.contentsview08.obb.data.Prefs) {
         } else {
             SegmentRow("返信先の引用", o.quote, io.github.contentsview08.obb.data.QUOTE_MODES) { set(o.copy(quote = it)) }
             SwitchRow("続けて書いたレスをまとめる", o.group, desc = "同じ人が続けて書いたレスの名前・アイコンを省きます") { set(o.copy(group = it)) }
+        }
+    }
+}
+
+/** 保存したスキンの札(配色の札と同じ形)。上に代表の色(地の上に 面・強調・未読・字)、下に名前。押すと当てる */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SkinGrid(themes: List<org.json.JSONObject>, selectedKey: String, onPick: (String) -> Unit) {
+    val lt = io.github.contentsview08.obb.data.LookTheme
+    FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (t in themes) {
+            val name = lt.nameOf(t)
+            val key = "saved:$name"
+            val on = key == selectedKey
+            val sw = lt.swatch(t) ?: listOf(Palette.base, Palette.surface, Palette.accent, Palette.unread, Palette.textStrong)
+            Column(
+                Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
+                    .clickable { onPick(key) },
+            ) {
+                Box(Modifier.fillMaxWidth().height(56.dp).background(sw[0]).padding(10.dp), contentAlignment = Alignment.Center) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (c in sw.drop(1)) Box(Modifier.size(16.dp).background(c, RoundedCornerShape(4.dp)).border(1.dp, Palette.border.copy(alpha = 0.6f), RoundedCornerShape(4.dp)))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), color = Palette.textStrong, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(16.dp))
+                }
+            }
         }
     }
 }

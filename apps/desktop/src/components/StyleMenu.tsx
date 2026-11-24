@@ -130,6 +130,8 @@ function PostStyleChips({ settings, update }: { settings: AppSettings; update: U
 /** 見た目の名前(スマホは括弧の中の説明を省く) */
 /** 設定を開いてほしいときの合図(detail はタブ。App が受けて開く) */
 export const OPEN_SETTINGS_EVENT = 'obb-open-settings'
+/** スキンを選ぶ窓(components/SkinPicker の SkinDialog)を開いてほしいときの合図 */
+export const OPEN_SKINS_EVENT = 'obb-open-skins'
 
 export function postStyleName(style: PostStyle): string {
   const name = POST_STYLES.find((p) => p.key === style)?.name ?? ''
@@ -303,8 +305,20 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
   const body =
     shown === 'color' ? (
       <>
-        <p className={LABEL}>カラーテーマ</p>
+        <p className={LABEL}>配色</p>
         <SchemeTiles settings={settings} update={update} />
+        {/* ここには同梱の配色だけ。保存した・取り込んだスキン(見た目まで含むもの)は窓で */}
+        <button
+          type="button"
+          className="mt-1 w-full flex items-center justify-between px-4 py-2 text-sm text-c-accent hover:bg-c-surface2"
+          onClick={() => {
+            props.onClose()
+            window.dispatchEvent(new CustomEvent(OPEN_SKINS_EVENT))
+          }}
+        >
+          <span>ほかのスキンも見る…</span>
+          <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>
+        </button>
         <p className={LABEL}>差し色</p>
         <AccentDots settings={settings} update={update} />
       </>

@@ -1,5 +1,6 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
-import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, lookThemeSwatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
+import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
+import { SkinCards, SkinPicker } from '../SkinPicker'
 import { openJson, saveJson } from '../../host/backup'
 import { useContext, useEffect, useState } from 'react'
 import {
@@ -181,7 +182,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
   return (
     <>
       <StickySample settings={s} />
-      <Section title="配色">
+      <Section title="配色とスキン" note={s.lookThemes.length && !s.followOsTheme ? '前の方が同梱の配色、後ろが保存したスキン(色だけのものも、見た目まで含むものも)。押すとその場で切り替わります' : undefined}>
         <Toggle
           checked={s.followOsTheme}
           onChange={(v) => update('followOsTheme', v)}
@@ -194,31 +195,8 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           label="動きを減らす"
           note="画面の移り方・新着の光り方・数字の繰り上がりを省きます。OS の「アニメーションを表示しない」がオンでも同じになります"
         />
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {[...COLOR_SCHEMES, ...(parseCustom(s.customScheme) ? [{ key: 'custom' as const, name: '自分の配色', accent: parseCustom(s.customScheme)!.accent, border: 'var(--c-border)' }] : [])].map((c) => {
-            const chosen = s.followOsTheme ? c.key === s.darkScheme || c.key === s.lightScheme : s.scheme === c.key
-            return (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => {
-                  for (const [k, v] of Object.entries(pickScheme(s, c.key))) update(k as keyof AppSettings, v as never)
-                }}
-                className={`flex items-center gap-2.5 px-3 py-2 text-sm border rounded-[var(--card-radius)] transition-colors ${
-                  chosen ? 'border-c-accent text-c-text-strong' : 'border-c-border text-c-text-body hover:border-c-border-strong'
-                }`}
-              >
-                <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: c.accent, boxShadow: `inset 0 0 0 1px ${c.border}` }} />
-                <span className="flex-1 text-left">{c.name}</span>
-                {s.followOsTheme && (
-                  <span className="text-[10px] text-c-text-muted">
-                    {(c.key === 'custom' ? isCustomDark(parseCustom(s.customScheme)!) : isDarkScheme(c.key)) ? 'ダーク' : 'ライト'}
-                    {chosen && 'で使う'}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        <div className="mt-2">
+          <SkinPicker settings={s} update={update} />
         </div>
       </Section>
       <Section title="差し色">
@@ -367,42 +345,18 @@ function LookThemeSection({ settings: s, update, onOpenCustomScheme }: Pick<Sett
   }
   return (
     <Section
-      title="スキン"
-      note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
+      title="スキンの管理"
+      note="スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
     >
       {/* 色を 1 つずつ選ぶ(6 色と細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる */}
       <OpenRow label="色を細かく編集" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
-      {/* 配色の札と同じ形で並べ、代表の色(地の上に 面・強調・未読・字)でどんな色味か分かるように */}
-      {s.lookThemes.length === 0 ? (
-        <p className="text-sm text-c-text-muted">スキンはまだありません。下の「いまの見た目をスキンとして保存」で作れます</p>
-      ) : (
+      {/* 札は上の「配色とスキン」に並べている。OS に合わせているときだけ、ここに並べる */}
+      {s.followOsTheme && s.lookThemes.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
-          {s.lookThemes.map((t) => {
-            const key = `saved:${lookThemeName(t)}`
-            const on = s.lookThemeKey === key
-            const sw = lookThemeSwatch(t) ?? ['var(--c-base)', 'var(--c-surface)', 'var(--c-accent)', 'var(--c-accent-self)', 'var(--c-text-strong)']
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  const text = lookThemeByKey(s, key)
-                  if (text) applyText(text, key)
-                }}
-                className={`flex items-center gap-2.5 px-3 py-2 text-sm border rounded-[var(--card-radius)] transition-colors ${on ? 'border-c-accent text-c-text-strong' : 'border-c-border text-c-text-body hover:border-c-border-strong'}`}
-              >
-                <span className="flex items-center gap-1 px-1.5 py-1 rounded flex-shrink-0" style={{ background: sw[0], boxShadow: 'inset 0 0 0 1px var(--c-border)' }}>
-                  {sw.slice(1).map((c, i) => (
-                    <span key={i} className="w-3 h-3 rounded-[3px]" style={{ background: c, boxShadow: 'inset 0 0 0 1px rgba(128,128,128,0.4)' }} />
-                  ))}
-                </span>
-                <span className="flex-1 text-left truncate">{lookThemeName(t)}</span>
-                {on && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
-              </button>
-            )
-          })}
+          <SkinCards settings={s} update={update} />
         </div>
       )}
+      {s.lookThemes.length === 0 && <p className="text-sm text-c-text-muted">スキンはまだありません。「いまの見た目をスキンとして保存」で作ると、上の「配色とスキン」に並びます</p>}
       <div className="flex flex-wrap items-center gap-2 pt-2">
         <input
           type="text"

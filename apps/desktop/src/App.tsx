@@ -91,7 +91,8 @@ import { HISTORY_SHOWN, restoreThreadRead, type DroppedThread } from '@bbs-brows
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, onOsNotifyClick, sendOsNotification } from './utils/osNotify'
 import { playNotifySound } from './host/notifySound'
-import { OPEN_SETTINGS_EVENT } from './components/StyleMenu'
+import { OPEN_SETTINGS_EVENT, OPEN_SKINS_EVENT } from './components/StyleMenu'
+import { SkinDialog } from './components/SkinPicker'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl, currentBackgroundImage } from './host/backgroundImage'
@@ -2960,8 +2961,15 @@ export default function App() {
   useEffect(() => {
     const on = (e: Event) => openSettings(((e as CustomEvent<string>).detail || 'display') as Parameters<typeof openSettings>[0])
     window.addEventListener(OPEN_SETTINGS_EVENT, on)
-    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, on)
+    const onSkins = () => setSkinsOpen(true)
+    window.addEventListener(OPEN_SKINS_EVENT, onSkins)
+    return () => {
+      window.removeEventListener(OPEN_SETTINGS_EVENT, on)
+      window.removeEventListener(OPEN_SKINS_EVENT, onSkins)
+    }
   }, [])
+  /** スキンを選ぶ窓(表示スタイルの窓の「ほかのスキンも見る…」) */
+  const [skinsOpen, setSkinsOpen] = useState(false)
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {
     if (k === 'posts') return void openPostHistory()
@@ -3533,6 +3541,7 @@ export default function App() {
           {...settingsProps()}
         />
       )}
+      {skinsOpen && <SkinDialog settings={settings} update={updateSetting} onClose={() => setSkinsOpen(false)} />}
       {settingsTab && !isMobile && !canOpenToolWindow && (
         <SettingsDialog
           initialTab={settingsTab}

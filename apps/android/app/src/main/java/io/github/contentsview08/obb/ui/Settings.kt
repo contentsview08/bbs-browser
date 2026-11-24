@@ -106,7 +106,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "色を細かく編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -338,6 +338,10 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
+    // 配色を 1 色ずつ編集する(前の「自分の配色を作る」。保存の場所は同じ customScheme なので、前に作った配色はそのまま使える)
+    Group("配色を編集", note = "地・面・字・強調・未読・自分の 6 色と、帯・線・印などの細かい色を 1 つずつ選べます。編集した配色は「自分の配色」として使え、スキンとして保存もできます") {
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "配色を編集…", value = if (p.customScheme.isEmpty()) null else if (p.scheme == "custom" && !p.followOsTheme) "自分の配色(使っています)" else "自分の配色") { open("custom") }
+    }
 }
 
 /** いま使っているスキン(か配色)の名前。設定の「スキンを選ぶ…」の右に出す */
@@ -484,7 +488,7 @@ private fun LookThemeGroup(vm: AppViewModel, open: (String) -> Unit) {
     var removeDialog by remember { mutableStateOf(false) }
     Group("スキンの管理", note = "スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
         // 色を 1 つずつ選ぶ(地・面・字・強調・未読・自分の 6 色と、細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる
-        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "色を細かく編集", value = if (p.customScheme.isEmpty()) null else "自分の配色") { open("custom") }
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "配色を編集…", value = if (p.customScheme.isEmpty()) null else "自分の配色") { open("custom") }
         ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
         if (saved.isNotEmpty()) ActionRow("保存したスキンを消す…") { removeDialog = true }
         if (LocalAdvanced.current) {

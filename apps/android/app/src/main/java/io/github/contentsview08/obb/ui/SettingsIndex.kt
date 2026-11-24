@@ -10,7 +10,6 @@ val SETTINGS_INDEX = listOf(
     Triple("theme", "ダークのとき", ""),
     Triple("theme", "ライトのとき", ""),
     Triple("theme", "差し色", "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります"),
-    Triple("theme", "自分の配色", "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます"),
     Triple("theme", "スタイル", ""),
     Triple("theme", "レスの見た目", ""),
     Triple("theme", "見本", ""),

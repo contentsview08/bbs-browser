@@ -105,7 +105,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "色を細かく編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -336,16 +336,13 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
     }
-    if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
-        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
-    }
     Group("スタイル") {
         SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
     Group("見本") { SamplePosts(vm) }
-    // ふだんは配色・スタイルから選ぶ。もっと細かく(全部まとめて)扱いたいときに、下まで来るとスキンの保存・切り替えがある
-    LookThemeGroup(vm)
+    // ふだんは配色・スタイルから選ぶ。もっと細かく(色の編集・全部まとめて)扱いたいときに、下まで来るとスキンがある
+    LookThemeGroup(vm, open)
 }
 
 /**
@@ -354,7 +351,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
  * JSON の貼り付け・コピーは詳細設定(貼り付けたスキンは保存されて、次からドロップダウンに出る)。ファイルの書き出し・読み込みはバックアップから
  */
 @Composable
-private fun LookThemeGroup(vm: AppViewModel) {
+private fun LookThemeGroup(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     val lt = io.github.contentsview08.obb.data.LookTheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -362,10 +359,12 @@ private fun LookThemeGroup(vm: AppViewModel) {
     val saved = remember(savedThemes) { savedThemes.map { lt.nameOf(it) } }
     var saveDialog by remember { mutableStateOf(false) }
     var removeDialog by remember { mutableStateOf(false) }
-    Group("スキン", note = "配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
+    Group("スキン", note = "配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
         // 配色の札と同じ形で並べ、代表の色(地・面・強調・未読・字)でどんな色味か分かるように
         if (savedThemes.isEmpty()) Text("スキンはまだありません。下の「いまの見た目をスキンとして保存…」で作れます", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Palette.textMuted, fontSize = 13.sp)
         else SkinGrid(savedThemes, p.lookThemeKey) { vm.pickLookTheme(it) }
+        // 色を 1 つずつ選ぶ(地・面・字・強調・未読・自分の 6 色と、細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "色を細かく編集", value = if (p.customScheme.isEmpty()) null else "自分の配色") { open("custom") }
         ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
         if (saved.isNotEmpty()) ActionRow("保存したスキンを消す…") { removeDialog = true }
         if (LocalAdvanced.current) {

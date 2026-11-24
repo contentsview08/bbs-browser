@@ -348,8 +348,8 @@ function LookThemeSection({ settings: s, update, onOpenCustomScheme }: Pick<Sett
       title="スキンの管理"
       note="スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
     >
-      {/* 色を 1 つずつ選ぶ(6 色と細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる */}
-      <OpenRow label="色を細かく編集" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
+      {/* 配色を 1 色ずつ編集する(前の「自分の配色を作る」。保存の場所は同じ customScheme なので、前に作った配色はそのまま)。編集した配色は「自分の配色」になり、スキンとして保存できる */}
+      <OpenRow label="配色を編集…" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
       {/* 札は上の「配色とスキン」に並べている。OS に合わせているときだけ、ここに並べる */}
       {s.followOsTheme && s.lookThemes.length > 0 && (
         <div className="grid grid-cols-2 gap-2">

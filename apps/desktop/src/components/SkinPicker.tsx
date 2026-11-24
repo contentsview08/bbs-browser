@@ -89,8 +89,8 @@ function SkinCard(props: { name: string; caption: string; on: boolean; schemeKey
       onClick={props.onPick}
       className={`text-left rounded-[var(--card-radius)] border bg-c-surface overflow-hidden transition-colors ${props.on ? 'border-c-accent' : 'border-c-border hover:border-c-border-strong'}`}
     >
-      <div className="p-2.5">
-        <div className="rounded-lg overflow-hidden border border-c-border" data-scheme={props.schemeKey} style={{ ...(props.vars as React.CSSProperties), background: 'var(--c-base)' }}>
+      <div className="p-1.5">
+        <div className="rounded-md overflow-hidden border border-c-border" data-scheme={props.schemeKey} style={{ ...(props.vars as React.CSSProperties), background: 'var(--c-base)' }}>
           <div className="flex items-center px-3 py-2" style={{ background: 'var(--c-header-footer)' }}>
             <span className="flex-1 font-bold text-[13px]" style={{ color: 'var(--c-text-strong)' }}>
               ニュー速
@@ -147,12 +147,12 @@ function SkinCard(props: { name: string; caption: string; on: boolean; schemeKey
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 px-3.5 pb-3">
+      <div className="flex items-center gap-2 px-2.5 pb-2">
         <div className="flex-1 min-w-0">
-          <div className="text-[15px] font-bold text-c-text-strong truncate">{props.name}</div>
-          {props.caption && <div className="text-xs text-c-text-muted line-clamp-2">{props.caption}</div>}
+          <div className="text-[13px] font-bold text-c-text-strong truncate">{props.name}</div>
+          {props.caption && <div className="text-[11px] text-c-text-muted truncate">{props.caption}</div>}
         </div>
-        {props.on ? <span className="text-xs font-bold text-c-accent">使っています</span> : <span className="px-3 py-1.5 rounded-md text-[13px] font-bold text-c-accent bg-c-accent-wash">使う</span>}
+        {props.on && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
       </div>
     </button>
   )
@@ -192,7 +192,7 @@ export function SkinDialog(props: Props & { onClose: () => void }) {
   return (
     <ManagerDialog title="スキン" onClose={props.onClose} wide>
       <p className="text-xs text-c-text-muted mb-2">前の方が同梱の配色、後ろが保存した・取り込んだスキン(色だけのものも、見た目まで含むものも)。押すとその場で切り替わります</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
         {schemes.map((c) => {
           const dark = isDarkScheme(c.key)
           const on = s.followOsTheme ? (dark ? s.darkScheme === c.key : s.lightScheme === c.key) : !s.lookThemeKey && s.scheme === c.key

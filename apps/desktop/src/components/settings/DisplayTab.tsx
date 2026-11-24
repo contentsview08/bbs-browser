@@ -239,9 +239,6 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           })}
         </div>
       </Section>
-      <Section advanced title="自分の配色" note="地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます(スマホのアプリと同じ JSON)">
-        <OpenRow label={parseCustom(s.customScheme) ? '自分の配色を直す' : '自分の配色を作る'} value={effectiveScheme(s) === 'custom' ? '使っています' : undefined} onOpen={onOpenCustomScheme} />
-      </Section>
       <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
         <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
         {s.fontFamily === 'custom' && (
@@ -334,7 +331,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         )}
       </Section>
       {/* スキン: 配色・レスの見た目・細かい表示・文字と余白をまとめたもの(ui/lookTheme.ts)。ふだんは上の配色・スタイルから選び、全部まとめて扱いたいときにここへ */}
-      <LookThemeSection settings={s} update={update} />
+      <LookThemeSection settings={s} update={update} onOpenCustomScheme={onOpenCustomScheme} />
     </>
   )
 }
@@ -344,7 +341,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
  * 保存したスキンをドロップダウンで選んで当てる(最初は 1 つもない)。いまの見た目に名前を付けて保存できる。
  * JSON の貼り付け・コピー・ファイルは詳細設定(貼り付けたスキンは保存されて、次からドロップダウンに出る)
  */
-function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+function LookThemeSection({ settings: s, update, onOpenCustomScheme }: Pick<SettingsProps, 'settings' | 'update'> & { onOpenCustomScheme: () => void }) {
   const [notice, setNotice] = useState<string>()
   const [saveName, setSaveName] = useState('')
   const showAdvanced = useContext(AdvancedContext)
@@ -371,8 +368,10 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
   return (
     <Section
       title="スキン"
-      note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
+      note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
     >
+      {/* 色を 1 つずつ選ぶ(6 色と細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる */}
+      <OpenRow label="色を細かく編集" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
       {/* 配色の札と同じ形で並べ、代表の色(地の上に 面・強調・未読・字)でどんな色味か分かるように */}
       {s.lookThemes.length === 0 ? (
         <p className="text-sm text-c-text-muted">スキンはまだありません。下の「いまの見た目をスキンとして保存」で作れます</p>

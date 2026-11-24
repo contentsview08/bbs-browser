@@ -91,6 +91,7 @@ import { HISTORY_SHOWN, restoreThreadRead, type DroppedThread } from '@bbs-brows
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, onOsNotifyClick, sendOsNotification } from './utils/osNotify'
 import { playNotifySound } from './host/notifySound'
+import { OPEN_SETTINGS_EVENT } from './components/StyleMenu'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl, currentBackgroundImage } from './host/backgroundImage'
@@ -2955,6 +2956,12 @@ export default function App() {
   const openNotificationLinkRef = useRef(openNotificationLink)
   openNotificationLinkRef.current = openNotificationLink
   useEffect(() => onOsNotifyClick((link) => link && openNotificationLinkRef.current(link)), [])
+  // 表示スタイルの窓の「スキンと細かい設定…」(components/StyleMenu の合図)
+  useEffect(() => {
+    const on = (e: Event) => openSettings(((e as CustomEvent<string>).detail || 'display') as Parameters<typeof openSettings>[0])
+    window.addEventListener(OPEN_SETTINGS_EVENT, on)
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, on)
+  }, [])
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {
     if (k === 'posts') return void openPostHistory()

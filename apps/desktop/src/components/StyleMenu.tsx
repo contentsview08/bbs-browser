@@ -128,6 +128,9 @@ function PostStyleChips({ settings, update }: { settings: AppSettings; update: U
 }
 
 /** 見た目の名前(スマホは括弧の中の説明を省く) */
+/** 設定を開いてほしいときの合図(detail はタブ。App が受けて開く) */
+export const OPEN_SETTINGS_EVENT = 'obb-open-settings'
+
 export function postStyleName(style: PostStyle): string {
   const name = POST_STYLES.find((p) => p.key === style)?.name ?? ''
   return isMobile ? name.replace(/[(（].*$/, '') : name
@@ -316,15 +319,33 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
     ) : (
       <PostDisplayItems settings={settings} update={update} />
     )
+  // ここは「さっと変える」場所。スキンの保存・切り替えや色の細かい編集は設定で(窓を閉じて設定の「表示」を開く)
+  const toSettings = (
+    <button
+      type="button"
+      className="mt-2 w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold text-c-accent hover:bg-c-surface2"
+      onClick={() => {
+        props.onClose()
+        window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: 'display' }))
+      }}
+    >
+      <span>スキンと細かい設定…</span>
+      <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>
+    </button>
+  )
   return createPortal(
     <SliderDragScope scope={scope}>
       {isMobile ? (
         <MobileSheet boxRef={boxRef} hidden={active} tabs={tabBar} onClose={props.onClose}>
           {body}
+          {toSettings}
         </MobileSheet>
       ) : (
         <DesktopWindow boxRef={boxRef} hidden={active} from={props.from} tabs={tabBar} onClose={props.onClose}>
-          <div className="pb-3">{body}</div>
+          <div className="pb-3">
+            {body}
+            {toSettings}
+          </div>
         </DesktopWindow>
       )}
     </SliderDragScope>,

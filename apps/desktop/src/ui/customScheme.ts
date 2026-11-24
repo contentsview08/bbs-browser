@@ -183,7 +183,7 @@ export const isCustomDark = (d: CustomDef) => luminance(d.base) < 0.4
 /**
  * 配色の CSS 変数を、その配色の印を付けた見えない要素で読む(テーマの CSS は [data-scheme] の付いた要素ならどこにでも効く)
  */
-function readSchemeVars(key: string, names: string[]): Record<string, string> {
+export function readSchemeVars(key: string, names: string[]): Record<string, string> {
   const el = document.createElement('div')
   el.setAttribute('data-scheme', key)
   el.style.display = 'none'

@@ -1,5 +1,5 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
-import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
+import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, lookThemeSwatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
 import { openJson, saveJson } from '../../host/backup'
 import { useContext, useEffect, useState } from 'react'
 import {
@@ -368,26 +368,42 @@ function LookThemeSection({ settings: s, update }: Pick<SettingsProps, 'settings
     setSaveName('')
     setNotice(`スキン「${name}」を保存しました`)
   }
-  const options = [
-    { key: '', name: s.lookThemes.length ? '(選んでいません)' : '(スキンがありません)' },
-    ...s.lookThemes.map((t) => ({ key: `saved:${lookThemeName(t)}`, name: lookThemeName(t) })),
-  ]
   return (
     <Section
       title="スキン"
       note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
     >
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-c-text-body">スキン</span>
-        <Choice
-          value={options.some((o) => o.key === s.lookThemeKey) ? s.lookThemeKey : ''}
-          options={options}
-          onChange={(k) => {
-            const text = lookThemeByKey(s, k)
-            if (text) applyText(text, k)
-          }}
-        />
-      </div>
+      {/* 配色の札と同じ形で並べ、代表の色(地の上に 面・強調・未読・字)でどんな色味か分かるように */}
+      {s.lookThemes.length === 0 ? (
+        <p className="text-sm text-c-text-muted">スキンはまだありません。下の「いまの見た目をスキンとして保存」で作れます</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {s.lookThemes.map((t) => {
+            const key = `saved:${lookThemeName(t)}`
+            const on = s.lookThemeKey === key
+            const sw = lookThemeSwatch(t) ?? ['var(--c-base)', 'var(--c-surface)', 'var(--c-accent)', 'var(--c-accent-self)', 'var(--c-text-strong)']
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  const text = lookThemeByKey(s, key)
+                  if (text) applyText(text, key)
+                }}
+                className={`flex items-center gap-2.5 px-3 py-2 text-sm border rounded-[var(--card-radius)] transition-colors ${on ? 'border-c-accent text-c-text-strong' : 'border-c-border text-c-text-body hover:border-c-border-strong'}`}
+              >
+                <span className="flex items-center gap-1 px-1.5 py-1 rounded flex-shrink-0" style={{ background: sw[0], boxShadow: 'inset 0 0 0 1px var(--c-border)' }}>
+                  {sw.slice(1).map((c, i) => (
+                    <span key={i} className="w-3 h-3 rounded-[3px]" style={{ background: c, boxShadow: 'inset 0 0 0 1px rgba(128,128,128,0.4)' }} />
+                  ))}
+                </span>
+                <span className="flex-1 text-left truncate">{lookThemeName(t)}</span>
+                {on && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 pt-2">
         <input
           type="text"

@@ -6,7 +6,7 @@
 // スマホのアプリの data/LookTheme.kt と同じ決まり
 
 import { importableSettings, type SettingsFile } from '../utils/backup'
-import { customToJson, parseCustom } from './customScheme'
+import { customToJson, customVars, parseCustom, readSchemeVars } from './customScheme'
 import { accentKeyOf, type AppSettings } from './settings'
 
 export const LOOK_THEME_FORMAT = 'obb-theme'
@@ -99,6 +99,24 @@ export function lookThemePatch(text: string, defaults: AppSettings): { patch: Pa
   if (typeof o.accent === 'string') patch.accent = accentKeyOf(o.accent)
   const theme = o as LookTheme
   return { patch, name: lookThemeName(theme), theme }
+}
+
+/**
+ * スキンの代表の色(地・面・強調・未読・字)。設定の一覧の札に出す。
+ * 自分の配色が入っていればそれから、なければ settings の配色のキーの CSS から。どちらもなければ undefined(今の配色で描く)
+ */
+export function lookThemeSwatch(t: LookTheme): string[] | undefined {
+  if (t.scheme && typeof t.scheme === 'object') {
+    const d = parseCustom(JSON.stringify(t.scheme))
+    if (d) {
+      const v = customVars(d)
+      return [d.base, d.surface, d.accent, d.unread, v['--c-text-strong']]
+    }
+  }
+  const key = t.settings?.scheme
+  if (typeof key !== 'string' || !key || key === 'custom') return undefined
+  const v = readSchemeVars(key, ['--c-base', '--c-surface', '--c-accent', '--c-accent-self', '--c-text-strong'])
+  return [v['--c-base'], v['--c-surface'], v['--c-accent'], v['--c-accent-self'], v['--c-text-strong']]
 }
 
 // ── 保存したスキン(設定 lookThemes。名前で見分ける) ──

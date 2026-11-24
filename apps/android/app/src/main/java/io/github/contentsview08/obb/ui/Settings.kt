@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -363,21 +364,21 @@ fun SkinPanel(vm: AppViewModel) {
                 HeaderBar("スキン", onNav = { vm.closeSkins() }, navIsBack = true, actions = { BarIcon(Icons.Filled.Close, "閉じる") { vm.closeSkins() } })
                 HorizontalDivider(color = Palette.border)
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    Group { SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it } }
+                    // OS のダーク・ライトに合わせる切り替えは設定のページに(ここは選ぶだけ)。合わせているときはダーク・ライトを分けて並べる
                     if (!p.followOsTheme) {
                         Group("配色", note = "同梱の配色です。押すとその場で切り替わります") {
-                            for (sc in SCHEMES) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, if (sc.dark) "暗い配色" else "明るい配色", on = p.lookThemeKey.isEmpty() && p.scheme == sc.key) { p.scheme = sc.key; p.lookThemeKey = "" }
+                            SkinCards(SCHEMES.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, if (sc.dark) "暗い配色" else "明るい配色", on = p.lookThemeKey.isEmpty() && p.scheme == sc.key) { p.scheme = sc.key; p.lookThemeKey = "" } })
                         }
                     } else {
-                        Group("ダークのとき") { for (sc in SCHEMES.filter { it.dark }) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, "暗い配色", on = p.darkScheme == sc.key) { p.darkScheme = sc.key } }
-                        Group("ライトのとき") { for (sc in SCHEMES.filter { !it.dark }) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, "明るい配色", on = p.lightScheme == sc.key) { p.lightScheme = sc.key } }
+                        Group("ダークのとき") { SkinCards(SCHEMES.filter { it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "暗い配色", on = p.darkScheme == sc.key) { p.darkScheme = sc.key } }) }
+                        Group("ライトのとき") { SkinCards(SCHEMES.filter { !it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "明るい配色", on = p.lightScheme == sc.key) { p.lightScheme = sc.key } }) }
                     }
                     Group("スキン", note = if (savedThemes.isEmpty()) "保存した・取り込んだスキンがここに並びます。配色・レスの見た目・細かい表示・文字と余白をまとめたもので、色だけのスキンも作れます" else "保存した・取り込んだスキン。押すとその場で切り替わります(入っている項目だけを上書きします)") {
-                        for (t in savedThemes) {
+                        SkinCards(savedThemes.map { t ->
                             val key = "saved:${lt.nameOf(t)}"
                             val sc = lt.schemeOf(t) ?: Palette.scheme
-                            SkinCard(sc, lt.ownOf(t, sc), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key) { vm.pickLookTheme(key) }
-                        }
+                            SkinEntry(sc, lt.ownOf(t, sc), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key) { vm.pickLookTheme(key) }
+                        })
                     }
                     // 色の編集は設定のページ(スキンを閉じて設定を開く。設定を閉じれば元の画面)
                     LookThemeGroup(vm) { vm.openSettings(it) }
@@ -388,23 +389,81 @@ fun SkinPanel(vm: AppViewModel) {
     }
 }
 
-/** スキン(配色)1 つの札: 大きな見本(上の帯・スレ一覧の行・レス・書き込み欄)と、名前・一言。押すと当てる */
+/** スキン(配色)の札 1 枚分の中身 */
+private class SkinEntry(val scheme: Scheme, val own: Color, val name: String, val caption: String, val on: Boolean, val onPick: () -> Unit)
+
+/** スキンの札を、横に 2 枚(広い画面では 3 枚)ずつ詰めて並べる */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SkinCard(s: Scheme, own: Color, name: String, caption: String, on: Boolean, onPick: () -> Unit) {
+private fun SkinCards(entries: List<SkinEntry>) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        val gap = 8.dp
+        val cols = maxOf(2, (maxWidth / 200.dp).toInt())
+        val w = (maxWidth - gap * (cols - 1)) / cols
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+            for (e in entries) Box(Modifier.width(w)) { SkinCard(e) }
+        }
+    }
+}
+
+/** スキン(配色)1 つの札: 小さな見本(上の帯・スレ一覧の行・レス・書き込み欄)と、名前・一言。押すと当てる */
+@Composable
+private fun SkinCard(e: SkinEntry) {
     Column(
-        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(10.dp))
-            .background(Palette.surface).clickable(onClick = onPick),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .border(if (e.on) 2.dp else 1.dp, if (e.on) Palette.accent else Palette.border, RoundedCornerShape(8.dp))
+            .background(Palette.surface).clickable(onClick = e.onPick),
     ) {
-        // 見本は押せないただの絵(中の文字の色などはその配色のもの)。外側の余白は札の中で調整する
-        Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) { SchemePreview(s, own) }
-        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 10.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        SkinMiniPreview(e.scheme, e.own)
+        Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(name, color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (caption.isNotEmpty()) Text(caption, color = Palette.textMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                Text(e.name, color = Palette.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (e.caption.isNotEmpty()) Text(e.caption, color = Palette.textMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (on) Text("使っています", color = Palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            else Text("使う", Modifier.clip(RoundedCornerShape(6.dp)).background(Palette.accentWash).padding(horizontal = 12.dp, vertical = 6.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            if (e.on) Icon(Icons.Filled.Check, "使っています", tint = Palette.accent, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** 札の中の小さな見本(SchemePreview を半分ほどの大きさに詰めたもの。文字は 1 行ずつ) */
+@Composable
+private fun SkinMiniPreview(s: Scheme, own: Color) {
+    val base = s.base
+    Column(Modifier.fillMaxWidth().background(base)) {
+        Row(Modifier.fillMaxWidth().background(s.bar).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("ニュー速", color = s.textStrong, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1)
+            Text("︙", color = s.textMuted, fontSize = 10.sp)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(s.border))
+        Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            Box(Modifier.width(2.dp).fillMaxHeight().background(s.unread))
+            Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 5.dp)) {
+                Text("読んだスレ", color = s.threadReadTitle, fontSize = 9.sp, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("3 時間前", color = s.textMuted, fontSize = 7.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text("+12", color = s.unreadText, fontSize = 7.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(s.unread, RoundedCornerShape(50)).padding(horizontal = 4.dp, vertical = 1.dp))
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(s.border))
+        Text("まだ開いていないスレ", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = s.textStrong, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(s.border))
+        Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).background(s.surface)) {
+            Box(Modifier.width(2.dp).fillMaxHeight().background(own))
+            Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("12 ", color = s.textMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text("名無し", color = s.posterName, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text(" 12:34 ID:AbCd", color = s.textMuted, fontSize = 7.sp, maxLines = 1)
+                }
+                Text(">>10", color = s.link, fontSize = 9.sp)
+                Text("本文はこの字の色", color = s.textBody, fontSize = 9.sp, maxLines = 1)
+            }
+        }
+        Row(Modifier.fillMaxWidth().background(s.bar).padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("書き込む", Modifier.weight(1f).background(s.surface, RoundedCornerShape(6.dp)).border(1.dp, s.border, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 4.dp), color = s.textMuted, fontSize = 8.sp, maxLines = 1)
+            Spacer(Modifier.width(5.dp))
+            Box(Modifier.size(20.dp).background(s.accent, CircleShape), contentAlignment = Alignment.Center) { Text("➤", color = s.accentText, fontSize = 8.sp) }
         }
     }
 }

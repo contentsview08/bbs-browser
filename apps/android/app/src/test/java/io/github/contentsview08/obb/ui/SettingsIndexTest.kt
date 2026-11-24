@@ -26,8 +26,9 @@ class SettingsIndexTest {
         assertTrue(has("history", "タブの置き場"))
     }
 
-    @Test fun テーマと色のページも索引に入る() {
-        assertTrue(has("theme", "配色"))
+    @Test fun スキンと配色のページも索引に入る() {
+        assertTrue(has("theme", "スキン"))
+        assertTrue(has("theme", "差し色"))
     }
 
     @Test fun 見た目ごとの設定も索引に入る() {

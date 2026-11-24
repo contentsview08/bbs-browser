@@ -289,6 +289,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun closeUnread() {
         unreadOpen = false
     }
+
+    /** スキンを選ぶパネル(同梱の配色と保存したスキン、スキンの管理)。設定・未読と同じく上に重ねる */
+    var skinOpen by mutableStateOf(false)
+        private set
+
+    fun openSkins() {
+        drawerOpen = false
+        skinOpen = true
+    }
+
+    fun closeSkins() {
+        skinOpen = false
+    }
     /** 画面の下に一瞬出す知らせ */
     var toast by mutableStateOf<String?>(null)
 
@@ -838,6 +851,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         forwardPage = null
         settingsOpen = false
         unreadOpen = false
+        skinOpen = false
         navDir = 1
         stack.add(p)
     }
@@ -847,6 +861,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         drawerOpen = false
         settingsOpen = false
         unreadOpen = false
+        skinOpen = false
         for (p in stack) flushRead(p)
         navDir = 0
         stack.clear()
@@ -1331,6 +1346,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         drawerOpen = false
         settingsOpen = false
         unreadOpen = false
+        skinOpen = false
         syncScheduler.activity()
         val page = Page.Threads(board)
         navDir = if (root) 0 else 1
@@ -1380,6 +1396,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settingsOpen = false
         val fromPanel = unreadOpen
         unreadOpen = false
+        skinOpen = false
         syncScheduler.activity()
         // このスレの知らせ(新着・あなた宛てのレス)は、開いたら用済みなので通知の欄から消す
         runCatching { io.github.contentsview08.obb.data.Notifier.cancelFor(getApplication(), TwoCh.webUrl(t)) }

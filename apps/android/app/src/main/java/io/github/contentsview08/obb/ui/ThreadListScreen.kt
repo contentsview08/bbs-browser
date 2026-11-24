@@ -554,7 +554,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             header = { MenuInfo(page.board.name, "${page.threads.size}スレ") },
         ) { menu = false }
     }
-    if (styleSheet) StyleSheet(vm.prefs, thread = false, onOpenSettings = { vm.openSettings("theme") }) { styleSheet = false }
+    if (styleSheet) StyleSheet(vm.prefs, thread = false, onOpenSettings = { vm.openSettings("theme") }, onOpenSkins = { vm.openSkins() }) { styleSheet = false }
     NewThreadSheet(vm, page)
 }
 

@@ -326,12 +326,9 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it }
         if (LocalAdvanced.current) SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
     }
-    // 表示スタイルのシートと同じ並び: 配色(カラーテーマ・差し色)→ スタイル(レスの見た目と、その見た目だけの設定)
-    if (!p.followOsTheme) {
-        Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }
-    } else {
-        Group("ダークのとき") { SchemeGrid(p.darkScheme, dark = true) { p.darkScheme = it } }
-        Group("ライトのとき") { SchemeGrid(p.lightScheme, dark = false) { p.lightScheme = it } }
+    // 配色とスキンは同じ族(スキン = 色だけ、または見た目まで含めたまとまり)。選ぶのは上に重ねるパネル(SkinPanel)で
+    Group("スキン", note = "同梱の配色と、保存した・取り込んだスキンから選びます。スキンの保存・色の編集もそこで") {
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "スキンを選ぶ…", value = currentSkinName(p)) { vm.openSkins() }
     }
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
@@ -340,9 +337,51 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
-    Group("見本") { SamplePosts(vm) }
-    // ふだんは配色・スタイルから選ぶ。もっと細かく(色の編集・全部まとめて)扱いたいときに、下まで来るとスキンがある
-    LookThemeGroup(vm, open)
+}
+
+/** いま使っているスキン(か配色)の名前。設定の「スキンを選ぶ…」の右に出す */
+private fun currentSkinName(p: io.github.contentsview08.obb.data.Prefs): String {
+    val key = p.lookThemeKey
+    if (key.startsWith("saved:")) return key.removePrefix("saved:")
+    if (p.followOsTheme) return "OS に合わせる"
+    return schemeOf(p.scheme).name
+}
+
+/**
+ * スキンを選ぶパネル: 設定・未読と同じく上に重ねる(閉じると元の画面にそのまま戻る)。
+ * 同梱の配色と保存したスキンを 1 つの並びで(OS に合わせているときはダーク・ライトの配色とスキン)、下にスキンの管理
+ */
+@Composable
+fun SkinPanel(vm: AppViewModel) {
+    OverlayPanel(visible = vm.skinOpen, onClose = { vm.closeSkins() }) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null, LocalAdvanced provides vm.prefs.showAdvanced) {
+            val p = vm.prefs
+            val lt = io.github.contentsview08.obb.data.LookTheme
+            val savedThemes = remember(p.lookThemes) { lt.saved(p) }
+            Column(Modifier.fillMaxSize().background(Palette.base)) {
+                HeaderBar("スキン", onNav = { vm.closeSkins() }, navIsBack = true, actions = { BarIcon(Icons.Filled.Close, "閉じる") { vm.closeSkins() } })
+                HorizontalDivider(color = Palette.border)
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
+                    Group { SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it } }
+                    if (!p.followOsTheme) {
+                        Group("配色とスキン", note = if (savedThemes.isEmpty()) "同梱の配色です。保存した・取り込んだスキンもここに並びます" else "前の方が同梱の配色、後ろが保存したスキン(色だけのものも、見た目まで含むものも)。押すとその場で切り替わります") {
+                            SchemeGrid(if (p.lookThemeKey.isEmpty()) p.scheme else "", skins = savedThemes, skinKey = p.lookThemeKey, onPickSkin = { vm.pickLookTheme(it) }) { p.scheme = it; p.lookThemeKey = "" }
+                        }
+                    } else {
+                        Group("ダークのとき") { SchemeGrid(p.darkScheme, dark = true) { p.darkScheme = it } }
+                        Group("ライトのとき") { SchemeGrid(p.lightScheme, dark = false) { p.lightScheme = it } }
+                        if (savedThemes.isNotEmpty()) Group("スキン", note = "押すとその場で切り替わります(スキンの配色になり、OS に合わせる設定は外れます)") {
+                            SchemeGrid("", skins = savedThemes, skinKey = p.lookThemeKey, showSchemes = false, onPickSkin = { vm.pickLookTheme(it) }) {}
+                        }
+                    }
+                    // 色の編集は設定のページ(設定は上に重なるので、閉じればここに戻る)
+                    LookThemeGroup(vm) { vm.openSettings(it) }
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -359,10 +398,7 @@ private fun LookThemeGroup(vm: AppViewModel, open: (String) -> Unit) {
     val saved = remember(savedThemes) { savedThemes.map { lt.nameOf(it) } }
     var saveDialog by remember { mutableStateOf(false) }
     var removeDialog by remember { mutableStateOf(false) }
-    Group("スキン", note = "配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存しておくと、ここで切り替えられます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
-        // 配色の札と同じ形で並べ、代表の色(地・面・強調・未読・字)でどんな色味か分かるように
-        if (savedThemes.isEmpty()) Text("スキンはまだありません。下の「いまの見た目をスキンとして保存…」で作れます", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Palette.textMuted, fontSize = 13.sp)
-        else SkinGrid(savedThemes, p.lookThemeKey) { vm.pickLookTheme(it) }
+    Group("スキンの管理", note = "スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
         // 色を 1 つずつ選ぶ(地・面・字・強調・未読・自分の 6 色と、細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "色を細かく編集", value = if (p.customScheme.isEmpty()) null else "自分の配色") { open("custom") }
         ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
@@ -430,41 +466,19 @@ private fun StyleOptionsGroup(p: io.github.contentsview08.obb.data.Prefs) {
     }
 }
 
-/** 保存したスキンの札(配色の札と同じ形)。上に代表の色(地の上に 面・強調・未読・字)、下に名前。押すと当てる */
+/**
+ * 配色の見本を並べて選ぶ。dark を渡すと、その明るさの配色だけ。
+ * skins を渡すと、同じ並びの後ろに保存したスキンの札(地の上に 面・強調・未読・字の代表の色。LookTheme.swatch)を足す。押すと当てる
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SkinGrid(themes: List<org.json.JSONObject>, selectedKey: String, onPick: (String) -> Unit) {
-    val lt = io.github.contentsview08.obb.data.LookTheme
+private fun SchemeGrid(
+    selected: String, dark: Boolean? = null,
+    skins: List<org.json.JSONObject> = emptyList(), skinKey: String = "", showSchemes: Boolean = true, onPickSkin: (String) -> Unit = {},
+    onPick: (String) -> Unit,
+) {
     FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (t in themes) {
-            val name = lt.nameOf(t)
-            val key = "saved:$name"
-            val on = key == selectedKey
-            val sw = lt.swatch(t) ?: listOf(Palette.base, Palette.surface, Palette.accent, Palette.unread, Palette.textStrong)
-            Column(
-                Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
-                    .clickable { onPick(key) },
-            ) {
-                Box(Modifier.fillMaxWidth().height(56.dp).background(sw[0]).padding(10.dp), contentAlignment = Alignment.Center) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (c in sw.drop(1)) Box(Modifier.size(16.dp).background(c, RoundedCornerShape(4.dp)).border(1.dp, Palette.border.copy(alpha = 0.6f), RoundedCornerShape(4.dp)))
-                    }
-                }
-                Row(Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, Modifier.weight(1f), color = Palette.textStrong, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-    }
-}
-
-/** 配色の見本を並べて選ぶ。dark を渡すと、その明るさの配色だけ */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String) -> Unit) {
-    FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (s in allSchemes().filter { dark == null || it.dark == dark }) {
+        for (s in if (showSchemes) allSchemes().filter { dark == null || it.dark == dark } else emptyList()) {
             val on = s.key == selected
             Column(
                 Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
@@ -483,6 +497,27 @@ private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String)
                 }
                 Row(Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(s.name, Modifier.weight(1f), color = Palette.textStrong, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        for (t in skins) {
+            val name = lt.nameOf(t)
+            val key = "saved:$name"
+            val on = key == skinKey
+            val sw = lt.swatch(t) ?: listOf(Palette.base, Palette.surface, Palette.accent, Palette.unread, Palette.textStrong)
+            Column(
+                Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
+                    .clickable { onPickSkin(key) },
+            ) {
+                Box(Modifier.fillMaxWidth().height(56.dp).background(sw[0]).padding(10.dp), contentAlignment = Alignment.Center) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (c in sw.drop(1)) Box(Modifier.size(16.dp).background(c, RoundedCornerShape(4.dp)).border(1.dp, Palette.border.copy(alpha = 0.6f), RoundedCornerShape(4.dp)))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), color = Palette.textStrong, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(16.dp))
                 }
             }

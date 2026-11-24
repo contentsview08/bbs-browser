@@ -75,7 +75,7 @@ import kotlin.math.roundToInt
  * thread: スレ表示から開いたか(スレ一覧はレスの細かい表示に関係しないので、「細かい表示」のタブを出さない)
  */
 @Composable
-fun StyleSheet(p: Prefs, thread: Boolean, onOpenSettings: (() -> Unit)? = null, onDismiss: () -> Unit) {
+fun StyleSheet(p: Prefs, thread: Boolean, onOpenSettings: (() -> Unit)? = null, onOpenSkins: (() -> Unit)? = null, onDismiss: () -> Unit) {
     // 出入りの動き(0 = 隠れている、1 = 出ている)と、指で下へずらした量(px)
     val show = remember { androidx.compose.animation.core.Animatable(0f) }
     var drag by remember { mutableFloatStateOf(0f) }
@@ -181,6 +181,14 @@ fun StyleSheet(p: Prefs, thread: Boolean, onOpenSettings: (() -> Unit)? = null, 
                             else -> {
                                 SheetLabel("配色")
                                 SchemeRow(p)
+                                // ここには同梱の配色だけ。保存した・取り込んだスキン(見た目まで含むもの)はパネルで
+                                if (onOpenSkins != null) Row(
+                                    Modifier.fillMaxWidth().clickable { close(); onOpenSkins() }.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("ほかのスキンも見る…", Modifier.weight(1f), color = Palette.accent, fontSize = 14.sp)
+                                    Text("›", color = Palette.textMuted, fontSize = 18.sp)
+                                }
                                 SheetLabel("差し色")
                                 AccentRow(p)
                             }

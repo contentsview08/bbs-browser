@@ -75,7 +75,7 @@ import kotlin.math.roundToInt
  * thread: スレ表示から開いたか(スレ一覧はレスの細かい表示に関係しないので、「細かい表示」のタブを出さない)
  */
 @Composable
-fun StyleSheet(p: Prefs, thread: Boolean, onOpenSettings: (() -> Unit)? = null, onOpenSkins: (() -> Unit)? = null, onDismiss: () -> Unit) {
+fun StyleSheet(p: Prefs, thread: Boolean, onOpenSkins: (() -> Unit)? = null, onDismiss: () -> Unit) {
     // 出入りの動き(0 = 隠れている、1 = 出ている)と、指で下へずらした量(px)
     val show = remember { androidx.compose.animation.core.Animatable(0f) }
     var drag by remember { mutableFloatStateOf(0f) }
@@ -192,14 +192,6 @@ fun StyleSheet(p: Prefs, thread: Boolean, onOpenSettings: (() -> Unit)? = null, 
                                 SheetLabel("差し色")
                                 AccentRow(p)
                             }
-                        }
-                        // ここは「さっと変える」場所。スキンの保存・切り替えや色の細かい編集は設定で(シートを閉じて開く。設定は上に重なるので、閉じれば読んでいた所に戻る)
-                        if (onOpenSettings != null) Row(
-                            Modifier.fillMaxWidth().padding(top = 8.dp).clickable { close(); onOpenSettings() }.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("スキンと細かい設定…", Modifier.weight(1f), color = Palette.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("›", color = Palette.textMuted, fontSize = 18.sp)
                         }
                     }
                 }

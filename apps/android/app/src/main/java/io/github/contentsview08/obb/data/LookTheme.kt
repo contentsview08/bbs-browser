@@ -61,6 +61,29 @@ object LookTheme {
         return merged.length()
     }
 
+    /** スキンの配色(見本を描くため)。自分の配色が入っていればそれ、なければ settings の配色のキーから。どちらもなければ null */
+    fun schemeOf(o: JSONObject): io.github.contentsview08.obb.ui.Scheme? {
+        o.optJSONObject("scheme")?.let { sc -> CustomDef.parse(sc.toString()) }?.let { return io.github.contentsview08.obb.ui.buildScheme(it) }
+        val key = o.optJSONObject("settings")?.optString("scheme").orEmpty()
+        return io.github.contentsview08.obb.ui.SCHEMES.firstOrNull { it.key == key }
+    }
+
+    /** スキンの「自分の書き込み」の色(見本の帯) */
+    fun ownOf(o: JSONObject, s: io.github.contentsview08.obb.ui.Scheme): androidx.compose.ui.graphics.Color =
+        o.optJSONObject("scheme")?.let { sc -> CustomDef.parse(sc.toString()) }?.own ?: io.github.contentsview08.obb.ui.Palette.extraOf(s, "own")
+
+    /** スキンの一言(JSON の note)。なければ、レスの見た目などから作る */
+    fun captionOf(o: JSONObject): String {
+        o.optString("note").takeIf { it.isNotEmpty() }?.let { return it }
+        val st = o.optJSONObject("settings")
+        val parts = ArrayList<String>()
+        st?.optString("postStyle")?.takeIf { it.isNotEmpty() }?.let { parts += "レスの見た目: " + io.github.contentsview08.obb.ui.postStyleName(it) }
+        val n = (st?.length() ?: 0) + (o.optJSONObject("android")?.length() ?: 0)
+        if (o.has("scheme")) parts += if (n == 0) "色だけのスキン" else "色と見た目($n 項目)"
+        else if (n > 0) parts += "見た目($n 項目)"
+        return parts.joinToString("・")
+    }
+
     /**
      * スキンの代表の色(地・面・強調・未読・字)。設定の一覧の札に出す。
      * 自分の配色が入っていればそれから、なければ settings の配色のキーから。どちらもなければ null(今の配色で描く)

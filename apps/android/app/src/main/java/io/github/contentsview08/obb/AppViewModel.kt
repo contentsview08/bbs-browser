@@ -258,6 +258,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openSettings(start: String? = null) {
         drawerOpen = false
+        // スキンのパネルは設定より上に重なるので、設定を開くときは閉じる(開いたままだと設定が見えない)
+        skinOpen = false
         settingsStart = start
         settingsKey++
         settingsOpen = true

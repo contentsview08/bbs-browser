@@ -255,8 +255,9 @@ class MainActivity : ComponentActivity() {
                             ) { page -> pageContent(page) }
                             // 未読・設定は今の画面の上に重ねる(閉じると元の画面にそのまま戻る)。設定の方が上
                             io.github.contentsview08.obb.ui.UnreadPanel(vm)
-                            io.github.contentsview08.obb.ui.SkinPanel(vm)
                             SettingsPanel(vm)
+                            // スキンは設定からも開くので、設定より上に重ねる(スキンから設定を開くときはスキンを閉じる)
+                            io.github.contentsview08.obb.ui.SkinPanel(vm)
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->

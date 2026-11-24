@@ -934,7 +934,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { menu = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
-    if (styleSheet) StyleSheet(vm.prefs, thread = true, onOpenSettings = { vm.openSettings("theme") }, onOpenSkins = { vm.openSkins() }) { styleSheet = false }
+    if (styleSheet) StyleSheet(vm.prefs, thread = true, onOpenSkins = { vm.openSkins() }) { styleSheet = false }
 
     if (ngEditing != null) {
         val r = ngEditing!!

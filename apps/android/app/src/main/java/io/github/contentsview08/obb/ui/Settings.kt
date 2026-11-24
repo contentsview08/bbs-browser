@@ -349,7 +349,8 @@ private fun currentSkinName(p: io.github.contentsview08.obb.data.Prefs): String 
 
 /**
  * スキンを選ぶパネル: 設定・未読と同じく上に重ねる(閉じると元の画面にそのまま戻る)。
- * 同梱の配色と保存したスキンを 1 つの並びで(OS に合わせているときはダーク・ライトの配色とスキン)、下にスキンの管理
+ * 配色もスキンも同じ族として、大きな見本の札を縦に並べて眺めて選ぶ(拡張機能の一覧のように)。
+ * 前の方が同梱の配色、後ろが保存した・取り込んだスキン。OS に合わせているときはダーク・ライトの配色を分けて並べる。下にスキンの管理
  */
 @Composable
 fun SkinPanel(vm: AppViewModel) {
@@ -362,24 +363,48 @@ fun SkinPanel(vm: AppViewModel) {
                 HeaderBar("スキン", onNav = { vm.closeSkins() }, navIsBack = true, actions = { BarIcon(Icons.Filled.Close, "閉じる") { vm.closeSkins() } })
                 HorizontalDivider(color = Palette.border)
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
                     Group { SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it } }
                     if (!p.followOsTheme) {
-                        Group("配色とスキン", note = if (savedThemes.isEmpty()) "同梱の配色です。保存した・取り込んだスキンもここに並びます" else "前の方が同梱の配色、後ろが保存したスキン(色だけのものも、見た目まで含むものも)。押すとその場で切り替わります") {
-                            SchemeGrid(if (p.lookThemeKey.isEmpty()) p.scheme else "", skins = savedThemes, skinKey = p.lookThemeKey, onPickSkin = { vm.pickLookTheme(it) }) { p.scheme = it; p.lookThemeKey = "" }
+                        Group("配色", note = "同梱の配色です。押すとその場で切り替わります") {
+                            for (sc in SCHEMES) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, if (sc.dark) "暗い配色" else "明るい配色", on = p.lookThemeKey.isEmpty() && p.scheme == sc.key) { p.scheme = sc.key; p.lookThemeKey = "" }
                         }
                     } else {
-                        Group("ダークのとき") { SchemeGrid(p.darkScheme, dark = true) { p.darkScheme = it } }
-                        Group("ライトのとき") { SchemeGrid(p.lightScheme, dark = false) { p.lightScheme = it } }
-                        if (savedThemes.isNotEmpty()) Group("スキン", note = "押すとその場で切り替わります(スキンの配色になり、OS に合わせる設定は外れます)") {
-                            SchemeGrid("", skins = savedThemes, skinKey = p.lookThemeKey, showSchemes = false, onPickSkin = { vm.pickLookTheme(it) }) {}
+                        Group("ダークのとき") { for (sc in SCHEMES.filter { it.dark }) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, "暗い配色", on = p.darkScheme == sc.key) { p.darkScheme = sc.key } }
+                        Group("ライトのとき") { for (sc in SCHEMES.filter { !it.dark }) SkinCard(sc, Palette.extraOf(sc, "own"), sc.name, "明るい配色", on = p.lightScheme == sc.key) { p.lightScheme = sc.key } }
+                    }
+                    Group("スキン", note = if (savedThemes.isEmpty()) "保存した・取り込んだスキンがここに並びます。配色・レスの見た目・細かい表示・文字と余白をまとめたもので、色だけのスキンも作れます" else "保存した・取り込んだスキン。押すとその場で切り替わります(入っている項目だけを上書きします)") {
+                        for (t in savedThemes) {
+                            val key = "saved:${lt.nameOf(t)}"
+                            val sc = lt.schemeOf(t) ?: Palette.scheme
+                            SkinCard(sc, lt.ownOf(t, sc), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key) { vm.pickLookTheme(key) }
                         }
                     }
-                    // 色の編集は設定のページ(設定は上に重なるので、閉じればここに戻る)
+                    // 色の編集は設定のページ(スキンを閉じて設定を開く。設定を閉じれば元の画面)
                     LookThemeGroup(vm) { vm.openSettings(it) }
                     Spacer(Modifier.height(24.dp))
                 }
             }
+        }
+    }
+}
+
+/** スキン(配色)1 つの札: 大きな見本(上の帯・スレ一覧の行・レス・書き込み欄)と、名前・一言。押すと当てる */
+@Composable
+private fun SkinCard(s: Scheme, own: Color, name: String, caption: String, on: Boolean, onPick: () -> Unit) {
+    Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(10.dp))
+            .background(Palette.surface).clickable(onClick = onPick),
+    ) {
+        // 見本は押せないただの絵(中の文字の色などはその配色のもの)。外側の余白は札の中で調整する
+        Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) { SchemePreview(s, own) }
+        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 10.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(name, color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (caption.isNotEmpty()) Text(caption, color = Palette.textMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            }
+            if (on) Text("使っています", color = Palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            else Text("使う", Modifier.clip(RoundedCornerShape(6.dp)).background(Palette.accentWash).padding(horizontal = 12.dp, vertical = 6.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

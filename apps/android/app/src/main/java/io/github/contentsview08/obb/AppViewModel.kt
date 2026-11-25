@@ -299,10 +299,77 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openSkins() {
         drawerOpen = false
         skinOpen = true
+        loadSkinCatalog()
     }
 
     fun closeSkins() {
         skinOpen = false
+    }
+
+    // ── スキンの一覧(カタログ。data/SkinCatalog.kt)。スキンのパネルの「もっと探す」 ──
+    var skinCatalog by mutableStateOf<List<io.github.contentsview08.obb.data.SkinCatalog.Entry>?>(null)
+        private set
+    var skinCatalogError by mutableStateOf<String?>(null)
+        private set
+    var skinCatalogLoading by mutableStateOf(false)
+        private set
+    /** いま入れている途中のスキンの id(札のボタンを「…」に) */
+    var skinBusy by mutableStateOf<String?>(null)
+        private set
+
+    /** 一覧を取り直す。取れたら、入れたスキンで新しくなったものを入れ替える */
+    fun loadSkinCatalog() {
+        if (skinCatalogLoading) return
+        skinCatalogLoading = true
+        skinCatalogError = null
+        viewModelScope.launch {
+            try {
+                val list = io.github.contentsview08.obb.data.SkinCatalog.fetch()
+                skinCatalog = list
+                updateInstalledSkins(list)
+            } catch (e: Exception) {
+                skinCatalogError = e.message ?: "スキンの一覧を取れませんでした"
+            } finally {
+                skinCatalogLoading = false
+            }
+        }
+    }
+
+    /** 一覧のスキンを取って保存し、当てる */
+    fun installCatalogSkin(e: io.github.contentsview08.obb.data.SkinCatalog.Entry) {
+        if (skinBusy != null) return
+        skinBusy = e.id
+        viewModelScope.launch {
+            try {
+                val sc = io.github.contentsview08.obb.data.SkinCatalog
+                val o = sc.fetchSkin(e)
+                sc.save(prefs, o)
+                toast = applyLookJson(o.toString(), "saved:${io.github.contentsview08.obb.data.LookTheme.nameOf(o)}")
+            } catch (ex: Exception) {
+                toast = ex.message ?: "入れられませんでした"
+            } finally {
+                skinBusy = null
+            }
+        }
+    }
+
+    /** 入れたスキンのうち一覧の方が新しいものを取り直して入れ替える(使っていれば当て直す) */
+    private suspend fun updateInstalledSkins(catalog: List<io.github.contentsview08.obb.data.SkinCatalog.Entry>) {
+        val sc = io.github.contentsview08.obb.data.SkinCatalog
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        val done = ArrayList<String>()
+        for ((old, e) in sc.updates(lt.saved(prefs), catalog)) {
+            try {
+                val fresh = sc.fetchSkin(e)
+                val wasOn = prefs.lookThemeKey == "saved:${lt.nameOf(old)}"
+                sc.save(prefs, fresh)
+                if (wasOn) applyLookJson(fresh.toString(), "saved:${lt.nameOf(fresh)}")
+                done += lt.nameOf(fresh)
+            } catch (_: Exception) {
+                // 1 つ取れなくても、ほかは入れ替える
+            }
+        }
+        if (done.isNotEmpty()) toast = "スキンが新しくなりました: ${done.joinToString("・")}"
     }
     /** 画面の下に一瞬出す知らせ */
     var toast by mutableStateOf<String?>(null)
@@ -675,6 +742,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         db.userOps.onOps = { viewModelScope.launch { syncScheduler.changed() } }
         // 期限の切れた一時 NG は自動で片づける(PC 版と同じ。どの端末でも同じ結果になるので同期には送らない)。起動時はまだスレを開いていないので判定し直しは要らない
         prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
+        // 一覧(カタログ)から入れたスキンがあれば、起動の少し後に新しくなっていないかを見る(なければ取りに行かない)
+        if (io.github.contentsview08.obb.data.LookTheme.saved(prefs).any { it.has("source") }) viewModelScope.launch {
+            kotlinx.coroutines.delay(8000)
+            runCatching { updateInstalledSkins(io.github.contentsview08.obb.data.SkinCatalog.fetch()) }
+        }
     }
 
     /** 画面に触れた。伸ばしていた確認の間隔を、選んだ間隔に戻す(前面で使っている間は選んだ間隔で確かめる) */

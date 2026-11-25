@@ -377,12 +377,36 @@ fun SkinPanel(vm: AppViewModel) {
                         Group("ダークのとき") { SkinCards(SCHEMES.filter { it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "暗い配色", on = p.darkScheme == sc.key) { p.darkScheme = sc.key } }) }
                         Group("ライトのとき") { SkinCards(SCHEMES.filter { !it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "明るい配色", on = p.lightScheme == sc.key) { p.lightScheme = sc.key } }) }
                     }
-                    Group("スキン", note = if (savedThemes.isEmpty()) "保存した・取り込んだスキンがここに並びます。配色・レスの見た目・細かい表示・文字と余白をまとめたもので、色だけのスキンも作れます" else "保存した・取り込んだスキン。押すとその場で切り替わります(入っている項目だけを上書きします)") {
+                    Group("入れたスキン", note = if (savedThemes.isEmpty()) "下の「もっと探す」から入れたスキンと、保存したスキンがここに並びます。配色・レスの見た目・細かい表示・文字と余白をまとめたもので、色だけのスキンも作れます" else "保存した・取り込んだスキン。押すとその場で切り替わります(入っている項目だけを上書きします)") {
                         SkinCards(savedThemes.map { t ->
                             val key = "saved:${lt.nameOf(t)}"
                             val sc = lt.schemeOf(t) ?: Palette.scheme
                             SkinEntry(sc, lt.ownOf(t, sc), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key) { vm.pickLookTheme(key) }
                         })
+                    }
+                    // 配っているスキンの一覧(data/SkinCatalog.kt)。押すと入る。入れてあれば押すと当てる
+                    Group("もっと探す", note = "配っているスキンの一覧です。入れたスキンは、配る側が新しくすると自動で入れ替わります") {
+                        val cat = vm.skinCatalog
+                        val err = vm.skinCatalogError
+                        when {
+                            err != null -> Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(err, Modifier.weight(1f), color = Palette.textMuted, fontSize = 13.sp)
+                                TextButton(onClick = { vm.loadSkinCatalog() }) { Text("取り直す") }
+                            }
+                            cat == null -> Text("一覧を取っています…", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 13.sp)
+                            cat.isEmpty() -> Text("配っているスキンはまだありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 13.sp)
+                            else -> SkinCards(cat.map { e ->
+                                val have = io.github.contentsview08.obb.data.SkinCatalog.installedOf(savedThemes, e.id)
+                                val def = e.scheme?.let { CustomDef.parse(it.toString()) }
+                                val sc = def?.let { buildScheme(it) } ?: SCHEMES.firstOrNull { it.key == e.settings?.optString("scheme") } ?: Palette.scheme
+                                val caption = e.note.ifEmpty { e.settings?.optString("postStyle")?.takeIf { it.isNotEmpty() }?.let { "レスの見た目: " + postStyleName(it) } ?: "" }
+                                SkinEntry(
+                                    sc, def?.own ?: Palette.extraOf(sc, "own"), e.name, caption,
+                                    on = have != null && p.lookThemeKey == "saved:${lt.nameOf(have)}",
+                                    action = if (have == null) "入れる" else null, busy = vm.skinBusy == e.id,
+                                ) { if (have != null) vm.pickLookTheme("saved:${lt.nameOf(have)}") else vm.installCatalogSkin(e) }
+                            })
+                        }
                     }
                     // 色の編集は設定のページ(スキンを閉じて設定を開く。設定を閉じれば元の画面)
                     LookThemeGroup(vm) { vm.openSettings(it) }
@@ -394,7 +418,14 @@ fun SkinPanel(vm: AppViewModel) {
 }
 
 /** スキン(配色)の札 1 枚分の中身 */
-private class SkinEntry(val scheme: Scheme, val own: Color, val name: String, val caption: String, val on: Boolean, val onPick: () -> Unit)
+private class SkinEntry(
+    val scheme: Scheme, val own: Color, val name: String, val caption: String, val on: Boolean,
+    /** 右下のボタンの字(一覧の「入れる」)。null なら出さない */
+    val action: String? = null,
+    /** 入れている途中(ボタンを「…」に) */
+    val busy: Boolean = false,
+    val onPick: () -> Unit,
+)
 
 /** スキンの札を、横に 2 枚(広い画面では 3 枚)ずつ詰めて並べる */
 @OptIn(ExperimentalLayoutApi::class)
@@ -425,6 +456,11 @@ private fun SkinCard(e: SkinEntry) {
                 if (e.caption.isNotEmpty()) Text(e.caption, color = Palette.textMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (e.on) Icon(Icons.Filled.Check, "使っています", tint = Palette.accent, modifier = Modifier.size(18.dp))
+            if (e.action != null) Text(
+                if (e.busy) "…" else e.action,
+                Modifier.background(Palette.accent, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                color = Palette.accentText, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -486,19 +522,23 @@ private fun LookThemeGroup(vm: AppViewModel, open: (String) -> Unit) {
     val saved = remember(savedThemes) { savedThemes.map { lt.nameOf(it) } }
     var saveDialog by remember { mutableStateOf(false) }
     var removeDialog by remember { mutableStateOf(false) }
+    val loadSkin = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importScheme(uri) }
+    val saveSkin = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportTheme(uri) }
     Group("スキンの管理", note = "スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります") {
         // 色を 1 つずつ選ぶ(地・面・字・強調・未読・自分の 6 色と、細かい色)。編集した色は上の配色の「自分の配色」になり、スキンとして保存できる
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "配色を編集…", value = if (p.customScheme.isEmpty()) null else "自分の配色") { open("custom") }
         ActionRow("いまの見た目をスキンとして保存…") { saveDialog = true }
-        if (saved.isNotEmpty()) ActionRow("保存したスキンを消す…") { removeDialog = true }
+        ActionRow("ファイルから入れる") { loadSkin.launch(arrayOf("application/json", "text/plain", "*/*")) }
+        ActionRow("ファイルに書き出す") { saveSkin.launch("OBB-skin.json") }
+        if (saved.isNotEmpty()) ActionRow("入れたスキンを消す…") { removeDialog = true }
         if (LocalAdvanced.current) {
-            ActionRow("スキンの JSON を貼り付けて当てる") {
+            ActionRow("文字(JSON)を貼り付けて入れる") {
                 val clip = runCatching {
                     context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
                 }.getOrNull()
                 if (clip.isNullOrEmpty()) vm.toast = "クリップボードに JSON がありません" else vm.applyLookJsonNow(clip)
             }
-            ActionRow("いまのスキンを JSON でコピー") { copyText(context, vm.themeJson()); vm.toast = "スキンの JSON をコピーしました" }
+            ActionRow("文字(JSON)でコピー") { copyText(context, vm.themeJson()); vm.toast = "コピーしました。掲示板などに貼って配れます" }
         }
     }
     if (saveDialog) {
@@ -520,7 +560,7 @@ private fun LookThemeGroup(vm: AppViewModel, open: (String) -> Unit) {
     }
     if (removeDialog) AlertDialog(
         onDismissRequest = { removeDialog = false },
-        title = { Text("保存したスキンを消す") },
+        title = { Text("入れたスキンを消す") },
         text = {
             Column {
                 if (saved.isEmpty()) Text("保存したスキンはありません", color = Palette.textMuted, fontSize = 13.sp)

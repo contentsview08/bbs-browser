@@ -766,30 +766,35 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
  * どのフォントでも、日本語フォントのすぐ後ろ(sans-serif の前)に置く
  */
 const KAOMOJI_FALLBACK = "'BBS Kaomoji Fallback'"
+/**
+ * 絵文字: OS の絵文字フォント(Windows / mac / Linux)を先に、同梱の予備(Twemoji の Mozilla 版。app.css の @font-face)をあとに。
+ * OS にない絵文字(Windows 10 にはない新しいもの)だけが予備で描かれる
+ */
+const EMOJI_FALLBACK = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'OBB Emoji'"
 
 /** 用意したフォント(Web フォントは host/fonts.ts が読む)。ゴシック → 丸ゴシック → 明朝 の順。名前は見本に使う(設定のドロップダウンはそのフォントで描く) */
 export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
-  { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'biz-ud', name: 'BIZ UDPゴシック', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'biz-ud', name: 'BIZ UDPゴシック', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
   // Windows に入っている BIZ UDPゴシックは画面表示向けの調整(ヒンティング)が効いていて、小さい字もガタつきにくい
   {
     key: 'system',
     name: 'Windows 標準(BIZ UDPゴシック)',
-    css: `'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', ${KAOMOJI_FALLBACK}, sans-serif`,
+    css: `'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif`,
   },
-  { key: 'm-plus-1p', name: 'M PLUS 1p', css: `'M PLUS 1p', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'm-plus-2', name: 'M PLUS 2', css: `'M PLUS 2 Variable', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'zen-kaku', name: 'Zen Kaku Gothic New', css: `'Zen Kaku Gothic New', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'ibm-plex', name: 'IBM Plex Sans JP', css: `'IBM Plex Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'murecho', name: 'Murecho', css: `'Murecho Variable', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'sawarabi', name: 'さわらびゴシック', css: `'Sawarabi Gothic', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'm-plus-rounded', name: 'M PLUS Rounded 1c(丸ゴシック)', css: `'M PLUS Rounded 1c', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'zen-maru', name: 'Zen Maru Gothic(丸ゴシック)', css: `'Zen Maru Gothic', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'kosugi-maru', name: 'Kosugi Maru(丸ゴシック)', css: `'Kosugi Maru', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'noto-serif', name: 'Noto Serif JP(明朝)', css: `'Noto Serif JP Variable', 'Noto Serif JP', ${KAOMOJI_FALLBACK}, serif` },
-  { key: 'biz-ud-mincho', name: 'BIZ UDP明朝', css: `'BIZ UDPMincho', ${KAOMOJI_FALLBACK}, serif` },
-  { key: 'shippori-mincho', name: 'しっぽり明朝', css: `'Shippori Mincho', ${KAOMOJI_FALLBACK}, serif` },
-  { key: 'zen-old-mincho', name: 'Zen Old Mincho(明朝)', css: `'Zen Old Mincho', ${KAOMOJI_FALLBACK}, serif` },
+  { key: 'm-plus-1p', name: 'M PLUS 1p', css: `'M PLUS 1p', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'm-plus-2', name: 'M PLUS 2', css: `'M PLUS 2 Variable', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'zen-kaku', name: 'Zen Kaku Gothic New', css: `'Zen Kaku Gothic New', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'ibm-plex', name: 'IBM Plex Sans JP', css: `'IBM Plex Sans JP', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'murecho', name: 'Murecho', css: `'Murecho Variable', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'sawarabi', name: 'さわらびゴシック', css: `'Sawarabi Gothic', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'm-plus-rounded', name: 'M PLUS Rounded 1c(丸ゴシック)', css: `'M PLUS Rounded 1c', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'zen-maru', name: 'Zen Maru Gothic(丸ゴシック)', css: `'Zen Maru Gothic', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'kosugi-maru', name: 'Kosugi Maru(丸ゴシック)', css: `'Kosugi Maru', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
+  { key: 'noto-serif', name: 'Noto Serif JP(明朝)', css: `'Noto Serif JP Variable', 'Noto Serif JP', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, serif` },
+  { key: 'biz-ud-mincho', name: 'BIZ UDP明朝', css: `'BIZ UDPMincho', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, serif` },
+  { key: 'shippori-mincho', name: 'しっぽり明朝', css: `'Shippori Mincho', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, serif` },
+  { key: 'zen-old-mincho', name: 'Zen Old Mincho(明朝)', css: `'Zen Old Mincho', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, serif` },
 ]
 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled', 'gray', 'nord', 'contrast', 'night', 'line-dark', 'x-dim', 'mono'])

@@ -11,17 +11,27 @@
   unicode-range: U+0020-04FF, U+1AB0-1AFF, U+1D00-1FFF, U+2000-206F, U+20D0-20FF, U+30FB, U+FF65;
 }
 
+/* 絵文字の予備フォント(Twemoji の Mozilla 版。COLR で色付き)。OS の絵文字フォントのあとに置くので、OS にある絵文字はそのまま、
+   ない絵文字(Windows 10 にはない新しい絵文字など。タイヤ 🛞 が豆腐になっていた)だけがこれで描かれる。
+   unicode-range で絵文字の範囲に限り、本文に絵文字が出てから読む */
+@font-face {
+  font-family: 'OBB Emoji';
+  src: url('./assets/fonts/TwemojiMozilla.ttf') format('truetype');
+  font-display: swap;
+  unicode-range: U+200D, U+20E3, U+FE0F, U+2190-21FF, U+2300-23FF, U+2460-24FF, U+25A0-27BF, U+2900-297F, U+2B00-2BFF, U+3030, U+303D, U+3297, U+3299, U+1F000-1FAFF, U+E0020-E007F;
+}
+
 /* 設定で選んだフォント(src/ui/settings.ts が --app-font を入れる) */
 html,
 body,
 #root {
-  font-family: var(--app-font, 'Noto Sans JP Variable', 'Noto Sans JP', 'BBS Kaomoji Fallback', sans-serif);
+  font-family: var(--app-font, 'Noto Sans JP Variable', 'Noto Sans JP', 'BBS Kaomoji Fallback', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'OBB Emoji', sans-serif);
 }
 
 /* AA 用のフォント(index.css の .aa-font)にも、同じ予備フォントを足す。並びは web 版と同じ */
 .aa-font {
   font-family: aahub_light, 'ＭＳ Ｐゴシック', 'MS PGothic', RobotoJAA, Monapo, 'IPA モナー Pゴシック', IPAMonaPGothic, Mona, '梅Pゴシック', Textar,
-    'BBS Kaomoji Fallback', sans-serif !important;
+    'BBS Kaomoji Fallback', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'OBB Emoji', sans-serif !important;
 }
 
 /* web 版はトップページ用にドット絵フォントを持っているが、専ブラでは使わない */

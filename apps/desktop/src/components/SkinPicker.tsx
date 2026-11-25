@@ -4,8 +4,10 @@
 // スマホのアプリの SkinPanel と同じ考え方・同じ並び。JSON という言葉は詳しい設定の中だけ
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS, COLOR_SCHEMES, POST_STYLES, isDarkScheme, pickScheme, type AppSettings, type ColorScheme, type UpdateSetting } from '../ui/settings'
-import { customVars, parseCustom, readSchemeVars } from '../ui/customScheme'
-import { lookThemeByKey, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, lookThemeShareJson, lookThemeSwatch, withSavedTheme, withoutSavedTheme, type LookTheme } from '../ui/lookTheme'
+import { customOf, customToJson, customVars, parseCustom, readSchemeVars } from '../ui/customScheme'
+import { BUILTIN_SKINS, isBuiltinSkinScheme, lookThemeByKey, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, lookThemeShareJson, lookThemeSwatch, pickBuiltinSkin, withSavedTheme, withoutSavedTheme, type LookTheme } from '../ui/lookTheme'
+import { AccentDots, PostDisplayItems, PostStyleChips, StyleOptionItems } from './StyleMenu'
+import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { installedSkin, skinKeyOf, type CatalogSkin } from '../ui/skinCatalog'
 import { fetchSkinCatalog, installSkin, updateInstalledSkins } from '../host/skinCatalog'
 import { openJson, saveJson } from '../host/backup'
@@ -22,6 +24,7 @@ export function currentSkinName(s: AppSettings): string {
   const saved = lookThemeKeyName(s.lookThemeKey)
   if (saved) return saved
   const nameOf = (k: string) => (k === 'custom' ? '自分の配色' : COLOR_SCHEMES.find((c) => c.key === k)?.name ?? k)
+  if (s.lookThemeKey.startsWith('builtin:')) return nameOf(s.lookThemeKey.slice(8))
   if (s.followOsTheme) return `${nameOf(s.darkScheme)} / ${nameOf(s.lightScheme)}`
   return nameOf(s.scheme)
 }
@@ -53,7 +56,7 @@ export function SkinSummaryRow({ settings: s, onOpen }: { settings: AppSettings;
 
 /** スキン(配色)1 つの大きな札: 見本(上の帯・スレ一覧の行・レス・書き込み欄)と、名前・一言。押すと当てる。
  * 見本の色は、同梱の配色なら data-scheme で、スキンの自分の配色なら CSS の変数を直に入れて描く。
- * action: 右下のボタン(一覧の「入れる」)。onRemove: 消すボタン(入れたスキン) */
+ * action: 右下のボタン(一覧の「入れる」)。menu: ⋯(と右クリック)で出すメニュー(編集・消す など) */
 function SkinCard(props: {
   name: string
   caption: string
@@ -62,14 +65,29 @@ function SkinCard(props: {
   vars?: Record<string, string>
   onPick?: () => void
   action?: { label: string; busy?: boolean; onClick: () => void }
-  onRemove?: () => void
+  menu?: { label: string; danger?: boolean; onClick: () => void }[]
 }) {
-  const Tag = props.onPick ? 'button' : 'div'
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <Tag
-      type={props.onPick ? 'button' : undefined}
+    <div
+      role={props.onPick ? 'button' : undefined}
+      tabIndex={props.onPick ? 0 : undefined}
       onClick={props.onPick}
-      className={`text-left rounded-[var(--card-radius)] border bg-c-surface overflow-hidden transition-colors ${props.on ? 'border-c-accent' : 'border-c-border'} ${props.onPick ? 'hover:border-c-border-strong' : ''}`}
+      onKeyDown={(e) => {
+        if (props.onPick && (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault()
+          props.onPick()
+        }
+      }}
+      onContextMenu={
+        props.menu
+          ? (e) => {
+              e.preventDefault()
+              setMenuOpen(true)
+            }
+          : undefined
+      }
+      className={`relative text-left rounded-[var(--card-radius)] border bg-c-surface overflow-visible transition-colors ${props.on ? 'border-c-accent' : 'border-c-border'} ${props.onPick ? 'cursor-pointer hover:border-c-border-strong' : ''}`}
     >
       <div className="p-1.5">
         <div className="rounded-md overflow-hidden border border-c-border" data-scheme={props.schemeKey} style={{ ...(props.vars as React.CSSProperties), background: 'var(--c-base)' }}>
@@ -148,21 +166,52 @@ function SkinCard(props: {
             {props.action.busy ? '…' : props.action.label}
           </button>
         )}
-        {props.onRemove && (
+        {props.menu && (
           <button
             type="button"
-            title="このスキンを消す"
+            title="メニュー"
             onClick={(e) => {
               e.stopPropagation()
-              props.onRemove!()
+              setMenuOpen((v) => !v)
             }}
-            className="material-symbols-outlined text-[18px] w-7 h-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-mark-danger"
+            className="material-symbols-outlined text-[18px] w-7 h-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong"
           >
-            delete
+            more_vert
           </button>
         )}
       </div>
-    </Tag>
+      {menuOpen && props.menu && (
+        <>
+          <div
+            className="fixed inset-0 z-[20]"
+            onClick={(e) => {
+              e.stopPropagation()
+              setMenuOpen(false)
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              setMenuOpen(false)
+            }}
+          />
+          <div className="absolute right-1.5 bottom-9 z-[21] min-w-[11em] py-1 rounded-md border border-c-border bg-c-surface shadow-lg" onClick={(e) => e.stopPropagation()}>
+            {props.menu.map((m) => (
+              <button
+                key={m.label}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMenuOpen(false)
+                  m.onClick()
+                }}
+                className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-c-surface2 ${m.danger ? 'text-c-mark-danger' : 'text-c-text-body'}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -233,17 +282,76 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
     if (saving) saveRef.current?.focus()
   }, [saving])
 
+  /** 編集しているスキン(undefined なら選ぶ画面。name が null なら、同梱のものを元にした新しいスキン) */
+  const [editing, setEditing] = useState<{ name: string | null }>()
+  const [editName, setEditName] = useState('')
   const pickScheme2 = (key: ColorScheme) => {
     for (const [k, v] of Object.entries(pickScheme(s, key))) update(k as keyof AppSettings, v as never)
     if (s.lookThemeKey) update('lookThemeKey', '')
   }
   const applyKey = (key: string) => {
+    const b = pickBuiltinSkin(key)
+    if (b) {
+      for (const [k, v] of Object.entries(b)) update(k as keyof AppSettings, v as never)
+      return
+    }
     const text = lookThemeByKey(s, key)
     if (!text) return
     const r = lookThemePatch(text, DEFAULT_SETTINGS)
     if (typeof r === 'string') return
     for (const [k, v] of Object.entries(r.patch)) update(k as keyof AppSettings, v as never)
     update('lookThemeKey', key)
+  }
+  /**
+   * スキンの編集を始める: そのスキン(か配色)を当て、配色を「自分の配色」に写して(同梱の配色なら 6 色を写す)、編集の画面にする。
+   * 変えた所はすぐ映る。終わったら「このスキンに保存」で書き戻す(途中で戻っても、見た目は変えたまま)
+   */
+  const beginEdit = (key: string) => {
+    let schemeKey = s.scheme
+    let custom = s.customScheme
+    if (key.startsWith('saved:')) {
+      const text = lookThemeByKey(s, key)
+      const r = text ? lookThemePatch(text, DEFAULT_SETTINGS) : undefined
+      if (r && typeof r !== 'string') {
+        for (const [k, v] of Object.entries(r.patch)) update(k as keyof AppSettings, v as never)
+        if (typeof r.patch.scheme === 'string') schemeKey = r.patch.scheme
+        if (typeof r.patch.customScheme === 'string') custom = r.patch.customScheme
+      }
+      update('lookThemeKey', key)
+    } else if (key.startsWith('builtin:')) {
+      const b = pickBuiltinSkin(key)!
+      for (const [k, v] of Object.entries(b)) update(k as keyof AppSettings, v as never)
+      schemeKey = b.scheme!
+    } else {
+      schemeKey = key.slice(7) as ColorScheme
+      update('followOsTheme', false)
+      update('scheme', schemeKey)
+      update('lookThemeKey', '')
+    }
+    // 配色を「自分の配色」に(同梱の配色なら、その 6 色から)
+    if (schemeKey !== 'custom' || !parseCustom(custom)) {
+      const base = schemeKey !== 'custom' ? schemeKey : 'indigo'
+      update('customScheme', customToJson(customOf(base, isDarkScheme(base))))
+      update('scheme', 'custom')
+      update('followOsTheme', false)
+    }
+    const name = key.startsWith('saved:') ? key.slice(6) : null
+    setEditing({ name })
+    setEditName(name ?? '')
+  }
+  /** 編集した見た目を、その名前のスキンに書き戻す(入れたスキンの出どころは外し、以後は自動で入れ替えない) */
+  const saveEdited = (name: string) => {
+    const n = name.trim()
+    if (!n || !editing) return
+    const old = s.lookThemes.find((t) => lookThemeName(t) === n)
+    const theme = lookThemeOf(s, n)
+    if (old?.note) theme.note = old.note
+    let list = s.lookThemes
+    if (editing.name && editing.name !== n) list = withoutSavedTheme(list, editing.name)
+    update('lookThemes', withSavedTheme(list, theme))
+    update('lookThemeKey', `saved:${n}`)
+    setEditing({ name: n })
+    setNotice(`スキン「${n}」に保存しました`)
   }
   /** 貼り付け・ファイルのスキンを当てる(保存して、そのスキンを選んだことにする) */
   const applyText = (text: string) => {
@@ -286,28 +394,86 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
     void saveJson('skin', JSON.parse(lookThemeShareJson(theme))).then((ok) => ok && setNotice('書き出しました'))
   }
 
+  // 配色だけのものと、スキン(見た目まで含む)に二分する。Discord 風・LINE 風の配色は同梱のスキンとして並べる
+  const plain = COLOR_SCHEMES.filter((c) => !isBuiltinSkinScheme(c.key))
   const schemeCards = (list: typeof COLOR_SCHEMES, onOf: (k: ColorScheme) => boolean) =>
-    list.map((c) => <SkinCard key={c.key} name={c.name} caption={isDarkScheme(c.key) ? '暗い配色' : '明るい配色'} on={onOf(c.key)} schemeKey={c.key} onPick={() => pickScheme2(c.key)} />)
+    list.map((c) => (
+      <SkinCard
+        key={c.key}
+        name={c.name}
+        caption={isDarkScheme(c.key) ? '暗い配色' : '明るい配色'}
+        on={onOf(c.key)}
+        schemeKey={c.key}
+        onPick={() => pickScheme2(c.key)}
+        menu={[{ label: 'この配色を元にスキンを作る…', onClick: () => beginEdit(`scheme:${c.key}`) }]}
+      />
+    ))
   const customDef = parseCustom(s.customScheme)
+
+  if (editing) {
+    const name = editing.name
+    return (
+      <ManagerDialog title={name ? `スキンを編集: ${name}` : 'スキンを作る'} onClose={props.onClose} wide>
+        <div className="flex items-center gap-3 mb-3">
+          <button type="button" className={BTN} onClick={() => setEditing(undefined)}>
+            ← スキンの一覧へ
+          </button>
+          <p className="text-xs text-c-text-muted">
+            {name ? `スキン「${name}」を編集しています。` : '同梱のものを元に、新しいスキンを作ります。'}変えるとすぐ映ります。終わったら下の保存で書き戻します
+          </p>
+        </div>
+        <CustomSchemeEditor settings={s} update={update} />
+        <Heading>差し色</Heading>
+        <AccentDots settings={s} update={update} />
+        <Heading>スタイル</Heading>
+        <PostStyleChips settings={s} update={update} />
+        <StyleOptionItems settings={s} update={update} />
+        <Heading>細かい表示</Heading>
+        <PostDisplayItems settings={s} update={update} />
+        <div className="mt-5 pt-3 border-t border-c-border flex flex-wrap items-center gap-2">
+          {name && (
+            <button type="button" className={`${BTN} font-bold bg-c-accent text-[var(--c-accent-text)] border-transparent`} onClick={() => saveEdited(name)}>
+              このスキンに保存
+            </button>
+          )}
+          <input
+            type="text"
+            value={editName}
+            placeholder="名前"
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveEdited(editName)
+            }}
+            className={`${INPUT} w-[14em]`}
+          />
+          <button type="button" className={BTN} disabled={!editName.trim()} onClick={() => saveEdited(editName)}>
+            {name ? '別の名前で保存' : 'スキンとして保存'}
+          </button>
+          {name && <span className="text-[11px] text-c-text-muted">入れたスキンを編集して保存すると、配る側が新しくしても自動では入れ替わらなくなります</span>}
+        </div>
+        {notice && <p className="mt-2 text-xs text-c-text-muted">{notice}</p>}
+      </ManagerDialog>
+    )
+  }
 
   return (
     <ManagerDialog title="スキン" onClose={props.onClose} wide>
       <p className="text-xs text-c-text-muted mb-3">
-        スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです。同梱の配色も、入れたスキンも、押すとその場で切り替わります。いまの見た目に名前を付けて保存すれば、自分のスキンになります
+        配色は色だけ、スキンは配色とレスの見た目(と細かい表示・文字と余白)をまとめたものです。押すとその場で切り替わります。札の ⋯ から、編集・消す
       </p>
       {s.followOsTheme ? (
         <>
           <Heading>ダークのとき</Heading>
-          <div className={GRID}>{schemeCards(COLOR_SCHEMES.filter((c) => isDarkScheme(c.key)), (k) => s.darkScheme === k)}</div>
+          <div className={GRID}>{schemeCards(plain.filter((c) => isDarkScheme(c.key)), (k) => s.darkScheme === k)}</div>
           <Heading>ライトのとき</Heading>
-          <div className={GRID}>{schemeCards(COLOR_SCHEMES.filter((c) => !isDarkScheme(c.key)), (k) => s.lightScheme === k)}</div>
+          <div className={GRID}>{schemeCards(plain.filter((c) => !isDarkScheme(c.key)), (k) => s.lightScheme === k)}</div>
           <p className="mt-1.5 text-[11px] text-c-text-muted">OS のダーク・ライトに合わせているので、暗い配色と明るい配色を 1 つずつ選びます(設定 → 表示 で切れます)</p>
         </>
       ) : (
         <>
           <Heading>配色</Heading>
           <div className={GRID}>
-            {schemeCards(COLOR_SCHEMES, (k) => !s.lookThemeKey && s.scheme === k)}
+            {schemeCards(plain, (k) => !s.lookThemeKey && s.scheme === k)}
             {customDef && (
               <SkinCard name="自分の配色" caption="配色を編集… で作った色" on={!s.lookThemeKey && s.scheme === 'custom'} vars={{ ...customVars(customDef), '--c-own': customDef.own }} onPick={() => pickScheme2('custom')} />
             )}
@@ -315,16 +481,40 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
         </>
       )}
 
-      <Heading>入れたスキン</Heading>
-      {s.lookThemes.length === 0 ? (
-        <p className="text-sm text-c-text-muted">まだありません。下の「もっと探す」から入れるか、いまの見た目を保存してください</p>
-      ) : (
-        <div className={GRID}>
-          {s.lookThemes.map((t) => (
-            <SkinCard key={skinKeyOf(t)} name={lookThemeName(t)} caption={captionOf(t)} on={s.lookThemeKey === skinKeyOf(t)} {...previewOf(t.scheme, t.settings)} onPick={() => applyKey(skinKeyOf(t))} onRemove={() => remove(t)} />
-          ))}
-        </div>
-      )}
+      <Heading>スキン</Heading>
+      <div className={GRID}>
+        {BUILTIN_SKINS.map((b) => {
+          const key = `builtin:${b.scheme}`
+          const c = COLOR_SCHEMES.find((x) => x.key === b.scheme)
+          return (
+            <SkinCard
+              key={key}
+              name={c?.name ?? b.scheme}
+              caption={`レスの見た目: ${POST_STYLES.find((p) => p.key === b.style)?.name ?? b.style}`}
+              on={s.lookThemeKey === key}
+              schemeKey={b.scheme}
+              onPick={() => applyKey(key)}
+              menu={[{ label: 'このスキンを元に編集…', onClick: () => beginEdit(key) }]}
+            />
+          )
+        })}
+        {s.lookThemes.map((t) => (
+          <SkinCard
+            key={skinKeyOf(t)}
+            name={lookThemeName(t)}
+            caption={captionOf(t)}
+            on={s.lookThemeKey === skinKeyOf(t)}
+            {...previewOf(t.scheme, t.settings)}
+            onPick={() => applyKey(skinKeyOf(t))}
+            menu={[
+              { label: '編集…', onClick: () => beginEdit(skinKeyOf(t)) },
+              { label: '文字(JSON)でコピー', onClick: () => void navigator.clipboard.writeText(lookThemeShareJson(t)).then(() => setNotice('コピーしました。掲示板などに貼って配れます')) },
+              { label: '消す', danger: true, onClick: () => remove(t) },
+            ]}
+          />
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11px] text-c-text-muted">前の方が同梱のスキン、後ろが入れた・保存したスキン。長い名前は札の下に出ます</p>
 
       <Heading
         right={

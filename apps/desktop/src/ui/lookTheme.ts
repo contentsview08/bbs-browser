@@ -7,9 +7,27 @@
 
 import { importableSettings, type SettingsFile } from '../utils/backup'
 import { customToJson, customVars, parseCustom, readSchemeVars } from './customScheme'
-import { accentKeyOf, type AppSettings } from './settings'
+import { accentKeyOf, type AppSettings, type ColorScheme, type PostStyle } from './settings'
 
 export const LOOK_THEME_FORMAT = 'obb-theme'
+
+/**
+ * 同梱のスキン: レスの見た目と組になっている配色(Discord 風・LINE 風の色)。配色の一覧からは外し、スキンとして並べる(2026-11-25)。
+ * キーは "builtin:<配色のキー>"。スマホのアプリの data/LookTheme.kt の BUILTIN_SKINS と同じ
+ */
+export const BUILTIN_SKINS: { scheme: ColorScheme; style: PostStyle }[] = [
+  { scheme: 'discord-dark', style: 'discord' },
+  { scheme: 'line-light', style: 'line' },
+  { scheme: 'line-dark', style: 'line' },
+  { scheme: 'x-dim', style: 'discord' },
+]
+export const isBuiltinSkinScheme = (key: string) => BUILTIN_SKINS.some((b) => b.scheme === key)
+/** 同梱のスキンを当てる差分(配色 + レスの見た目。OS に合わせるのはやめる) */
+export function pickBuiltinSkin(key: string): Partial<AppSettings> | undefined {
+  const b = BUILTIN_SKINS.find((x) => `builtin:${x.scheme}` === key)
+  if (!b) return undefined
+  return { followOsTheme: false, scheme: b.scheme, postStyle: b.style, lookThemeKey: key }
+}
 
 /** スマホのアプリの LookTheme.COMMON_KEYS と同じ並び(名前も意味も同じ項目) */
 export const COMMON_KEYS = [

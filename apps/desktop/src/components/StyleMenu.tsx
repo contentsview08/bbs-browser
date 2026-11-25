@@ -85,7 +85,7 @@ function SchemeTiles({ settings, update }: { settings: AppSettings; update: Upda
 }
 
 /** 差し色(スマホのアプリ・hono-bbs の web と同じ 8 色)。左端の「テーマ」はテーマの色に戻す */
-function AccentDots({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
+export function AccentDots({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   const current = effectiveScheme(settings)
   const dark = isDarkScheme(current)
   return (
@@ -114,7 +114,7 @@ function AccentDots({ settings, update }: { settings: AppSettings; update: Updat
 }
 
 /** レスの見た目: 切り替えボタン(説明は PC だけ、乗せたときに出す) */
-function PostStyleChips({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
+export function PostStyleChips({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   return (
     <div className={isMobile ? 'px-[16px] py-[4px]' : 'px-4 pb-1'}>
       <Segmented
@@ -160,7 +160,7 @@ export function DepthSlider(props: { value: number; onChange: (v: number) => voi
  * 選んでいる見た目だけの設定(見出し「〇〇の設定」)。値は見た目ごとに別々に覚える。
  * カード・専ブラ風・まとめ風: ツリー表示・字下げの深さの上限。Discord 風・LINE 風: 返信先の引用・続けて書いたレスをまとめる
  */
-function StyleOptionItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
+export function StyleOptionItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   const style = effectivePostStyle(settings)
   const o = styleOptionsOf(settings, style)
   const set = <K extends keyof typeof o>(key: K, value: (typeof o)[K]) => update('styleOptions', withStyleOption(settings, style, key, value))
@@ -220,7 +220,7 @@ function ChoiceChips<T extends string>(props: { label: string; value: T; options
 }
 
 /** 細かい表示: どの見た目にも効く、設定の「レス表示」の名前と ID・本文・日時の項目(言葉も設定の画面と同じ。設定の画面にも残してある) */
-function PostDisplayItems({ settings: s, update }: { settings: AppSettings; update: UpdateSetting }) {
+export function PostDisplayItems({ settings: s, update }: { settings: AppSettings; update: UpdateSetting }) {
   return (
     <div className={isMobile ? '' : 'py-1'}>
       <div className={isMobile ? 'px-[16px]' : 'px-4'}>

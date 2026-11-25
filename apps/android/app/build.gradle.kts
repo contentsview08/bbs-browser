@@ -196,6 +196,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.core:core-ktx:1.18.0")
+    // 絵文字: 端末のフォントにない新しい絵文字・組み合わせ(ZWJ)の絵文字を、Google Play 開発者サービスの絵文字フォントで描く(EmojiCompat)。
+    // 入れるだけで androidx.startup から自動で始まり、Compose の Text が使う。取れない端末(GMS なし)では何もしない(今までどおり端末のフォント)
+    implementation("androidx.emoji2:emoji2:1.5.0")
     // 閲覧履歴の定期確認と OS の通知(アプリを閉じている間)
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

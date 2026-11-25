@@ -36,7 +36,7 @@
 {"name":"androidx.core:core-ktx","version":"1.18.0","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/core#1.18.0","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
 {"name":"androidx.core:core-viewtree","version":"1.0.0","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/core#1.0.0","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
 {"name":"androidx.customview:customview-poolingcontainer","version":"1.0.0","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/customview#1.0.0","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
-{"name":"androidx.emoji2:emoji2","version":"1.4.0","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/emoji2#1.4.0","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
+{"name":"androidx.emoji2:emoji2","version":"1.5.0","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/emoji2#1.5.0","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
 {"name":"androidx.exifinterface:exifinterface","version":"1.4.2","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/exifinterface#1.4.2","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
 {"name":"androidx.graphics:graphics-path","version":"1.0.1","license":"Apache-2.0","url":"https://developer.android.com/jetpack/androidx/releases/graphics#1.0.1","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},
 {"name":"androidx.interpolator:interpolator","version":"1.0.0","license":"Apache-2.0","url":"http://developer.android.com/tools/extras/support-library.html","kind":"gradle","texts":[{"file":"Apache-2.0","text":0}]},

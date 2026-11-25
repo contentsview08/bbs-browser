@@ -85,18 +85,23 @@ fn screens_of(window: &WebviewWindow) -> Vec<Area> {
         .collect()
 }
 
-/// 覚えていた位置と大きさへ戻す(窓はまだ隠れている)。最大化していたなら true(出してから maximize する。隠れたままの窓への maximize は効かないことがある)
-fn apply_saved(window: &WebviewWindow) -> bool {
-    let Some(saved) = path_of(window).and_then(|p| read(&p)) else { return false };
+/// 覚えていた位置と大きさへ戻す(窓はまだ隠れている)。戻した値(元の大きさ。最大化していたなら maximized が true)を返す。
+/// 最大化していたときは、元の大きさが使えなくても(画面の外・最大化の形で覚わっていた)最大化は戻す(元の大きさは既定の大きさに置き直す)。
+/// 前は元の大きさの検査(usable)で先に抜けていたので、最大化の形(-8,-8。上の帯の見える幅が 40px に足りない)で覚わっていると
+/// 大きさも最大化も戻らなかった
+fn apply_saved(window: &WebviewWindow) -> Option<Saved> {
+    let saved = path_of(window).and_then(|p| read(&p))?;
     let screens = screens_of(window);
-    if !usable(&saved, &screens) {
-        return false;
-    }
-    // 元の大きさが最大化の形で覚わっていたら(前の版の取りこぼし)、既定の大きさに置き直す
-    let rect = if saved.maximized && looks_maximized(saved.width, &screens) { default_rect(window) } else { saved };
+    let rect = if saved.maximized && (looks_maximized(saved.width, &screens) || !usable(&saved, &screens)) {
+        default_rect(window)
+    } else if usable(&saved, &screens) {
+        saved
+    } else {
+        return None;
+    };
     let _ = window.set_size(PhysicalSize::new(rect.width, rect.height));
     let _ = window.set_position(PhysicalPosition::new(rect.x, rect.y));
-    saved.maximized
+    Some(Saved { maximized: saved.maximized, ..rect })
 }
 
 /// 出したあとに最大化する。効いていなければ少し待ってやり直す(出した直後の maximize が効かないことがある)
@@ -162,14 +167,18 @@ fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Sav
 /// 起動時に前回の位置と大きさへ戻して窓を出し、以後の変化を覚える。窓は tauri.conf.json で隠して作る(動いて見えないように)
 pub fn setup(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else { return };
-    let maximized = apply_saved(&window);
+    let restored = apply_saved(&window);
     let _ = window.show();
     // 隠れている間の maximize は効かないことがあるので、出してから(効かなければやり直す)
-    if maximized {
+    if restored.is_some_and(|s| s.maximized) {
         maximize_after_show(&window);
     }
     let Some(path) = path_of(&window) else { return };
-    let current = Arc::new(Mutex::new(read(&path)));
+    // 最大化中の「元の大きさ」は、戻した値から始める(置き直した既定の大きさを含む。ファイルの古い値を引き継がない)
+    let current = Arc::new(Mutex::new(restored));
+    if let Some(s) = restored {
+        write(&path, &s);
+    }
     let generation = Arc::new(AtomicU64::new(0));
     // 閉じると決まったあとの動き・大きさの変化は見ない。Windows は窓を壊す途中で「最大化を解いた大きさ」の Resized を送ってくるので、
     // それを拾うと最大化したまま閉じたのに maximized=false で上書きされ、次の起動で最大化に戻らなかった
@@ -235,6 +244,14 @@ mod tests {
     fn 右へはみ出しても帯が見えれば戻す() {
         assert!(usable(&saved(1800, 100), &[SCREEN]));
         assert!(!usable(&saved(1860, 100), &[SCREEN]));
+    }
+
+    #[test]
+    fn 最大化の形は上の帯が足りず使えない_だから最大化は別に戻す() {
+        // 本人の環境の値(2560x1440 の画面で最大化した枠なし窓)。usable では落ちる = 前はここで何も戻らなかった
+        let polluted = Saved { x: -8, y: -8, width: 2576, height: 1408, maximized: true };
+        assert!(!usable(&polluted, &[Area { x: 0, y: 0, width: 2560, height: 1440 }]));
+        assert!(looks_maximized(polluted.width, &[Area { x: 0, y: 0, width: 2560, height: 1440 }]));
     }
 
     #[test]

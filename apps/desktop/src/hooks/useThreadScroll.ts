@@ -734,6 +734,7 @@ export function useThreadScroll(o: Options) {
         if (el) jumpScroll(root, el, () => headerOffset() + pos.offset)
       }
       pendingUnread.current = false
+      firstGrowth.current = false
     } else {
       const t = openTarget({
         saved,
@@ -753,6 +754,8 @@ export function useThreadScroll(o: Options) {
         pendingUnread.current = !!t.pendingUnread
         const el = savedEl(t.position.no)
         if (el) jumpScroll(root, el, () => headerOffset() + t.position.offset)
+        // 覚えた位置へ戻したときは「開いて最初の取得の新着へ送る」をしない(読んでいた所から一番下へ飛んでしまう)
+        firstGrowth.current = false
       }
     }
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)

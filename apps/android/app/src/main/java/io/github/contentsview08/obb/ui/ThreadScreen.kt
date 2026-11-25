@@ -318,8 +318,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
-        // ツリー表示のときは、ツリーが組み上がって並びが変わってから位置を決める(番号の順の並びで決めると、組み上がった後にずれる)
-        snapshotFlow { listState.layoutInfo.totalItemsCount > 0 && (!treeWantedNow.value || treeNow.value) }.first { it }
+        // レスの行が実際に並んでから位置を決める。並ぶ前(下の -END- の行だけのとき)に決めると、先頭へ送っても何も起きず、
+        // そのあとレスが並んだときに一覧が -END- の行を画面に留めたまま一番下になる(見たことのないスレをツリー表示で開くと一番下が出ていた)。
+        // 行の数(rowNos)は組み立てた並び、layoutInfo は並べ終えた一覧。後者が前者を含む大きさになるまで待つ。
+        // ツリー表示のときは、ツリーが組み上がって並びが変わってから(番号の順の並びで決めると、組み上がった後にずれる)
+        snapshotFlow {
+            val rows = shownNow.value.size
+            rows > 0 && listState.layoutInfo.totalItemsCount > rows && (!treeWantedNow.value || treeNow.value)
+        }.first { it }
         // レスへ飛ぶときは、ふだんの開く位置を読んだことにしない
         val jumpNo = page.jumpNo
         ctl.keepJump = jumpNo != null

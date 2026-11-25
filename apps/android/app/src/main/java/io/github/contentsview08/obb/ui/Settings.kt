@@ -1521,7 +1521,8 @@ private fun LicensesPage() {
 /** 項目のまとまり。見出しと、下に小さな説明 */
 @Composable
 internal fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
-    if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    // 段の見出しは差し色で(説明の薄い字と見分けがつくように。字の大きさは説明より少し大きいだけ)
+    if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 22.dp, bottom = 6.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
     else Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {
         content()

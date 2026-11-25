@@ -72,8 +72,16 @@ fn write(path: &Path, s: &Saved) {
 /// 最大化した窓の形か(どれかの画面の幅いっぱい。Windows の枠なし窓の最大化は、画面より 8px ずつ外にはみ出した大きさになる)。
 /// 最大化の途中は is_maximized がまだ false のまま、この形の Moved が先に届く。これを「元の大きさ」として覚えると、
 /// 次の起動で元の大きさが画面いっぱいになり、最大化を解いても戻れない・最大化が効かないように見えた
+/// 覚えの値だけで見るとき(どの画面か分からない): どれかの画面より 8px 以上広ければ最大化の形
 fn looks_maximized(width: u32, screens: &[Area]) -> bool {
-    screens.iter().any(|a| width >= a.width)
+    screens.iter().any(|a| width >= a.width + 8)
+}
+
+/// 今の窓の形が最大化の形か(窓のある画面と比べる)。左上が画面の端かその外にあり、幅が画面いっぱい。
+/// 画面の幅だけで見ると、2 つの画面で小さい方より広いふつうの窓まで最大化の形と見て、元の大きさを一度も覚えなくなる
+/// (起動時の「最大化していた」のまま閉じて、次も最大化で開いていた)
+fn is_maximized_shape(x: i32, y: i32, width: u32, monitor: &Area) -> bool {
+    x <= monitor.x && y <= monitor.y && width >= monitor.width
 }
 
 fn screens_of(window: &WebviewWindow) -> Vec<Area> {
@@ -141,7 +149,8 @@ fn default_rect(window: &WebviewWindow) -> Saved {
 /// 今の状態を current へ写す。最小化中は位置が画面の外の値になるので写さない。最大化中は元の大きさを残す。
 /// 最大化中でまだ元の大きさを知らないとき(初めての起動ですぐ最大化した・覚え書きがなかった)は、既定の大きさを添えて
 /// 「最大化していた」ことだけは覚える(前はここで何も書かず、最大化したまま閉じると次の起動で戻らなかった)
-fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Saved> {
+/// closing: 閉じると決まったとき(動きの途中ではないので、形の検査をせずに今の値をそのまま使う)
+fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>, closing: bool) -> Option<Saved> {
     if window.is_minimized().unwrap_or(false) {
         return None;
     }
@@ -154,9 +163,12 @@ fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Sav
     } else {
         let p = window.outer_position().ok()?;
         let z = window.outer_size().ok()?;
-        // 最大化の途中(形は最大化、印はまだ)は、元の大きさとして覚えない
-        if looks_maximized(z.width, &screens_of(window)) {
-            return None;
+        // 最大化の途中(形は最大化、印はまだ)は、元の大きさとして覚えない(窓のある画面と比べる)
+        if !closing {
+            let on_screen = window.current_monitor().ok().flatten().map(|m| Area { x: m.position().x, y: m.position().y, width: m.size().width, height: m.size().height });
+            if on_screen.is_some_and(|m| is_maximized_shape(p.x, p.y, z.width, &m)) {
+                return None;
+            }
         }
         Saved { x: p.x, y: p.y, width: z.width, height: z.height, maximized: false }
     };
@@ -189,7 +201,7 @@ pub fn setup(app: &tauri::AppHandle) {
             if closing.load(Ordering::SeqCst) {
                 return;
             }
-            let Some(next) = capture(&watched, &current) else { return };
+            let Some(next) = capture(&watched, &current, false) else { return };
             // 動かしている間は書かず、止まってから 1 回だけ書く
             let mine = generation.fetch_add(1, Ordering::SeqCst) + 1;
             let (generation, path) = (generation.clone(), path.clone());
@@ -202,7 +214,7 @@ pub fn setup(app: &tauri::AppHandle) {
         }
         WindowEvent::CloseRequested { .. } => {
             closing.store(true, Ordering::SeqCst);
-            if let Some(next) = capture(&watched, &current) {
+            if let Some(next) = capture(&watched, &current, true) {
                 // 待っている書き込みは取り消し、今の状態を最後の 1 回として書く
                 generation.fetch_add(1, Ordering::SeqCst);
                 write(&path, &next);
@@ -259,6 +271,10 @@ mod tests {
         assert!(looks_maximized(2576, &[Area { x: 0, y: 0, width: 2560, height: 1440 }]));
         assert!(looks_maximized(1936, &[SCREEN, SECOND]));
         assert!(!looks_maximized(1280, &[SCREEN]));
+        // 今の窓の形: 画面の端より内側から始まるふつうの窓は、幅が広くても最大化の形ではない(2 つ目の画面より広いだけの窓)
+        assert!(is_maximized_shape(-8, -8, 1936, &SCREEN));
+        assert!(!is_maximized_shape(100, 60, 1700, &SCREEN));
+        assert!(!is_maximized_shape(1920, 0, 1296, &SECOND) || is_maximized_shape(1912, -8, 1296, &SECOND));
     }
 
     #[test]

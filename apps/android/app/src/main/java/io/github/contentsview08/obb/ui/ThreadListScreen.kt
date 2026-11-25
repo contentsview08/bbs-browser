@@ -192,6 +192,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val favKeys = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     // 帯の「+N」は既読で変わるので、帯を出すときは既読の記録もきっかけにする(並びは unreadTop の控えで保っているので、読んでも並べ直されない)
     val bandStates = if (hasKeywords && (keywordBands || (tab ?: defaultTab(sort)) == ListTab.KEYWORD)) page.states else null
+    // 検索の語(スレタイで目立たせる)
+    val highlightTerms = remember(query) { io.github.contentsview08.obb.data.searchTerms(query) }
     val rows: List<ListRow> = remember(page.threads, statesKey, bandStates, tab, query, ngMatcher, sort, keywordMatcher, page.reversed, page.only, unreadFirst, collapsedBands, keywordBands, favKeys) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
@@ -412,6 +414,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         ThreadRow(
                             t, pinchScale ?: prefs.listFontScale, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
+                            highlight = highlightTerms,
                             onLongClick = { from -> Haptics.longPress(hapticView); menuFor = PeekTarget(t, from) },
                         ) { vm.openThread(t) }
                         HorizontalDivider(color = Palette.border)
@@ -571,7 +574,10 @@ private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolea
 @Composable
 private fun ThreadRow(
     t: ThreadSummary, k: Float, state: ThreadState?, momentum: Double, rank: Double, now: Long,
-    isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean, onLongClick: (androidx.compose.ui.geometry.Rect?) -> Unit, onClick: () -> Unit,
+    isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean,
+    /** 検索の語(スレタイの当たる所を目立たせる) */
+    highlight: List<String> = emptyList(),
+    onLongClick: (androidx.compose.ui.geometry.Rect?) -> Unit, onClick: () -> Unit,
 ) = WithoutBaseFont {
     // のぞく窓をこの行の位置から広げる
     val anchor = rememberPeekAnchor()
@@ -603,7 +609,7 @@ private fun ThreadRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    threadTitleText(t, isNew, isFavorite),
+                    threadTitleText(t, isNew, isFavorite).withHighlight(highlight),
                     Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = (14 * k).sp, inlineContent = chipInlineContent(),
                     color = if (visited) Palette.threadReadTitle else Palette.textStrong, fontWeight = FontWeight.Normal,
                 )
@@ -627,7 +633,7 @@ private fun ThreadRow(
         Column(Modifier.weight(1f).align(Alignment.CenterVertically).padding(vertical = if (thumb != null) (pad - 2.dp).coerceAtLeast(0.dp) else 0.dp)) {
             val titleColor = if (visited) Palette.threadReadTitle else Palette.textStrong
             Text(
-                threadTitleText(t, isNew, isFavorite),
+                threadTitleText(t, isNew, isFavorite).withHighlight(highlight),
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
                 // 開いたスレは新着があっても既読の色にする。新着は右の数の札で分かる
                 color = titleColor, fontWeight = FontWeight.Normal,

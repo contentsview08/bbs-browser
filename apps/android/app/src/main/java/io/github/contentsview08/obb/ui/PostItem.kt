@@ -92,6 +92,8 @@ fun PostItem(
     style: String = "card", id: String? = null, /** アイコンの右下の数字(2 以上で出す) */ iconCount: Int = 0, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
     /** 人気のレス(返信 3 件から)の色。帯と淡い地 */
     heat: Color? = null,
+    /** スレ内検索の語(本文・頭の当たる所を目立たせる) */
+    highlight: List<String> = emptyList(),
     /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
     onAvatar: (() -> Unit)? = null,
     /** 画像の札を押して、URL を本文に広げたか */
@@ -112,7 +114,8 @@ fun PostItem(
     // 本文の字を小さくしたら余白も一緒に狭く(字に対して余白だけ大きく見えないように)。大きくしたときは広げすぎない
     val s = prefs.bodyScale.coerceIn(0.6f, 1.2f)
     val pad = (prefs.postPad * s).dp
-    val shownBody = if (imagesExpanded) r.bodyExpanded ?: r.body else r.body
+    val shownBody = (if (imagesExpanded) r.bodyExpanded ?: r.body else r.body).withHighlight(highlight)
+    val shownHeader = r.header.withHighlight(highlight)
     val body = @Composable { mod: Modifier ->
         if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
     }
@@ -141,7 +144,7 @@ fun PostItem(
             // 右上の ID の幅だけを除いて、残りを全部頭に使う(頭と余白の両方に weight を付けると幅を半分ずつ分け合い、入るのに折り返す)
             Row(if (idTopRight != null) Modifier.fillMaxWidth() else Modifier, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
-                    Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                    Text(shownHeader, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     if (headChip != null) {
                         Spacer(Modifier.width(6.dp))
                         OwnChip(headChip, Palette.onSky(style))
@@ -149,7 +152,7 @@ fun PostItem(
                 }
                 if (idTopRight != null) Text(idTopRight, Modifier.padding(start = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
             }
-        } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+        } else Text(shownHeader, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
     }
     // 左右の帯: 人気のレスは設定の側(左・右)に暖色と淡い地。レスの見た目に関わらず同じ
     val heatSide = prefs.heatStyle
@@ -204,7 +207,7 @@ fun PostItem(
                         // 右の吹き出しは、ID と頭をまとめて右へ寄せる(名前は出さない)
                         if (right) Row(verticalAlignment = Alignment.CenterVertically) {
                             if (idTopRight != null) Text(idTopRight, Modifier.padding(end = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
-                            Text(r.headerOwn ?: r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                            Text((r.headerOwn ?: r.header).withHighlight(highlight), Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                         } else header()
                     }
                     // 番号と時刻、その外側に「返信」の札を、吹き出しの隣に置く(左の吹き出しなら右、右の吹き出しなら左)
@@ -253,7 +256,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = (10 * s).dp, vertical = pad / 2 + 1.dp)) {
                     // track と onTextLayout は、ID・名前の長押しのメニューに要る
-                    if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                    if (own || toOwn || idTopRight != null) header() else Text(shownHeader, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).coerceAtLeast(1f).em)
                     idLine()

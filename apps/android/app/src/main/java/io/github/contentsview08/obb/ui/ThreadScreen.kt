@@ -155,6 +155,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var filter by page::filter
     var searching by page::searching
     var query by page::query
+    // 検索の語(本文・頭の当たる所を目立たせる)
+    val highlightTerms = remember(query) { io.github.contentsview08.obb.data.searchTerms(query) }
     // 下から順に。押した所の高さ・押したレスは、指を置いたときに控えておく
     val popups = remember { mutableStateListOf<PopupEntry>() }
     // アンカーをたどったレスに色を付けるのはやめた(スマホはキーボードがなく「今どのレスか」を示す意味がない。PC 版のカーソルの色とは別)
@@ -557,6 +559,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     info = null, autoLoad = false, gross = false,
                 ) } else PostItem(
                     it, style = style, id = p.id, iconCount = iconCounts[iconKey(p)] ?: 0, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
+                    highlight = highlightTerms,
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
                     heat = Palette.heat(index.heatCount[p.no] ?: 0),
                     imagesExpanded = p.no in page.expandedImages,

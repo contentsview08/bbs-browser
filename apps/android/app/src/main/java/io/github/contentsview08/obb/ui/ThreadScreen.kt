@@ -306,6 +306,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 作ったときの並びを覚えたままだと、開いたときに位置が見つからず一番下へ飛ぶ
     val shownNow = androidx.compose.runtime.rememberUpdatedState(rowNos)
     val treeNow = androidx.compose.runtime.rememberUpdatedState(treeLines != null)
+    val treeWantedNow = androidx.compose.runtime.rememberUpdatedState(treeWanted)
     val scroller = remember(page, listState) {
         ThreadScroller(ctl, listState, scope, { shownNow.value }, { footerH }, with(density) { 80.dp.toPx() }, { treeNow.value })
     }
@@ -317,7 +318,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+        // ツリー表示のときは、ツリーが組み上がって並びが変わってから位置を決める(番号の順の並びで決めると、組み上がった後にずれる)
+        snapshotFlow { listState.layoutInfo.totalItemsCount > 0 && (!treeWantedNow.value || treeNow.value) }.first { it }
         // レスへ飛ぶときは、ふだんの開く位置を読んだことにしない
         val jumpNo = page.jumpNo
         ctl.keepJump = jumpNo != null

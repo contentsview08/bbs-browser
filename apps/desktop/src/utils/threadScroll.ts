@@ -53,10 +53,13 @@ export function openTarget(input: {
   if (saved && input.savedFound) return { kind: 'saved', position: saved }
   if (input.openPosition === 'bottom') return { kind: 'bottom', pendingUnread: false }
   if (input.openPosition === 'unread' && input.unreadFrom > 1) {
-    if (input.hasUnreadPost) return { kind: 'unread', no: input.unreadFrom }
+    // 途中で閉じていたなら、未読が手元にあってもそこへ戻す(「前回読んだところ」= 閉じたときの位置。2026-11-26。
+    // 前は未読が手元にあると未読の頭へ行き、途中で閉じて開き直すたびに「ここから未読」へ落ちていた)。新着が届いても動かさない
     const closed = usable(input.closed)
-    // 途中で閉じていたならそこへ戻すだけ(新着が届いても動かさない。読んでいた所から新着まで送ると読み飛ばす)。一番下で閉じていたなら一番下で新着を待つ
-    return closed && !closed.bottom ? { kind: 'saved', position: closed, pendingUnread: false } : { kind: 'bottom', pendingUnread: true }
+    if (closed && !closed.bottom) return { kind: 'saved', position: closed, pendingUnread: false }
+    // 一番下で閉じていた・位置を覚えていない: 未読の頭へ。まだ手元になければ一番下で新着を待つ
+    if (input.hasUnreadPost) return { kind: 'unread', no: input.unreadFrom }
+    return { kind: 'bottom', pendingUnread: true }
   }
   return { kind: 'top' }
 }

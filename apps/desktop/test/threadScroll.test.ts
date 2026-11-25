@@ -73,8 +73,11 @@ describe('openTarget: 開いたときの行き先', () => {
     it('閉じたときに一番下にいたなら一番下', () => {
       expect(openTarget({ ...base, closed: { no: 990, offset: 0, bottom: true } })).toEqual({ kind: 'bottom', pendingUnread: true })
     })
-    it('未読があれば未読の頭を優先する', () => {
-      expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true, closed: { no: 578, offset: 0 } })).toEqual({ kind: 'unread', no: 701 })
+    it('途中で閉じていたら、未読が手元にあってもそこへ戻す。一番下で閉じていた・位置がなければ未読の頭', () => {
+      const closed = { no: 578, offset: 0 }
+      expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true, closed })).toEqual({ kind: 'saved', position: closed, pendingUnread: false })
+      expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true, closed: { no: 990, offset: 0, bottom: true } })).toEqual({ kind: 'unread', no: 701 })
+      expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true })).toEqual({ kind: 'unread', no: 701 })
     })
     it('開く位置を一番下にしている人は、閉じたときの位置を使わない', () => {
       expect(openTarget({ ...base, openPosition: 'bottom', closed: { no: 578, offset: 0 } })).toEqual({ kind: 'bottom', pendingUnread: false })

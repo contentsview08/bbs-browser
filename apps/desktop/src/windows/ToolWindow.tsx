@@ -63,8 +63,7 @@ function ReplyWindow({ settings }: { settings: ReturnType<typeof useSettings>[0]
         ref.current?.focus()
         void getCurrentWindow().setFocus()
       }),
-      // 閉じるときにメインへ知らせる(欄を元の場所に戻す)
-      getCurrentWindow().onCloseRequested(() => void broadcast(REPLY_POPUP_EVENT, { open: false })),
+      // 閉じたことは Rust(lib.rs の on_window_event)がメインに知らせる(JS の onCloseRequested だと destroy の権限が要って閉じなくなる)
     ]
     return () => offs.forEach((o) => void o.then((f) => f()))
   }, [])

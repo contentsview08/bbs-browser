@@ -745,6 +745,13 @@ pub fn run() {
         context.config_mut().app.app_directories_override = Some(tauri::utils::config::AppDirectoriesOverride::Root(dir));
     }
     tauri::Builder::default()
+        // 書き込み欄のポップアップ(reply の窓)が閉じたら、メインに知らせる(欄を元の場所に戻す)。
+        // JS の onCloseRequested で知らせると、閉じるのに destroy の権限が要って窓が閉じなくなるので、こちらで見る
+        .on_window_event(|window, event| {
+            if window.label() == "reply" && matches!(event, tauri::WindowEvent::Destroyed) {
+                let _ = tauri::Emitter::emit_to(window.app_handle(), "main", "reply-popup", serde_json::json!({ "from": "reply", "payload": { "open": false } }));
+            }
+        })
         .register_asynchronous_uri_scheme_protocol(media_cache::SCHEME, media_cache::handle_protocol)
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())

@@ -13,6 +13,7 @@ import { measurePost } from '../utils/postLimit'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { ReplyLayout } from '../ui/settings'
+import { FloatingMenu, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 
 export interface ReplyFormHandle {
   /** 本文のカーソル位置に文字を入れる(>>12 の挿入など) */
@@ -72,6 +73,8 @@ interface Props {
   phraseBar?: string[]
   /** 上げる前の確かめで「画像にスレタイと URL を入れる」に使う、このスレのスレタイと URL */
   stamp?: { title?: string; url?: string }
+  /** 欄の空いた所を右クリックしたときのメニュー(しまう・右に置く・別のウィンドウに出す など)。なければ出さない */
+  menuItems?: MenuItem[]
 }
 
 const INPUT =
@@ -82,6 +85,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [mail, setMail] = useState(props.initialMail)
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  /** 右クリックのメニューの位置(出していなければ undefined) */
+  const [menu, setMenu] = useState<MenuPos>()
   const [result, setResult] = useState<PostResult>()
   // スマホ: 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
   useEffect(() => {
@@ -437,7 +442,22 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   return (
     // data-zoom="reply": この中で Ctrl+ホイールを回すと、書き込み欄の本文の文字の大きさが変わる(hooks/useWheelZoom.ts)
-    <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden" data-zoom="reply" {...dropProps(media)}>
+    <div
+      className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden"
+      data-zoom="reply"
+      {...dropProps(media)}
+      // 空いた所(入力欄・ボタン・リンクの上ではない)を右クリックしたら、欄の置き方のメニュー。入力欄の上は OS のメニューのまま
+      onContextMenu={
+        props.menuItems?.length
+          ? (e) => {
+              if (wantsNativeMenu(e) || (e.target as Element | null)?.closest?.('button')) return
+              e.preventDefault()
+              setMenu(menuPosAt(e.clientX, e.clientY))
+            }
+          : undefined
+      }
+    >
+      {menu && props.menuItems && <FloatingMenu pos={menu} items={props.menuItems} onClose={() => setMenu(undefined)} />}
       {media.confirmView}
       {media.error && (
         <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">

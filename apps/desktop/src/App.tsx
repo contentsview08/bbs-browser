@@ -63,7 +63,8 @@ import ThreadListPanel, { threadId, type SortMode } from './components/ThreadLis
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
-import { broadcast, canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { broadcast, canOpenToolWindow, onBroadcast, openToolWindow, serveMain, REPLY_CONTEXT_EVENT, REPLY_INSERT_EVENT, REPLY_POPUP_EVENT, type ReplyContext } from './host/crossWindow'
 import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { favoriteChange, favoriteKey, isFavoriteIn } from './utils/favoriteBoards'
@@ -2620,8 +2621,55 @@ export default function App() {
     const [boards, favBoards, favThreads] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavorites(), store.listFavoriteThreads()])
     return [...boards.flat().map((b) => b.url), ...favBoards.map((b) => b.url), ...favThreads.map((f) => f.thread.boardUrl)]
   }
-  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate })
-  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate }
+  /** 書き込み欄のポップアップが書くスレ(いま開いているタブ)。関数は渡せないので、値だけ */
+  const replyContext = (): ReplyContext | null => {
+    if (!activeTab) return null
+    const t = activeTab.thread
+    const c = connectorOf(t.connectorId)
+    const meta = settings.boardMeta[t.boardUrl]
+    return {
+      thread: t,
+      title: activeTab.log?.title || t.title,
+      threadUrl: c.threadWebUrl(t),
+      canPost: c.createPost !== undefined,
+      disabled: activeTab.log?.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined,
+      postName: meta?.defaultName ?? settings.postName,
+      postMail: meta?.defaultMail ?? settings.postMail,
+      limits: boardInfos.get(t.boardUrl)?.limits,
+      accounts: postAccountsOf(t.connectorId, t.boardUrl),
+    }
+  }
+  const rpcRef = useRef({
+    loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate,
+    replyContext, submitPost, confirmPost, openLink,
+    replyUploaded: (u: UploadedFile) => { if (store) void new UserOps(store).uploadAdd(u).catch(backgroundError('アップロード履歴の保存')) },
+    replyToggleAccount: (id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on }),
+    replyOpenAccountSettings: () => openSettings('accounts'),
+    replyLoadDraft: (t: ThreadSummary) => store?.getDraft(t),
+    replySaveDraft: (t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存')),
+  })
+  rpcRef.current = {
+    loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus, exportBackupExtras, importBackupExtras, importChmate,
+    replyContext, submitPost, confirmPost, openLink,
+    replyUploaded: (u: UploadedFile) => { if (store) void new UserOps(store).uploadAdd(u).catch(backgroundError('アップロード履歴の保存')) },
+    replyToggleAccount: (id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on }),
+    replyOpenAccountSettings: () => openSettings('accounts'),
+    replyLoadDraft: (t: ThreadSummary) => store?.getDraft(t),
+    replySaveDraft: (t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存')),
+  }
+  // 書き込み欄のポップアップ(reply の窓)が開いているか。開いている間はスレ表示の中の欄を出さない。窓が閉じたら欄は元の場所に戻る
+  const [replyPopup, setReplyPopup] = useState(false)
+  useEffect(() => {
+    if (!canOpenToolWindow) return
+    void WebviewWindow.getByLabel('reply').then((w) => setReplyPopup(!!w))
+    const off = onBroadcast<{ open: boolean }>(REPLY_POPUP_EVENT, (p) => setReplyPopup(p.open))
+    return () => void off.then((f) => f())
+  }, [])
+  // 開いているスレ・名前・アカウントが変わったら、ポップアップに取り直させる
+  const replyContextKey = activeTab ? `${activeTab.id}|${activeTab.log?.title ?? ''}|${activeTab.log?.status ?? ''}` : ''
+  useEffect(() => {
+    if (replyPopup) void broadcast(REPLY_CONTEXT_EVENT, null)
+  }, [replyPopup, replyContextKey, settings.postName, settings.postMail, settings.boardMeta, settings.postAccounts, boardInfos])
   useEffect(() => {
     if (!store || !canOpenToolWindow) return
     const offs = [
@@ -2643,6 +2691,16 @@ export default function App() {
         login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),
         pruneLogs: () => rpcRef.current.pruneLogs(),
         loginStatus: () => [...rpcRef.current.loginStatus.entries()],
+        // 書き込み欄のポップアップ(いま開いているスレに書く。submitPost・confirmPost は activeTab を見る)
+        replyContext: () => rpcRef.current.replyContext(),
+        replySubmit: (input: PostInput) => rpcRef.current.submitPost(input),
+        replyConfirm: ({ confirm, input }: { confirm: PostConfirm; input: PostInput }) => rpcRef.current.confirmPost(confirm, input),
+        replyOpenUrl: (url: string) => void rpcRef.current.openLink(url),
+        replyUploaded: (u: UploadedFile) => rpcRef.current.replyUploaded(u),
+        replyToggleAccount: ({ id, on }: { id: string; on: boolean }) => rpcRef.current.replyToggleAccount(id, on),
+        replyOpenAccountSettings: () => rpcRef.current.replyOpenAccountSettings(),
+        replyLoadDraft: (t: ThreadSummary) => rpcRef.current.replyLoadDraft(t),
+        replySaveDraft: ({ thread, body }: { thread: ThreadSummary; body: string }) => rpcRef.current.replySaveDraft(thread, body),
         aiModelStatus: () => aiModelStatus(),
         aiTestScore: ({ text, prompt }: { text: string; prompt: string }) => testScore(text, prompt),
         aiDeleteModel: () => deleteAiModelFiles(),
@@ -2810,6 +2868,8 @@ export default function App() {
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
     toggleFavoriteThread: useEvent((t: ThreadSummary) => toggleFavoriteThread(t)),
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
+    openReplyPopup: useEvent(() => void openToolWindow('reply').catch(backgroundError('書き込み欄のウィンドウ'))),
+    replyPopupInsert: useEvent((text: string) => void broadcast(REPLY_INSERT_EVENT, text)),
     openAccountSettings: useEvent(() => openSettings('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
@@ -3307,6 +3367,7 @@ export default function App() {
                   favorite={favIds.has(id)}
                   postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
                   showBackToList={single}
+                  replyPopup={replyPopup && canOpenToolWindow}
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
                   postByteLength={connector?.postByteLength}
                   maxPosts={connector?.maxPosts}

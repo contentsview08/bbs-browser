@@ -1,12 +1,14 @@
 // 道具のウィンドウ(PC)。設定・NG の管理表を、メインのウィンドウの外に出す(index.html?window=settings / ng)。
 // DB は同じものを開く。設定の変更は useSettings が settings-changed で写し合う。
 // お気に入り板・サイト・アカウントは DB に直に書き、*-changed でメインに知らせる。メインでしかできないこと(板の一覧を取る・ログイン・板を開く)は callMain で頼む
-import { useEffect, useMemo, useState } from 'react'
-import type { Board, LoginResult, SiteConfig } from '@bbs-browser/connectors'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { findConnector, type Board, type LoginResult, type PostConfirm, type PostInput, type PostResult, type SiteConfig, type ThreadSummary } from '@bbs-browser/connectors'
 import { UserOps, type AccountRecord, type LogStore } from '@bbs-browser/logstore'
 import { openLogStore } from '../host/logStore'
 import { useSettings } from '../ui/settings'
-import { broadcast, callMain, onBroadcast, onToolOpen, toolKindOfThisWindow } from '../host/crossWindow'
+import { broadcast, callMain, onBroadcast, onToolOpen, toolKindOfThisWindow, REPLY_CONTEXT_EVENT, REPLY_INSERT_EVENT, REPLY_POPUP_EVENT, type ReplyContext } from '../host/crossWindow'
+import ReplyForm, { type ReplyFormHandle } from '../components/ReplyForm'
+import type { UploadedFile } from '../host/uploader'
 import { mirrorAiModelStatus } from '../hooks/useAiNg'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { BackupExtras } from '../utils/backup'
@@ -35,8 +37,97 @@ export default function ToolWindow() {
     </div>
   ) : kind === 'keywords' ? (
     <KeywordsWindow store={store} settings={settings} update={update} />
+  ) : kind === 'reply' ? (
+    <ReplyWindow settings={settings} />
   ) : (
     <SettingsWindow store={store} settings={settings} update={update} />
+  )
+}
+
+/**
+ * 書き込み欄のポップアップ。欄は 1 つで、メインで「いま開いているスレ」に書く(スレを切り替えるとこちらも切り替わる)。
+ * 書き込みそのもの(コネクタ・アカウント・書き込み後の取り直し)はメインに頼む(replySubmit など。関数は窓をまたげないので値だけ渡す)。
+ * 開いている間、メインはスレ表示の中の欄を出さない。この窓を閉じると欄は元の場所に戻る(REPLY_POPUP_EVENT)
+ */
+function ReplyWindow({ settings }: { settings: ReturnType<typeof useSettings>[0] }) {
+  const [ctx, setCtx] = useState<ReplyContext | null>()
+  const ref = useRef<ReplyFormHandle>(null)
+  useEffect(() => {
+    const load = () => callMain<ReplyContext | null>('replyContext').then(setCtx, backgroundError('書き込むスレ'))
+    void load()
+    void broadcast(REPLY_POPUP_EVENT, { open: true })
+    const offs = [
+      onBroadcast(REPLY_CONTEXT_EVENT, () => void load()),
+      onBroadcast<string>(REPLY_INSERT_EVENT, (text) => {
+        ref.current?.insert(text)
+        ref.current?.focus()
+        void getCurrentWindow().setFocus()
+      }),
+      // 閉じるときにメインへ知らせる(欄を元の場所に戻す)
+      getCurrentWindow().onCloseRequested(() => void broadcast(REPLY_POPUP_EVENT, { open: false })),
+    ]
+    return () => offs.forEach((o) => void o.then((f) => f()))
+  }, [])
+  useEffect(() => {
+    void getCurrentWindow().setTitle(ctx ? `書き込み: ${ctx.title}` : '書き込み')
+  }, [ctx?.title])
+  if (ctx === undefined) return <div className="h-full w-full bg-panel-reply" />
+  if (ctx === null || !ctx.canPost) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-panel-reply text-sm text-c-text-muted px-4 text-center">
+        {ctx === null ? 'スレを開くと、ここに書き込み欄が出ます' : 'この掲示板には書き込めません'}
+      </div>
+    )
+  }
+  const t = ctx.thread
+  const connector = findConnector(t.connectorId)
+  const key = `${t.boardUrl}${t.key}`
+  return (
+    <div className="h-full w-full flex flex-col bg-panel-reply text-c-text-body">
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-c-border text-xs text-c-text-muted">
+        <span className="material-symbols-outlined text-base">edit</span>
+        <span className="flex-1 truncate" title={ctx.title}>
+          {ctx.title}
+        </span>
+        <button type="button" className="text-c-accent hover:underline whitespace-nowrap" title="このウィンドウを閉じて、書き込み欄をスレ表示に戻す" onClick={closeWindow}>
+          元の場所に戻す
+        </button>
+      </div>
+      <div className="flex-1 min-h-0">
+        <ReplyForm
+          key={key}
+          ref={ref}
+          layout="bottom"
+          disabled={ctx.disabled}
+          initialName={ctx.postName}
+          initialMail={ctx.postMail}
+          onSubmit={(input: PostInput) => callMain<PostResult>('replySubmit', input)}
+          onConfirm={(confirm: PostConfirm, input: PostInput) => callMain<PostResult>('replyConfirm', { confirm, input })}
+          onOpenUrl={(url) => void callMain('replyOpenUrl', url)}
+          uploader={{
+            maxDimension: settings.uploadMaxDimension,
+            userhash: settings.catboxUserhash.trim() || undefined,
+            host: settings.uploadHost,
+            imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
+            imgurClientId: settings.imgurClientId.trim() || undefined,
+          }}
+          onUploaded={(u: UploadedFile) => void callMain('replyUploaded', u)}
+          draft={{
+            load: () => callMain<string | undefined>('replyLoadDraft', t),
+            save: (body: string) => void callMain('replySaveDraft', { thread: t, body }),
+            key: `reply:${key}`,
+          }}
+          limits={ctx.limits}
+          byteLength={connector?.postByteLength}
+          accounts={ctx.accounts}
+          onToggleAccount={(id, on) => void callMain('replyToggleAccount', { id, on })}
+          onOpenAccountSettings={() => void callMain('replyOpenAccountSettings')}
+          attach={connector?.attachments}
+          phraseBar={settings.quickPhrases}
+          stamp={{ title: ctx.title, url: ctx.threadUrl }}
+        />
+      </div>
+    </div>
   )
 }
 

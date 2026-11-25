@@ -90,6 +90,10 @@ export interface TabEvents {
   toggleFavoriteThread: (t: ThreadSummary) => void
   /** 書き込むときに使うアカウントのオン・オフ(どの板でも同じ) */
   togglePostAccount: (id: string, on: boolean) => void
+  /** 書き込み欄を別のウィンドウ(ポップアップ)に出す(開いていれば前に出す) */
+  openReplyPopup: () => void
+  /** ポップアップの書き込み欄の本文に文字を入れる(>>12 など) */
+  replyPopupInsert: (text: string) => void
   /** 書き込みの下書きを読む・保存する(空なら消す) */
   loadDraft: (t: ThreadSummary) => Promise<string | undefined>
   saveDraft: (t: ThreadSummary, body: string) => void
@@ -124,6 +128,8 @@ interface Props {
   postAccounts?: PostAccountOption[]
   /** 1 画面のとき: スレタイの左に、スレ一覧へ戻るボタンを出す */
   showBackToList?: boolean
+  /** 書き込み欄を別のウィンドウ(ポップアップ)に出しているか。出している間はスレ表示の中の欄を出さない */
+  replyPopup?: boolean
   /** 板の書き込みの上限と、その掲示板での数え方 */
   postLimits?: PostLimits
   postByteLength?: (text: string) => number
@@ -165,6 +171,7 @@ function TabPane({
   favorite,
   postAccounts,
   showBackToList,
+  replyPopup,
   postLimits,
   postByteLength,
   maxPosts,
@@ -239,6 +246,9 @@ function TabPane({
       onResizeReply={ev.resizeReply}
       onSetReplyCollapsed={ev.setReplyCollapsed}
       onBackToList={showBackToList ? ev.backToList : undefined}
+      replyPopup={replyPopup}
+      onOpenReplyPopup={ev.openReplyPopup}
+      onReplyPopupInsert={ev.replyPopupInsert}
       onOpenDrawer={ev.openDrawer}
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}

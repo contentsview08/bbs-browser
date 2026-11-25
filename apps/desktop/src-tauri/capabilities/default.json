@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "メイン・設定・NG のウィンドウの権限。掲示板はどこにあるか分からないので、http/https の通信はすべて許可する。ウィンドウ枠はアプリで描くので、最小化・最大化・閉じる・ドラッグを許可する。更新は確かめる・落とす・入れるの 3 つだけ(画面からは plugin-updater の署名を確かめる道でしか入れ替えられない)。SQL は開くだけで、文は自前の命令(sql_batch.rs。ATTACH・VACUUM などを断る)で流す",
-  "windows": ["main", "settings", "ng", "keywords"],
+  "windows": ["main", "settings", "ng", "keywords", "reply"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",

@@ -2,11 +2,33 @@
 // - openToolWindow: 道具のウィンドウを開く(開いていれば前に出して、出す分類を知らせる)
 // - 設定の変更は settings-changed、お気に入り板・サイト・アカウントの変更は *-changed の知らせで、ウィンドウどうしが写し合う
 // - 道具のウィンドウから、メインでしかできないこと(板の一覧を取る・ログイン・板を開く など)は callMain で頼む(main-rpc)
+import type { PostLimits, ThreadSummary } from '@bbs-browser/connectors'
+import type { PostAccountOption } from '../components/PostAccountMenu'
 import { emit, emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 
-export type ToolKind = 'settings' | 'ng' | 'keywords'
+export type ToolKind = 'settings' | 'ng' | 'keywords' | 'reply'
+
+// ── 書き込み欄のポップアップ(reply の窓)。メインと合図でつながる ──
+/** ポップアップが開いた・閉じた(payload: { open }) */
+export const REPLY_POPUP_EVENT = 'reply-popup'
+/** いま開いているスレが変わった(ポップアップは replyContext を取り直す) */
+export const REPLY_CONTEXT_EVENT = 'reply-context-changed'
+/** 本文のカーソルの位置に文字を入れてほしい(>>12 など。payload: 文字) */
+export const REPLY_INSERT_EVENT = 'reply-insert'
+/** ポップアップが書き込むスレ(メインでいま開いているタブ)。関数は渡せないので、コネクタの id からポップアップ側で引く */
+export interface ReplyContext {
+  thread: ThreadSummary
+  title: string
+  threadUrl: string
+  canPost: boolean
+  disabled?: string
+  postName: string
+  postMail: string
+  limits?: PostLimits
+  accounts: PostAccountOption[]
+}
 
 /** 道具のウィンドウを開けるか(PC 版は true。web 版は false で、画面の中に出す) */
 export const canOpenToolWindow = true
@@ -22,13 +44,15 @@ export function windowLabel(): string {
 /** 今のウィンドウが道具のウィンドウなら、その種類(URL の ?window=) */
 export function toolKindOfThisWindow(): ToolKind | undefined {
   const w = new URLSearchParams(location.search).get('window')
-  return w === 'settings' || w === 'ng' || w === 'keywords' ? w : undefined
+  return w === 'settings' || w === 'ng' || w === 'keywords' || w === 'reply' ? w : undefined
 }
 
-const TOOL_DEF: Record<ToolKind, { title: string; width: number; height: number }> = {
-  settings: { title: '設定', width: 1000, height: 720 },
-  ng: { title: 'NG の一覧', width: 960, height: 640 },
-  keywords: { title: 'キーワードの一覧', width: 960, height: 640 },
+const TOOL_DEF: Record<ToolKind, { title: string; width: number; height: number; minWidth: number; minHeight: number }> = {
+  settings: { title: '設定', width: 1000, height: 720, minWidth: 640, minHeight: 420 },
+  ng: { title: 'NG の一覧', width: 960, height: 640, minWidth: 640, minHeight: 420 },
+  keywords: { title: 'キーワードの一覧', width: 960, height: 640, minWidth: 640, minHeight: 420 },
+  // 書き込み欄のポップアップ: 小さくても使えるように
+  reply: { title: '書き込み', width: 720, height: 340, minWidth: 400, minHeight: 220 },
 }
 
 /** 道具のウィンドウを開く(開いていれば前に出す)。tab は設定の分類 */
@@ -43,7 +67,7 @@ export async function openToolWindow(kind: ToolKind, params: { tab?: string } = 
   }
   const def = TOOL_DEF[kind]
   const q = new URLSearchParams({ window: kind, ...(params.tab ? { tab: params.tab } : {}) })
-  const w = new WebviewWindow(label, { url: `index.html?${q}`, title: def.title, width: def.width, height: def.height, minWidth: 640, minHeight: 420 })
+  const w = new WebviewWindow(label, { url: `index.html?${q}`, title: def.title, width: def.width, height: def.height, minWidth: def.minWidth, minHeight: def.minHeight })
   await new Promise<void>((resolve, reject) => {
     void w.once('tauri://created', () => resolve())
     void w.once('tauri://error', (e) => reject(new Error(String(e.payload))))

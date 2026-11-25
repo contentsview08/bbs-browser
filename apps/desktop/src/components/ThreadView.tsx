@@ -135,6 +135,10 @@ interface Props {
   onOpenDrawer?: () => void
   /** 書き込み欄をしまう・出す(設定に覚える) */
   onSetReplyCollapsed: (collapsed: boolean) => void
+  /** 書き込み欄を別のウィンドウ(ポップアップ)に出しているか(PC)。出している間は中の欄を出さず、>>12 の挿入はポップアップへ送る */
+  replyPopup?: boolean
+  onOpenReplyPopup?: () => void
+  onReplyPopupInsert?: (text: string) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
   /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
@@ -947,6 +951,8 @@ export default function ThreadView(props: Props) {
   /** 書き込み欄に何かする(しまっていたら出してから) */
   const pendingReply = useRef<((h: ReplyFormHandle) => void) | undefined>(undefined)
   const withReply = (fn: (h: ReplyFormHandle) => void) => {
+    // ポップアップに出している間は、そちらの欄に入れる(欄は 1 つ。いま開いているスレに書く)
+    if (props.replyPopup && !isMobile) return fn({ insert: (text) => props.onReplyPopupInsert?.(text), focus: () => props.onOpenReplyPopup?.() })
     if (!replyCollapsed && replyRef.current) return fn(replyRef.current)
     pendingReply.current = fn
     openReply()
@@ -1479,6 +1485,9 @@ export default function ThreadView(props: Props) {
             icon: replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda',
             onClick: () => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom'),
           },
+          ...(props.onOpenReplyPopup && !isMobile
+            ? [{ id: 'replyPopup', label: props.replyPopup ? '書き込み欄のウィンドウを前に出す' : '書き込み欄を別のウィンドウに出す', icon: 'open_in_new', onClick: () => props.onOpenReplyPopup?.() }]
+            : []),
         ]
       : []),
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
@@ -2752,7 +2761,21 @@ export default function ThreadView(props: Props) {
       )}
       </div>
 
-      {props.onSubmitPost && replyCollapsed && !isMobile && (
+      {props.onSubmitPost && props.replyPopup && !isMobile && (
+        // 別のウィンドウに出している間は、細い帯だけ(押すとそのウィンドウを前に出す)。ウィンドウを閉じると欄はここに戻る
+        <button
+          type="button"
+          onClick={() => props.onOpenReplyPopup?.()}
+          className={`flex-shrink-0 flex items-center justify-center gap-2 bg-panel-reply text-sm text-c-text-muted hover:text-c-text-strong transition-colors border-c-border ${
+            replyLayout === 'bottom' ? 'h-9 border-t' : 'w-9 border-l flex-col'
+          }`}
+          title="書き込み欄は別のウィンドウに出しています(押すと前に出す。ウィンドウを閉じるとここに戻ります)"
+        >
+          <span className="material-symbols-outlined text-lg">open_in_new</span>
+          {replyLayout === 'bottom' && '書き込み欄は別のウィンドウに'}
+        </button>
+      )}
+      {props.onSubmitPost && replyCollapsed && !isMobile && !props.replyPopup && (
         // しまっているときは、細い帯(右に置くときは細い縦の帯)だけを出す。押すと書き込み欄を出す
         <button
           type="button"
@@ -2766,7 +2789,7 @@ export default function ThreadView(props: Props) {
           {replyLayout === 'bottom' && '書き込む'}
         </button>
       )}
-      {replyFormProps && !replyCollapsed && !isMobile && (
+      {replyFormProps && !replyCollapsed && !isMobile && !props.replyPopup && (
         <>
           <Splitter
             layout={replyLayout}
@@ -2788,6 +2811,14 @@ export default function ThreadView(props: Props) {
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
               onCollapse={closeReply}
+              // 欄の空いた所を右クリック: しまう・置く場所・別のウィンドウに出す
+              menuItems={[
+                { label: '書き込み欄をしまう', icon: 'keyboard_hide', onClick: closeReply },
+                replyLayout === 'bottom'
+                  ? { label: '右に置く', icon: 'view_sidebar', onClick: () => props.onChangeReplyLayout('right') }
+                  : { label: '下に置く', icon: 'view_agenda', onClick: () => props.onChangeReplyLayout('bottom') },
+                ...(props.onOpenReplyPopup ? [{ label: '別のウィンドウに出す', icon: 'open_in_new', onClick: () => props.onOpenReplyPopup?.() }] : []),
+              ]}
             />
           </div>
         </>

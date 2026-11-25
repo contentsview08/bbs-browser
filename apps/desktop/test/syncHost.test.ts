@@ -47,7 +47,8 @@ describe('同期の PC の部品', () => {
 
   it('開いた窓は権限の対象に入らない', () => {
     const caps = JSON.parse(readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'))
-    expect(caps.windows).toEqual(['main', 'settings', 'ng', 'keywords'])
+    // 自分の窓(メイン・道具の窓・書き込み欄のポップアップ)だけ。同期のログインで開く外のページの窓(sync-login)は入れない
+    expect(caps.windows).toEqual(['main', 'settings', 'ng', 'keywords', 'reply'])
     expect(caps.remote).toBeUndefined()
   })
 

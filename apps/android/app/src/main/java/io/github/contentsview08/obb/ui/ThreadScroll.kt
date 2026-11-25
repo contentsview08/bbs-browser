@@ -304,24 +304,6 @@ class ThreadScroller(
 
     fun toUnread(no: Int, animate: Boolean = false) { scope.launch { toUnreadNow(no, animate) } }
 
-    /** ツリー表示の「未読の頭」: 並んでいる順で最初の、番号が from 以上の行(番号の順に並ばないので、番号ではなく並びで探す)。なければ -1 */
-    private fun firstUnreadRow(from: Int): Int {
-        val rows = shown()
-        for (i in rows.indices) if (rows[i] >= from && rows[i] > 0) return i
-        return -1
-    }
-
-    /**
-     * ツリー表示で未読の頭へ(開いたとき・待っていた新着が届いたとき)。新着が届いた直後はツリーを組み直すまで行に出ないので、
-     * 少しのあいだ待つ(組み直しは別のスレッドで数十 ms)。それでも出なければ一番下へ
-     */
-    suspend fun toUnreadTreeNow(from: Int) {
-        var i = firstUnreadRow(from)
-        var waited = 0
-        while (i < 0 && waited < 1500) { delay(50); waited += 50; i = firstUnreadRow(from) }
-        if (i < 0) return toBottomNow()
-        state.scrollToItem(i, -(visibleHeight() * UNREAD_AT).toInt())
-    }
     fun toBottom(animate: Boolean = false) { scope.launch { toBottomNow(animate) } }
 
     /**
@@ -359,16 +341,27 @@ class ThreadScroller(
         val savedIdx = idx(saved)
         val closedIdx = idx(closed)
         val unreadFrom = page.unreadFrom
-        when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom }, closed, closedIdx >= 0)) {
-            // ツリー表示では、一番下が最後のレスとは限らないので、読み終えていたレスの位置へ(新着が届いたら grew が未読の頭へ送る)
-            is OpenTarget.Bottom -> if (tree() && t.pendingUnread) { toUnreadNow(ctl.sent); ctl.pendingUnread = true } else { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
+        if (tree()) {
+            // ツリー表示: 未読は枝に散るので「未読の頭」を追わない。閉じたときの位置に戻すだけ(一番下で閉じたなら一番下、なければ先頭)。
+            // 設定が先頭・一番下なら、そのとおり(PC 版と同じ)
+            val pos = saved ?: closed
+            val posIdx = if (saved != null) savedIdx else closedIdx
+            when {
+                jumpTo != null -> jumpToNow(jumpTo)
+                openPosition == "top" -> state.scrollToItem(0)
+                openPosition == "bottom" || pos?.bottom == true -> toBottomNow()
+                pos != null && posIdx >= 0 -> state.scrollToItem(posIdx, -pos.offset)
+                else -> state.scrollToItem(0)
+            }
+            ctl.pendingUnread = false
+        } else when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom }, closed, closedIdx >= 0)) {
+            is OpenTarget.Bottom -> { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
             // 覚えたずれは「上の帯の下からの位置」(上へはみ出していれば負)。scrollToItem は送る量なので符号を返す
             is OpenTarget.Saved -> {
                 state.scrollToItem(if (t.pos === saved) savedIdx else closedIdx, -t.pos.offset)
                 ctl.pendingUnread = t.pendingUnread
             }
-            // ツリー表示では、並んでいる順で最初の未読の行へ(番号の順と同じ見え方。あとの未読は枝に散るので、新着の印とミニマップで)
-            is OpenTarget.Unread -> if (tree()) toUnreadTreeNow(t.no) else toUnreadNow(t.no)
+            is OpenTarget.Unread -> toUnreadNow(t.no)
             OpenTarget.Top -> if (jumpTo != null) jumpToNow(jumpTo) else state.scrollToItem(0)
         }
         // この時点で手元にあるレスは「新着」として扱わない
@@ -418,9 +411,8 @@ class ThreadScroller(
         val unreadFrom = page.unreadFrom
         when {
             ctl.keepJump -> {}
-            // ツリー表示: 未読を待っていた(開いたとき手元に未読がなかった)なら、並びで最初の未読の行へ。
-            // 読んでいる途中の新着は、あちこちの枝に入るので送らずに位置を保つ(新着の印と札で知らせる)
-            tree() -> if (ctl.pendingUnread) scope.launch { toUnreadTreeNow(unreadFrom) }
+            // ツリー表示では新着があちこちの枝に入るので、送らずに読んでいる位置を保つ(新着の印と札で知らせる)
+            tree() -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
             opening -> if (read >= prevLastNo) toUnread(head)
             // 実況モードの間は、流す方が新着まで運ぶ(送る動きどうしがぶつからないように)

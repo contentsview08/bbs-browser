@@ -69,24 +69,49 @@ fn write(path: &Path, s: &Saved) {
     }
 }
 
-/// 覚えていた位置と大きさへ戻す。最大化していたなら true(出してからもう一度 maximize する。隠れたままの窓への maximize は効かないことがある)
-fn apply_saved(window: &WebviewWindow) -> bool {
-    let Some(saved) = path_of(window).and_then(|p| read(&p)) else { return false };
-    let screens: Vec<Area> = window
+/// 最大化した窓の形か(どれかの画面の幅いっぱい。Windows の枠なし窓の最大化は、画面より 8px ずつ外にはみ出した大きさになる)。
+/// 最大化の途中は is_maximized がまだ false のまま、この形の Moved が先に届く。これを「元の大きさ」として覚えると、
+/// 次の起動で元の大きさが画面いっぱいになり、最大化を解いても戻れない・最大化が効かないように見えた
+fn looks_maximized(width: u32, screens: &[Area]) -> bool {
+    screens.iter().any(|a| width >= a.width)
+}
+
+fn screens_of(window: &WebviewWindow) -> Vec<Area> {
+    window
         .available_monitors()
         .unwrap_or_default()
         .iter()
         .map(|m| Area { x: m.position().x, y: m.position().y, width: m.size().width, height: m.size().height })
-        .collect();
+        .collect()
+}
+
+/// 覚えていた位置と大きさへ戻す(窓はまだ隠れている)。最大化していたなら true(出してから maximize する。隠れたままの窓への maximize は効かないことがある)
+fn apply_saved(window: &WebviewWindow) -> bool {
+    let Some(saved) = path_of(window).and_then(|p| read(&p)) else { return false };
+    let screens = screens_of(window);
     if !usable(&saved, &screens) {
         return false;
     }
-    let _ = window.set_size(PhysicalSize::new(saved.width, saved.height));
-    let _ = window.set_position(PhysicalPosition::new(saved.x, saved.y));
-    if saved.maximized {
-        let _ = window.maximize();
-    }
+    // 元の大きさが最大化の形で覚わっていたら(前の版の取りこぼし)、既定の大きさに置き直す
+    let rect = if saved.maximized && looks_maximized(saved.width, &screens) { default_rect(window) } else { saved };
+    let _ = window.set_size(PhysicalSize::new(rect.width, rect.height));
+    let _ = window.set_position(PhysicalPosition::new(rect.x, rect.y));
     saved.maximized
+}
+
+/// 出したあとに最大化する。効いていなければ少し待ってやり直す(出した直後の maximize が効かないことがある)
+fn maximize_after_show(window: &WebviewWindow) {
+    let _ = window.maximize();
+    let w = window.clone();
+    tauri::async_runtime::spawn(async move {
+        for wait in [150u64, 600, 1500] {
+            tokio::time::sleep(Duration::from_millis(wait)).await;
+            if w.is_maximized().unwrap_or(true) {
+                return;
+            }
+            let _ = w.maximize();
+        }
+    });
 }
 
 /// 最大化したまま覚えるものがないとき(初めての起動ですぐ最大化した)に使う、元に戻したときの大きさ(tauri.conf.json の既定と同じ)
@@ -124,6 +149,10 @@ fn capture(window: &WebviewWindow, current: &Mutex<Option<Saved>>) -> Option<Sav
     } else {
         let p = window.outer_position().ok()?;
         let z = window.outer_size().ok()?;
+        // 最大化の途中(形は最大化、印はまだ)は、元の大きさとして覚えない
+        if looks_maximized(z.width, &screens_of(window)) {
+            return None;
+        }
         Saved { x: p.x, y: p.y, width: z.width, height: z.height, maximized: false }
     };
     *slot = Some(next);
@@ -135,9 +164,9 @@ pub fn setup(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else { return };
     let maximized = apply_saved(&window);
     let _ = window.show();
-    // 隠れている間の maximize は効かないことがあるので、出してからもう一度(前は最大化したまま閉じても次の起動で戻らなかった)
+    // 隠れている間の maximize は効かないことがあるので、出してから(効かなければやり直す)
     if maximized {
-        let _ = window.maximize();
+        maximize_after_show(&window);
     }
     let Some(path) = path_of(&window) else { return };
     let current = Arc::new(Mutex::new(read(&path)));
@@ -206,6 +235,13 @@ mod tests {
     fn 右へはみ出しても帯が見えれば戻す() {
         assert!(usable(&saved(1800, 100), &[SCREEN]));
         assert!(!usable(&saved(1860, 100), &[SCREEN]));
+    }
+
+    #[test]
+    fn 最大化の形は元の大きさとして扱わない() {
+        assert!(looks_maximized(2576, &[Area { x: 0, y: 0, width: 2560, height: 1440 }]));
+        assert!(looks_maximized(1936, &[SCREEN, SECOND]));
+        assert!(!looks_maximized(1280, &[SCREEN]));
     }
 
     #[test]

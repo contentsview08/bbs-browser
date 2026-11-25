@@ -243,7 +243,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           osFont={true}
           onPick={(key) => update('fontFamily', key)}
           onImportFont={() =>
-            void pickOpenPath('フォント', ['ttf', 'otf', 'woff', 'woff2']).then(async (path) => {
+            void pickOpenPath('フォント', ['ttf', 'otf', 'ttc', 'woff', 'woff2']).then(async (path) => {
               if (!path) return
               const name = await importUserFont(path)
               update('userFontName', name)

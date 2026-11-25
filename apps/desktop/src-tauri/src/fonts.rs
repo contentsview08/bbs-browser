@@ -17,7 +17,7 @@ const FONT_CSS: &str = "font.css";
 const TMP_PREFIX: &str = ".tmp-";
 /// 自分で選んだフォントのファイルの置き場(fonts/user)。CSS の font-family は 'OBB User Font'
 const USER_KEY: &str = "user";
-const USER_EXTS: [&str; 4] = ["ttf", "otf", "woff", "woff2"];
+const USER_EXTS: [&str; 5] = ["ttf", "otf", "woff", "woff2", "ttc"];
 const EVENT: &str = "font-download";
 /// ブラウザが 1 つの相手へ同時に開く数と同じ
 const WORKERS: usize = 6;
@@ -367,14 +367,14 @@ pub fn font_css(app: tauri::AppHandle, key: String) -> Result<Option<LocalFont>,
     }
 }
 
-/// 自分で選んだフォントのファイル(ttf/otf/woff/woff2)を fonts/user に写し、font.css を書く。表示用にファイル名を返す。
+/// 自分で選んだフォントのファイル(ttf/otf/woff/woff2/ttc。ttc は最初の字だけ使われる)を fonts/user に写し、font.css を書く。表示用にファイル名を返す。
 /// 前に入れたものは消す(1 つだけ)。絵文字などその字にない文字は、CSS の後ろの既定の字で出る
 #[tauri::command]
 pub fn import_user_font(app: tauri::AppHandle, path: String) -> Result<String, String> {
     let src = PathBuf::from(&path);
-    let ext = src.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).ok_or("フォントのファイル(ttf・otf・woff・woff2)を選んでください")?;
+    let ext = src.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).ok_or("フォントのファイル(ttf・otf・ttc・woff・woff2)を選んでください")?;
     if !USER_EXTS.contains(&ext.as_str()) {
-        return Err("フォントのファイル(ttf・otf・woff・woff2)を選んでください".into());
+        return Err("フォントのファイル(ttf・otf・ttc・woff・woff2)を選んでください".into());
     }
     let meta = std::fs::metadata(&src).map_err(|e| e.to_string())?;
     if meta.len() == 0 || meta.len() > 64 * 1024 * 1024 {
@@ -385,8 +385,15 @@ pub fn import_user_font(app: tauri::AppHandle, path: String) -> Result<String, S
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let file = format!("1.{ext}");
     std::fs::copy(&src, dir.join(&file)).map_err(|e| e.to_string())?;
-    let format = match ext.as_str() { "ttf" => "truetype", "otf" => "opentype", "woff" => "woff", _ => "woff2" };
-    let css = format!("@font-face{{font-family:'OBB User Font';src:url(\"{file}\") format(\"{format}\");font-display:swap}}\n");
+    // ttc(複数の字をまとめたもの)は format() を付けない(付けると読まれないことがある。最初の字が使われる)
+    let src_css = match ext.as_str() {
+        "ttf" => format!("url(\"{file}\") format(\"truetype\")"),
+        "otf" => format!("url(\"{file}\") format(\"opentype\")"),
+        "woff" => format!("url(\"{file}\") format(\"woff\")"),
+        "woff2" => format!("url(\"{file}\") format(\"woff2\")"),
+        _ => format!("url(\"{file}\")"),
+    };
+    let css = format!("@font-face{{font-family:'OBB User Font';src:{src_css};font-display:swap}}\n");
     std::fs::write(dir.join(FONT_CSS), css).map_err(|e| e.to_string())?;
     Ok(src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(file))
 }

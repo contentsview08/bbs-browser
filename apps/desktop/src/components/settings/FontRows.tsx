@@ -79,7 +79,7 @@ export function FontRows(props: { settings: AppSettings; onPick: (key: FontFamil
               <span className="block truncate text-sm text-c-text-strong" style={s.userFontName ? { fontFamily: "'OBB User Font'" } : undefined}>
                 {s.userFontName ? `フォントのファイル(${s.userFontName})` : 'フォントのファイルから選ぶ…'}
               </span>
-              <span className="block text-xs text-c-text-muted">{s.userFontName ? 'ttf・otf・woff・woff2。その字にない文字(絵文字など)は既定の字で出ます' : 'ttf・otf・woff・woff2 のファイルを選んで、その字で表示します'}</span>
+              <span className="block text-xs text-c-text-muted">{s.userFontName ? 'ttf・otf・ttc・woff・woff2。その字にない文字(絵文字など)は既定の字で出ます' : 'ttf・otf・ttc・woff・woff2 のファイルを選んで、その字で表示します(ttc は最初の字)'}</span>
             </span>
             {s.fontFamily === 'file' && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
             {!s.userFontName && <span className="material-symbols-outlined text-lg text-c-text-muted">folder_open</span>}

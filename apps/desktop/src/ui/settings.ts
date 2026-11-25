@@ -8,7 +8,7 @@ import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './
 import type { LookTheme } from './lookTheme'
 import type { DateStyle } from '../utils/displayDate'
 import { isMobile } from '../utils/platform'
-import { ensureFont, onFontSwitch } from '../host/fonts'
+import { ensureFont, onFontSwitch, ensureUserFont } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyNgDiff, isEmptyNgDiff, ngDiff, UserOps, type LogStore, type NgDiff } from '@bbs-browser/logstore'
 import { settingOpsOf } from '@bbs-browser/sync'
@@ -127,7 +127,8 @@ export function effectiveDensity(s: Pick<AppSettings, 'postStyle'>): ListDensity
 }
 export type ListDensity = 'list' | 'dense'
 /** フォント。用意したもの(FONT_FAMILIES)か、OS のもの(custom。customFont に名前を持つ) */
-export type FontFamily = (typeof FONT_FAMILY_KEYS)[number] | 'custom'
+/** custom: OS のフォント(customFont に名前)。file: 自分で入れたフォントのファイル(fonts/user。userFontName に表示用の名前) */
+export type FontFamily = (typeof FONT_FAMILY_KEYS)[number] | 'custom' | 'file'
 export const FONT_FAMILY_KEYS = [
   'noto',
   'biz-ud',
@@ -303,6 +304,8 @@ export interface AppSettings {
   thumbLoad: 'always' | 'wifi' | 'tap' | 'never'
   fontFamily: FontFamily
   customFont: string
+  /** 自分で入れたフォントのファイルの名前(表示用。ファイルは host が持つ) */
+  userFontName: string
   threadPanelWidth: number
   /** サイドバーを広げたときの幅 */
   sidebarWidth: number
@@ -612,6 +615,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   thumbLoad: 'always',
   fontFamily: 'system',
   customFont: '',
+  userFontName: '',
   threadPanelWidth: 420,
   sidebarWidth: 256,
   threadHeaderHeight: 0,
@@ -773,7 +777,7 @@ const KAOMOJI_FALLBACK = "'BBS Kaomoji Fallback'"
 const EMOJI_FALLBACK = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'OBB Emoji'"
 
 /** 用意したフォント(Web フォントは host/fonts.ts が読む)。ゴシック → 丸ゴシック → 明朝 の順。名前は見本に使う(設定のドロップダウンはそのフォントで描く) */
-export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
+export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom' | 'file'>; name: string; css: string }[] = [
   { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
   { key: 'biz-ud', name: 'BIZ UDPゴシック', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, ${EMOJI_FALLBACK}, sans-serif` },
   // Windows に入っている BIZ UDPゴシックは画面表示向けの調整(ヒンティング)が効いていて、小さい字もガタつきにくい
@@ -1079,13 +1083,16 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
     root.removeAttribute('data-list-pad')
   }
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
-  // 用意した書体は host/fonts.ts が使えるようにする
-  if (s.fontFamily !== 'custom') ensureFont(preset.key)
-  // OS のフォントが見つからなかったときのために、既定のフォントを後ろに置く
+  // 用意した書体は host/fonts.ts が使えるようにする。自分で入れたファイルはその CSS を入れる
+  if (s.fontFamily === 'file') ensureUserFont()
+  else if (s.fontFamily !== 'custom') ensureFont(preset.key)
+  // OS のフォント・自分のファイルにない文字(絵文字など)のために、既定のフォントを後ろに置く
   const css =
     s.fontFamily === 'custom' && s.customFont
       ? `'${s.customFont.replace(/'/g, "\\'")}', ${FONT_FAMILIES[0].css}`
-      : preset.css
+      : s.fontFamily === 'file'
+        ? `'OBB User Font', ${FONT_FAMILIES[0].css}`
+        : preset.css
   root.style.setProperty('--app-font', css)
   // 背景画像がないときは透かさない(透かしても後ろは地の色なので、薄く見えるだけ)
   const alpha = s.backgroundImage ? s.panelOpacity : 1

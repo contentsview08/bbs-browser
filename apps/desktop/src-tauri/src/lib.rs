@@ -815,6 +815,7 @@ pub fn run() {
             fonts::font_css,
             fonts::download_font,
             fonts::cancel_font_download,
+            fonts::import_user_font,
             save_image,
             save_path_preview,
             media_cache::media_cached,

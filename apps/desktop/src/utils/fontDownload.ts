@@ -64,5 +64,6 @@ export function fontPercent(done: number, total: number): number | undefined {
 /** 置き場の CSS の url("0.woff2") を、画面から読める URL に置き換える */
 export function localFontCss(css: string, dir: string, toUrl: (path: string) => string): string {
   const sep = dir.includes('\\') ? '\\' : '/'
-  return css.replace(/url\("(\d+\.woff2)"\)/g, (_, file: string) => `url("${toUrl(`${dir}${sep}${file}`)}")`)
+  // 取得した字は 連番.woff2。自分で入れたフォントのファイル(fonts/user)は 1.ttf などもある
+  return css.replace(/url\("(\d+\.(?:woff2|woff|ttf|otf))"\)/g, (_, file: string) => `url("${toUrl(`${dir}${sep}${file}`)}")`)
 }

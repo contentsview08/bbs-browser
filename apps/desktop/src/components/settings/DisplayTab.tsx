@@ -26,7 +26,7 @@ import { BTN_PRIMARY, INPUT } from '../DialogParts'
 import { backgroundImageUrl, importBackgroundImage } from '../../host/backgroundImage'
 import { pickOpenPath } from '../../host/dialog'
 import { isMobile } from '../../utils/platform'
-import { FONT_NOTE } from '../../host/fonts'
+import { FONT_NOTE, importUserFont } from '../../host/fonts'
 import { FontRows } from './FontRows'
 import { type SettingsProps, AdvancedContext, Section, StickySample, Choice } from './common'
 import { SearchInput } from '../ClearButton'
@@ -238,7 +238,19 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
       </Section>
       <StyleOptionSection settings={s} update={update} />
       <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
-        <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
+        <FontRows
+          settings={s}
+          osFont={true}
+          onPick={(key) => update('fontFamily', key)}
+          onImportFont={() =>
+            void pickOpenPath('フォント', ['ttf', 'otf', 'woff', 'woff2']).then(async (path) => {
+              if (!path) return
+              const name = await importUserFont(path)
+              update('userFontName', name)
+              update('fontFamily', 'file')
+            })
+          }
+        />
         {s.fontFamily === 'custom' && (
           <SystemFontPicker
             value={s.customFont}

@@ -15,6 +15,9 @@ const CDN: &str = "https://cdn.jsdelivr.net/npm/";
 const FONTS_DIR: &str = "fonts";
 const FONT_CSS: &str = "font.css";
 const TMP_PREFIX: &str = ".tmp-";
+/// 自分で選んだフォントのファイルの置き場(fonts/user)。CSS の font-family は 'OBB User Font'
+const USER_KEY: &str = "user";
+const USER_EXTS: [&str; 4] = ["ttf", "otf", "woff", "woff2"];
 const EVENT: &str = "font-download";
 /// ブラウザが 1 つの相手へ同時に開く数と同じ
 const WORKERS: usize = 6;
@@ -353,13 +356,39 @@ pub fn font_status(app: tauri::AppHandle, jobs: tauri::State<'_, FontJobs>) -> R
 /// 取得済みの書体の CSS と置き場(なければ None)
 #[tauri::command]
 pub fn font_css(app: tauri::AppHandle, key: String) -> Result<Option<LocalFont>, String> {
-    sources_of(&key)?;
+    if key != USER_KEY {
+        sources_of(&key)?;
+    }
     let dir = fonts_dir(&app)?.join(&key);
     match std::fs::read_to_string(dir.join(FONT_CSS)) {
         Ok(css) => Ok(Some(LocalFont { css, dir: dir.to_string_lossy().into_owned() })),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// 自分で選んだフォントのファイル(ttf/otf/woff/woff2)を fonts/user に写し、font.css を書く。表示用にファイル名を返す。
+/// 前に入れたものは消す(1 つだけ)。絵文字などその字にない文字は、CSS の後ろの既定の字で出る
+#[tauri::command]
+pub fn import_user_font(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let src = PathBuf::from(&path);
+    let ext = src.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).ok_or("フォントのファイル(ttf・otf・woff・woff2)を選んでください")?;
+    if !USER_EXTS.contains(&ext.as_str()) {
+        return Err("フォントのファイル(ttf・otf・woff・woff2)を選んでください".into());
+    }
+    let meta = std::fs::metadata(&src).map_err(|e| e.to_string())?;
+    if meta.len() == 0 || meta.len() > 64 * 1024 * 1024 {
+        return Err("フォントのファイルが空か、大きすぎます(64MB まで)".into());
+    }
+    let dir = fonts_dir(&app)?.join(USER_KEY);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = format!("1.{ext}");
+    std::fs::copy(&src, dir.join(&file)).map_err(|e| e.to_string())?;
+    let format = match ext.as_str() { "ttf" => "truetype", "otf" => "opentype", "woff" => "woff", _ => "woff2" };
+    let css = format!("@font-face{{font-family:'OBB User Font';src:url(\"{file}\") format(\"{format}\");font-display:swap}}\n");
+    std::fs::write(dir.join(FONT_CSS), css).map_err(|e| e.to_string())?;
+    Ok(src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(file))
 }
 
 /// 書体を取りに行く(進み具合は font-download で全部のウィンドウへ知らせる)。

@@ -55,6 +55,21 @@ function injectFont(key: string): Promise<boolean> {
   return p
 }
 
+/** 自分で入れたフォントのファイル(fonts/user)の CSS を入れる(入れてあれば) */
+export function ensureUserFont(): void {
+  if (typeof document === 'undefined') return
+  void injectFont('user')
+}
+
+/** フォントのファイルを取り込む(Rust が fonts/user に写して CSS を書く)。表示用のファイル名を返す。入れ替えたので CSS も入れ直す */
+export async function importUserFont(path: string): Promise<string> {
+  const name = await invoke<string>('import_user_font', { path })
+  document.querySelectorAll('style[data-font="user"]').forEach((el) => el.remove())
+  injected.delete('user')
+  await injectFont('user')
+  return name
+}
+
 /** 選んである書体を使えるようにする。取得済みでなければ裏で取りに行く(切り替わるのではなく、選んである書体が出るようになる) */
 export function ensureFont(key: string): void {
   if (!fontNeedsDownload(key) || typeof document === 'undefined') return

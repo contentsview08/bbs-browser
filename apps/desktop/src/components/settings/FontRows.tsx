@@ -42,7 +42,7 @@ function FontRow(props: { name: string; css?: string; chosen: boolean; state: Fo
   )
 }
 
-export function FontRows(props: { settings: AppSettings; onPick: (key: FontFamily) => void; osFont: boolean }) {
+export function FontRows(props: { settings: AppSettings; onPick: (key: FontFamily) => void; osFont: boolean; onImportFont?: () => void }) {
   const { settings: s, onPick } = props
   const states = useFontStates()
   const stateOf = (key: string): FontState => {
@@ -70,6 +70,26 @@ export function FontRows(props: { settings: AppSettings; onPick: (key: FontFamil
           onPick={() => chooseFont('custom', () => onPick('custom'))}
           onCancel={() => undefined}
         />
+      )}
+      {props.onImportFont && (
+        // 自分のフォントのファイル(ttf・otf・woff・woff2)。入れてあれば押すと使う。「別のファイル…」で入れ替える
+        <div className={`relative flex items-center gap-2 ${s.fontFamily === 'file' ? 'bg-[var(--c-accent-wash)]' : ''}`}>
+          <button type="button" onClick={() => (s.userFontName ? onPick('file') : props.onImportFont?.())} className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 text-left hover:bg-c-surface2">
+            <span className="flex-1 min-w-0">
+              <span className="block truncate text-sm text-c-text-strong" style={s.userFontName ? { fontFamily: "'OBB User Font'" } : undefined}>
+                {s.userFontName ? `フォントのファイル(${s.userFontName})` : 'フォントのファイルから選ぶ…'}
+              </span>
+              <span className="block text-xs text-c-text-muted">{s.userFontName ? 'ttf・otf・woff・woff2。その字にない文字(絵文字など)は既定の字で出ます' : 'ttf・otf・woff・woff2 のファイルを選んで、その字で表示します'}</span>
+            </span>
+            {s.fontFamily === 'file' && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
+            {!s.userFontName && <span className="material-symbols-outlined text-lg text-c-text-muted">folder_open</span>}
+          </button>
+          {s.userFontName && (
+            <button type="button" onClick={props.onImportFont} className="flex-shrink-0 mr-2 px-2 py-1 text-xs rounded border border-c-border text-c-text-muted hover:text-c-text-strong">
+              別のファイル…
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

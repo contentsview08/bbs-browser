@@ -699,34 +699,41 @@ internal val HEAT_STYLES = listOf("left" to "左の帯", "right" to "右の帯",
 @Composable
 private fun ThreadPage(vm: AppViewModel) {
     val p = vm.prefs
-    Group("見本", note = "変えるとすぐ映ります") { SamplePosts(vm) }
+    // 段は 1 つの話題ずつ(開いたとき / 名前と ID / 日時 / 人気のレス / リンクと本文 / ミニマップ)。行の名前は「もの」の名前、説明は 1 行。
+    // PC 版の設定「スレ表示」と同じ段・同じ順(docs/settings-plan.md)
+    PageLead("スレを開いたときの位置と、レスの出し方。変えるとすぐ下の見本に映ります")
+    Group { SamplePosts(vm) }
     Group("開いたとき") {
         ChoiceRow("開く位置", p.openPosition, listOf("unread" to "前回読んだところ", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
+        SwitchRow("次スレの候補", p.showNextCandidatesAtEnd, desc = "スレが終わったら一番下に出します。︙ の「次スレを探す」でも探せます") { p.showNextCandidatesAtEnd = it }
+        SwitchRow("次の未読スレへのボタン", p.showNextUnreadAtEnd, desc = "一番下に、スレ一覧で次に未読のあるスレへ") { p.showNextUnreadAtEnd = it }
     }
-    // 表示スタイルのシートの「細かい表示」と同じ言葉・同じ並び。どの見た目にも効く
-    Group("細かい表示") {
-        SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
-        SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
-        SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
-        SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
-        SegmentRow("ID の位置", p.idPosition, ID_POSITIONS) { p.idPosition = it }
-        // LINE 風は吹き出しの隣に時刻だけを出すので、日時の出し方は効かない
-        if (p.postStyle != "line") SegmentRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
-        SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
-        SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
-        SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
-        SegmentRow("人気のレスの示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
-        if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
-        if (LocalAdvanced.current) SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます") { p.urlShorten = it }
-        SwitchRow("スレの最後に次スレの候補を出す", p.showNextCandidatesAtEnd, desc = "スレが終わったら(dat 落ち・上限に達した)、-END- の下に出します。オフでも ︙ の「次スレを探す」で探せます") { p.showNextCandidatesAtEnd = it }
-        SwitchRow("スレの最後に次の未読スレを出す", p.showNextUnreadAtEnd, desc = "-END- の下に、スレ一覧で次に未読のあるスレへのボタンを出します") { p.showNextUnreadAtEnd = it }
+    Group("名前と ID") {
+        SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前") { p.omitNoname = it }
+        SwitchRow("名前欄を薄く", p.nameSubtle, desc = "日付や ID と同じ色・同じ大きさに") { p.nameSubtle = it }
+        SwitchRow("ワッチョイを短く", p.watchoiShort, desc = "(ワッチョイ 1a2b-3c4d) → (1a2b-3c4d)") { p.watchoiShort = it }
+        SwitchRow("ID を短く", p.idShort, desc = "先頭の 6 文字だけ。数えるのと色は ID 全体で") { p.idShort = it }
+        SwitchRow("ID ごとの色", p.idStyle == "color", desc = "2 回以上書いた ID に色を付け、同じ人を目で追えるように") { p.idStyle = if (it) "color" else "none" }
+        ChoiceRow("ID の位置", p.idPosition, ID_POSITIONS) { p.idPosition = it }
+        // Discord 風・LINE 風のアイコンの種。ワッチョイは週ごとなので、同じ人が同じアイコンで続く
+        ChoiceRow("アイコンの種", if (p.iconFromWatchoi) "watchoi" else "id", listOf("watchoi" to "ワッチョイ(あれば)", "id" to "ID")) { p.iconFromWatchoi = it == "watchoi" }
+        SwitchRow("スレ主の印", p.highlightOp, desc = ">>1 と同じ ID のレスに「主」") { p.highlightOp = it }
+    }
+    // LINE 風は吹き出しの隣に時刻だけを出すので、日時の出し方は効かない
+    if (p.postStyle != "line") Group("日時") {
+        ChoiceRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
+    }
+    Group("人気のレス", note = "返信が 3 件からのレス。多いほど赤く") {
+        ChoiceRow("示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
+    }
+    Group("リンクと本文") {
+        SwitchRow("リンクのカード", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }
+        SwitchRow("リンクをアプリの中で開く", p.openLinksInApp, desc = "オフ: ブラウザで開く") { p.openLinksInApp = it }
+        SwitchRow("URL を短く", p.urlShorten, desc = "https:// を外し、画像の URL は「画像」の札に") { p.urlShorten = it }
+        SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行に") { p.tidyBlankLines = it }
     }
     Group("ミニマップ") {
-        SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
-    }
-    if (LocalAdvanced.current) Group("リンク") {
-        SwitchRow("リンクのカードを出す", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }
-        SwitchRow("リンクをアプリの中で開く", p.openLinksInApp, desc = "オフにすると、ブラウザで開きます") { p.openLinksInApp = it }
+        SwitchRow("ミニマップ", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置") { p.showMinimap = it }
     }
 }
 
@@ -1519,6 +1526,12 @@ private fun LicensesPage() {
 // ── 部品 ──
 
 /** 項目のまとまり。見出しと、下に小さな説明 */
+/** ページの頭の 1 行の案内(このページで変わるもの)。段の見出しより先に、薄い字で */
+@Composable
+internal fun PageLead(text: String) {
+    Text(text, Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp), color = Palette.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
+}
+
 @Composable
 internal fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
     // 段の見出しは差し色で(説明の薄い字と見分けがつくように。字の大きさは説明より少し大きいだけ)

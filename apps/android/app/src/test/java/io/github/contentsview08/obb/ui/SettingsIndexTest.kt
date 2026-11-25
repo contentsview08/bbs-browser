@@ -34,7 +34,7 @@ class SettingsIndexTest {
     @Test fun 見た目ごとの設定も索引に入る() {
         assertTrue(has("theme", "ツリー表示"))
         assertTrue(has("theme", "返信先の引用"))
-        assertTrue(has("thread", "細かい表示"))
+        assertTrue(has("thread", "名前と ID"))
     }
 
     // お気に入り板の並べ替えは「お気に入り板」のページにしかない。BBS メニューのページへ飛ぶと探した項目が出ない

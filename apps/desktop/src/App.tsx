@@ -93,6 +93,7 @@ import { ensureNotifyPermission, onOsNotifyClick, sendOsNotification } from './u
 import { playNotifySound } from './host/notifySound'
 import { OPEN_SETTINGS_EVENT, OPEN_SKINS_EVENT } from './components/StyleMenu'
 import { SkinDialog } from './components/SkinPicker'
+import { useSkinAutoUpdate } from './hooks/useSkinAutoUpdate'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl, currentBackgroundImage } from './host/backgroundImage'
@@ -2970,6 +2971,8 @@ export default function App() {
   }, [])
   /** スキンを選ぶ窓(表示スタイルの窓の「ほかのスキンも見る…」) */
   const [skinsOpen, setSkinsOpen] = useState(false)
+  // 一覧から入れたスキンが新しくなっていたら、起動時に入れ替える
+  useSkinAutoUpdate(settings, updateSetting)
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {
     if (k === 'posts') return void openPostHistory()
@@ -3541,7 +3544,17 @@ export default function App() {
           {...settingsProps()}
         />
       )}
-      {skinsOpen && <SkinDialog settings={settings} update={updateSetting} onClose={() => setSkinsOpen(false)} />}
+      {skinsOpen && (
+        <SkinDialog
+          settings={settings}
+          update={updateSetting}
+          onClose={() => setSkinsOpen(false)}
+          onEditColors={() => {
+            setSkinsOpen(false)
+            openSettings('display')
+          }}
+        />
+      )}
       {settingsTab && !isMobile && !canOpenToolWindow && (
         <SettingsDialog
           initialTab={settingsTab}

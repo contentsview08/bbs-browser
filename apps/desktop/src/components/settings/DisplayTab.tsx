@@ -1,7 +1,5 @@
-import { isCustomDark, parseCustom } from '../../ui/customScheme'
-import { lookThemeByKey, lookThemeJson, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, withSavedTheme, withoutSavedTheme } from '../../ui/lookTheme'
-import { SkinCards, SkinPicker } from '../SkinPicker'
-import { openJson, saveJson } from '../../host/backup'
+import { parseCustom } from '../../ui/customScheme'
+import { SkinDialog, SkinSummaryRow } from '../SkinPicker'
 import { useContext, useEffect, useState } from 'react'
 import {
   DEFAULT_SETTINGS,
@@ -179,26 +177,33 @@ function BackgroundDialog({ settings: s, update, onClose }: Pick<SettingsProps, 
 
 export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<SettingsProps, 'settings' | 'update'> & { onOpenCustomScheme: () => void }) {
   const [bgOpen, setBgOpen] = useState(false)
+  const [skinsOpen, setSkinsOpen] = useState(false)
+  // 段の並びはスマホのアプリの「スキンと配色」と同じ(スキン / 差し色 / 文字 / スタイル。PC だけの段はその後ろ。配色を編集は一番下)
   return (
     <>
       <StickySample settings={s} />
-      <Section title="配色とスキン" note={s.lookThemes.length && !s.followOsTheme ? '前の方が同梱の配色、後ろが保存したスキン(色だけのものも、見た目まで含むものも)。押すとその場で切り替わります' : undefined}>
-        <Toggle
-          checked={s.followOsTheme}
-          onChange={(v) => update('followOsTheme', v)}
-          label="OS のダーク・ライトに合わせる"
-          note="オンのときは、暗い配色と明るい配色を 1 つずつ選びます。Windows の設定を切り替えると、その場で切り替わります"
-        />
-        <Toggle
-          checked={s.reduceMotion}
-          onChange={(v) => update('reduceMotion', v)}
-          label="動きを減らす"
-          note="画面の移り方・新着の光り方・数字の繰り上がりを省きます。OS の「アニメーションを表示しない」がオンでも同じになります"
-        />
-        <div className="mt-2">
-          <SkinPicker settings={s} update={update} />
+      <Section title="スキン" note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。同梱の配色も、入れたスキンも、同じ窓から選びます">
+        <SkinSummaryRow settings={s} onOpen={() => setSkinsOpen(true)} />
+        <div className="mt-3">
+          <Toggle
+            checked={s.followOsTheme}
+            onChange={(v) => update('followOsTheme', v)}
+            label="OS のダーク・ライトに合わせる"
+            note="暗い配色と明るい配色を 1 つずつ選びます。Windows の設定を切り替えると、その場で切り替わります"
+          />
         </div>
       </Section>
+      {skinsOpen && (
+        <SkinDialog
+          settings={s}
+          update={update}
+          onClose={() => setSkinsOpen(false)}
+          onEditColors={() => {
+            setSkinsOpen(false)
+            onOpenCustomScheme()
+          }}
+        />
+      )}
       <Section title="差し色">
         <p className="text-xs text-c-text-muted mb-2">ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります(スマホのアプリ・web と同じ 8 色)</p>
         <div className="flex flex-wrap gap-3">
@@ -217,6 +222,21 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           })}
         </div>
       </Section>
+      <Section title="文字の大きさ">
+        {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
+        <BaseFontSlider settings={s} update={update} fixedSize />
+      </Section>
+      {/* 表示スタイルの窓の「スタイル」のタブと同じ見出し・同じ部品 */}
+      <Section
+        title="スタイル"
+        note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}(Discord 風・LINE 風は一覧表示、ほかは高密度で並べます)`}
+      >
+        <p className="text-xs text-c-text-muted mb-1.5">レスの見た目</p>
+        <div className="max-w-md">
+          <Segmented label="レスの見た目" value={effectivePostStyle(s)} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
+        </div>
+      </Section>
+      <StyleOptionSection settings={s} update={update} />
       <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
         <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
         {s.fontFamily === 'custom' && (
@@ -255,21 +275,6 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
           onChange={(v) => update('paneMode', v)}
         />
       </Section>
-      <Section title="文字の大きさ">
-        {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
-        <BaseFontSlider settings={s} update={update} fixedSize />
-      </Section>
-      {/* 表示スタイルの窓の「スタイル」のタブと同じ見出し・同じ部品 */}
-      <Section
-        title="スタイル"
-        note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}(Discord 風・LINE 風は一覧表示、ほかは高密度で並べます)`}
-      >
-        <p className="text-xs text-c-text-muted mb-1.5">レスの見た目</p>
-        <div className="max-w-md">
-          <Segmented label="レスの見た目" value={effectivePostStyle(s)} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
-        </div>
-      </Section>
-      <StyleOptionSection settings={s} update={update} />
       <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle checked={s.tabsEnabled} onChange={(v) => update('tabsEnabled', v)} label="タブを使う" note="オフにするとタブの帯を出さず、いつも今のスレを置き換えます(開いているスレ以外のタブは閉じます)" />
         {s.tabsEnabled && (
@@ -308,124 +313,17 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         />
         )}
       </Section>
-      {/* スキン: 配色・レスの見た目・細かい表示・文字と余白をまとめたもの(ui/lookTheme.ts)。ふだんは上の配色・スタイルから選び、全部まとめて扱いたいときにここへ */}
-      <LookThemeSection settings={s} update={update} onOpenCustomScheme={onOpenCustomScheme} />
+      <Section title="動き">
+        <Toggle
+          checked={s.reduceMotion}
+          onChange={(v) => update('reduceMotion', v)}
+          label="動きを減らす"
+          note="画面の移り方・新着の光り方・数字の繰り上がりを省きます。OS の「アニメーションを表示しない」がオンでも同じになります"
+        />
+      </Section>
+      <Section title="配色を編集" note="地・面・字・強調・未読・自分の 6 色と、帯・線・印などの細かい色を 1 つずつ選べます。編集した配色は「自分の配色」としてスキンの窓に出ます">
+        <OpenRow label="配色を編集…" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
+      </Section>
     </>
-  )
-}
-
-/**
- * スキン(ui/lookTheme.ts): 配色・レスの見た目・細かい表示・文字と余白をまとめたもの。
- * 保存したスキンをドロップダウンで選んで当てる(最初は 1 つもない)。いまの見た目に名前を付けて保存できる。
- * JSON の貼り付け・コピー・ファイルは詳細設定(貼り付けたスキンは保存されて、次からドロップダウンに出る)
- */
-function LookThemeSection({ settings: s, update, onOpenCustomScheme }: Pick<SettingsProps, 'settings' | 'update'> & { onOpenCustomScheme: () => void }) {
-  const [notice, setNotice] = useState<string>()
-  const [saveName, setSaveName] = useState('')
-  const showAdvanced = useContext(AdvancedContext)
-  const BTN = 'px-3 py-1.5 rounded-md text-sm border border-c-border text-c-text-strong hover:bg-c-surface2'
-  /** スキンの JSON を当てる。key はドロップダウンで選んだときのキー(貼り付け・ファイルのときは保存して、そのキーを選んだことにする) */
-  const applyText = (text: string, key?: string) => {
-    const r = lookThemePatch(text, DEFAULT_SETTINGS)
-    if (typeof r === 'string') return setNotice(r)
-    for (const [k, v] of Object.entries(r.patch)) update(k as keyof AppSettings, v as never)
-    if (r.theme) {
-      if (!key) update('lookThemes', withSavedTheme(s.lookThemes, r.theme))
-      update('lookThemeKey', key ?? `saved:${r.name}`)
-    }
-    setNotice(`スキン「${r.name}」を当てました(${Object.keys(r.patch).length} 項目)`)
-  }
-  const saveCurrent = () => {
-    const name = saveName.trim()
-    if (!name) return
-    update('lookThemes', withSavedTheme(s.lookThemes, lookThemeOf(s, name)))
-    update('lookThemeKey', `saved:${name}`)
-    setSaveName('')
-    setNotice(`スキン「${name}」を保存しました`)
-  }
-  return (
-    <Section
-      title="スキンの管理"
-      note="スキンは、配色・レスの見た目・細かい表示・文字と余白をまとめたものです(色だけのスキンも作れます)。いまの見た目に名前を付けて保存すると、上の「配色とスキン」に並びます。スキンに入っている項目だけを上書きするので、当ててから気に入らない所を直せます。配られたスキンは、詳細設定の「JSON を貼り付けて当てる」で入ります(スマホのアプリと同じ形)"
-    >
-      {/* 配色を 1 色ずつ編集する(前の「自分の配色を作る」。保存の場所は同じ customScheme なので、前に作った配色はそのまま)。編集した配色は「自分の配色」になり、スキンとして保存できる */}
-      <OpenRow label="配色を編集…" value={parseCustom(s.customScheme) ? (effectiveScheme(s) === 'custom' ? '自分の配色(使っています)' : '自分の配色') : undefined} onOpen={onOpenCustomScheme} />
-      {/* 札は上の「配色とスキン」に並べている。OS に合わせているときだけ、ここに並べる */}
-      {s.followOsTheme && s.lookThemes.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          <SkinCards settings={s} update={update} />
-        </div>
-      )}
-      {s.lookThemes.length === 0 && <p className="text-sm text-c-text-muted">スキンはまだありません。「いまの見た目をスキンとして保存」で作ると、上の「配色とスキン」に並びます</p>}
-      <div className="rounded-lg border border-c-border bg-c-surface px-3.5 py-3">
-        <p className="text-xs font-bold text-c-accent tracking-wide mb-1.5">いまの見た目をスキンとして保存</p>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={saveName}
-            placeholder={lookThemeKeyName(s.lookThemeKey) || 'スキンの名前'}
-            onChange={(e) => setSaveName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveCurrent()
-            }}
-            className={`${INPUT} flex-1 max-w-[20em]`}
-          />
-          <button type="button" className={`${BTN} font-bold ${saveName.trim() ? 'bg-c-accent text-[var(--c-accent-text)] border-transparent' : ''}`} disabled={!saveName.trim()} onClick={saveCurrent}>
-            保存
-          </button>
-        </div>
-        <p className="mt-1.5 text-[11px] text-c-text-muted">同じ名前があれば入れ替えます。保存したスキンは上の「配色とスキン」に並びます</p>
-      </div>
-      {s.lookThemes.length > 0 && (
-        <div className="mt-3 rounded-lg overflow-hidden border border-c-border bg-c-surface">
-          {s.lookThemes.map((t) => {
-            const key = `saved:${lookThemeName(t)}`
-            const on = s.lookThemeKey === key
-            return (
-              <div key={key} className="flex items-center gap-3 min-h-[42px] pl-3.5 pr-1.5 border-b border-c-border last:border-b-0">
-                <span className={`flex-1 text-[14px] truncate ${on ? 'text-c-text-strong font-bold' : 'text-c-text-body'}`}>{lookThemeName(t)}</span>
-                {on && <span className="text-xs text-c-accent font-bold">使っています</span>}
-                <button
-                  type="button"
-                  className="material-symbols-outlined text-[18px] px-2 py-1.5 text-c-text-muted hover:text-c-mark-danger"
-                  title={`「${lookThemeName(t)}」を消す`}
-                  onClick={() => {
-                    update('lookThemes', withoutSavedTheme(s.lookThemes, lookThemeName(t)))
-                    if (s.lookThemeKey === key) update('lookThemeKey', '')
-                  }}
-                >
-                  delete
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {showAdvanced && (
-        <details className="mt-3 rounded-lg border border-c-border bg-c-surface px-3.5 py-2.5">
-          <summary className="cursor-pointer text-xs font-bold text-c-accent tracking-wide">JSON で受け渡す(配る・取り込む)</summary>
-          <div className="flex flex-wrap gap-2 pt-2.5">
-            <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
-              スキンの JSON を貼り付けて当てる
-            </button>
-            <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまのスキンの JSON をコピーしました'))}>
-              いまのスキンを JSON でコピー
-            </button>
-            {!isMobile && (
-              <>
-                <button type="button" className={BTN} onClick={() => void saveJson('skin', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
-                  ファイルに書き出す
-                </button>
-                <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
-                  ファイルを読み込む
-                </button>
-              </>
-            )}
-          </div>
-          <p className="pt-2 text-[11px] text-c-text-muted">形は docs/skin.md。掲示板などに貼って配れます。貼り付けたスキンは保存され、上に並びます</p>
-        </details>
-      )}
-      {notice && <p className="pt-2 text-xs text-c-text-muted">{notice}</p>}
-    </Section>
   )
 }

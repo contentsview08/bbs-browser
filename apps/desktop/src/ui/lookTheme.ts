@@ -35,6 +35,8 @@ export interface LookTheme {
   settings?: Record<string, unknown>
   android?: Record<string, unknown>
   pc?: Record<string, unknown>
+  /** 一覧(カタログ)から入れたスキンの出どころ。あれば、一覧が新しくなったときに自動で入れ替える(ui/skinCatalog.ts) */
+  source?: { id: string; url: string; revision: number }
 }
 
 /** スキンの JSON か(自分の配色だけの JSON と見分ける) */
@@ -59,6 +61,12 @@ export function lookThemeOf(s: AppSettings, name = ''): LookTheme {
 }
 
 export const lookThemeJson = (s: AppSettings, name = '') => JSON.stringify(lookThemeOf(s, name), null, 2)
+
+/** 配る形の JSON(出どころの source は外す) */
+export const lookThemeShareJson = (t: LookTheme) => {
+  const { source: _s, ...rest } = t
+  return JSON.stringify(rest, null, 2)
+}
 
 /**
  * スキンか自分の配色の JSON を読み、設定に当てる差分を返す(入っている項目だけ)。読めなければ理由の文。

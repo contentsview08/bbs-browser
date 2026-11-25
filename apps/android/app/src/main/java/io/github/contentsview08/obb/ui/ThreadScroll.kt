@@ -483,7 +483,9 @@ class ThreadScroller(
         // 実況モードでまだ出していないレスは読んでいない
         val top = minOf(lastNo, if (tree()) Int.MAX_VALUE else ctl.liveLimit)
         val from = maxOf(ctl.sent, page.readNo)
-        val last = if (ctl.counting()) readHead(from, top, ctl.seen, exists, atBottom = ctl.atBottom && !filtering) else from
+        // ツリー表示: 新着は枝に散って下に足されるわけではないので、「下まで見たら既読」は成り立たない。
+        // 開いたとき手元にあるレスは全部読んだことにする(開いた直後でも。絞り込み中は別)
+        val last = if (tree() && !filtering) maxOf(from, lastNo) else if (ctl.counting()) readHead(from, top, ctl.seen, exists, atBottom = ctl.atBottom && !filtering) else from
         val first = items.firstOrNull { it.offset + it.size > 0 }
         return last to first?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
     }

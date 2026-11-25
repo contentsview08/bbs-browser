@@ -335,7 +335,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
     }
     Group("スタイル") {
-        SegmentRow("レスの見た目", p.postStyle, POST_STYLES) { p.postStyle = it }
+        SegmentRow("レスの見た目", p.postStyle, pickablePostStyles(p.postStyle)) { p.postStyle = it }
     }
     StyleOptionsGroup(p)
     // 配色を 1 色ずつ編集する(前の「自分の配色を作る」。保存の場所は同じ customScheme なので、前に作った配色はそのまま使える)

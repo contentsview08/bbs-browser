@@ -336,9 +336,9 @@ private fun AccentRow(p: Prefs) {
     }
 }
 
-/** レスの見た目の切り替え(POST_STYLES の順に横並び) */
+/** レスの見た目の切り替え(選べるもの。専ブラ風・まとめ風は選んでいるときだけ出る) */
 @Composable
-private fun PostStyleRow(p: Prefs) = ChipRow(POST_STYLES, p.postStyle) { p.postStyle = it }
+private fun PostStyleRow(p: Prefs) = ChipRow(pickablePostStyles(p.postStyle), p.postStyle) { p.postStyle = it }
 
 /** 排他の選択はどれもつながった切り替えボタンにそろえる(設定の画面と同じ部品) */
 @Composable

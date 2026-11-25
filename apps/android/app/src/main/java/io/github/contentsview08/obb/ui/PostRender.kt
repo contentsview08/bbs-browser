@@ -120,11 +120,20 @@ private val plain = TextLinkStyles(null)
 /** レスの見た目のうち、会話の形(アイコン・短い頭・返信先の 1 行)にするもの */
 fun isChatStyle(style: String) = style == "discord" || style == "line"
 
-/** 選べるレスの見た目(キーと名前) */
+/** レスの見た目(キーと名前)。描ける全部(スキンや古い設定が指すことがあるので、専ブラ風・まとめ風も描ける) */
 val POST_STYLES = listOf(
     "card" to "カード", "classic" to "専ブラ風(詰めて)", "matome" to "まとめ風(人気を大きく)",
     "discord" to "Discord 風", "line" to "LINE 風",
 )
+
+/**
+ * 選ぶ画面に出すレスの見た目(2026-11-25 にスマホでは専ブラ風・まとめ風を選択肢から外した。字を詰めたいときは文字と余白、
+ * 人気の強調は人気のレスの示し方で足りる。Web のスマホ表示と同じ)。いま選んでいるものが外したものなら、切り替えられるように一緒に出す
+ */
+fun pickablePostStyles(current: String): List<Pair<String, String>> =
+    POST_STYLES.filter { it.first !in HIDDEN_POST_STYLES || it.first == current }
+
+private val HIDDEN_POST_STYLES = setOf("classic", "matome")
 
 /** 見た目の短い名前(括弧の中の説明を除く)。「〇〇の設定」の見出しに使う */
 fun postStyleName(style: String): String = (POST_STYLES.firstOrNull { it.first == style }?.second ?: style).substringBefore('(')

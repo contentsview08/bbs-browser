@@ -7,6 +7,7 @@ import { useLongPress } from '../hooks/useLongPress'
 import { isMobile } from '../utils/platform'
 import { memo, useCallback, useState } from 'react'
 import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } from './PostMenu'
+import { highlightNodes } from '../utils/postBody'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -17,6 +18,8 @@ import { mediaSrc } from '../utils/httpsFirst'
 
 interface Props {
   thread: ThreadSummary
+  /** スレ一覧の検索の語(normalizeForSearch 済み)。スレタイの当たる所を目立たせる */
+  highlight?: readonly string[]
   state?: ThreadState
   isActive: boolean
   /** 勢い(スレ一覧を取ったときの時刻で計算したもの) */
@@ -66,7 +69,7 @@ const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted
 /** 操作バーをカードの枠の上へはみ出させられるか。WebKit は overflow-clip-margin がなく、content-visibility の枠で切り取られる */
 const CAN_OVERHANG = typeof CSS !== 'undefined' && CSS.supports('overflow-clip-margin', '1.5rem')
 
-function ThreadCard({
+function ThreadCard({ highlight,
   thread,
   state,
   isActive,
@@ -92,6 +95,7 @@ function ThreadCard({
   compact = false,
   historyMeta,
 }: Props) {
+  const titleNode = highlight?.length ? highlightNodes(thread.title, highlight, 't') : thread.title
   // スマホ: 長押しで操作の一覧を出す(選べる一覧(閲覧履歴)では、選び始める)
   const [sheet, setSheet] = useState(false)
   /** 操作バーの NG のメニューを開いているか(開いている間はバーを出したままにする) */
@@ -198,7 +202,7 @@ function ThreadCard({
           {newBadge}
           {favStar}
           {threadBadges}
-          {thread.title}
+          {titleNode}
         </div>
         {/* 1 レス目ののぞき見(スレ一覧の時点で本文が分かる掲示板だけ。hono-bbs など) */}
         {previewText && <div className="mt-0.5 text-[0.78125rem] leading-snug line-clamp-2 break-words text-c-text-muted">{previewText}</div>}
@@ -235,7 +239,7 @@ function ThreadCard({
         {newBadge}
         {favStar}
         {threadBadges}
-        {thread.title}
+        {titleNode}
       </span>
       <span className={`flex-shrink-0 min-w-[2.25rem] text-right text-[0.6875rem] tabular-nums ${momentumColorClass}`} title={`レス数(勢い：${formatMomentum(m)})`}>
         {thread.postCount}
@@ -263,7 +267,7 @@ function ThreadCard({
         <div className="text-[0.875rem] leading-snug truncate" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {favStar}
           {threadBadges}
-          {thread.title || thread.key}
+          {thread.title ? titleNode : thread.key}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[0.6875rem] text-c-text-muted min-w-0">
           <BoardIcon boardUrl={thread.boardUrl} override={meta.icon} size={14} />
@@ -320,7 +324,7 @@ function ThreadCard({
           {newBadge}
           {favStar}
           {threadBadges}
-          {thread.title}
+          {titleNode}
           {/* dat 落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる(右に列で置くと、長いスレタイが 3 行にもなる) */}
           <span className="inline-flex items-center gap-1.5 ml-1.5 align-[0.0625rem] whitespace-nowrap font-normal">
             {archived && <span className="text-[0.625rem] text-c-text-muted">dat 落ち</span>}
@@ -347,7 +351,7 @@ function ThreadCard({
         <span className="thread-row-title min-w-0" style={{ color: titleColor }}>
           {favStar}
           {threadBadges}
-          {thread.title}
+          {titleNode}
         </span>
         <span className="font-mono tabular-nums text-right text-c-text-muted">{thread.postCount}</span>
         <span className="font-mono tabular-nums text-right font-bold" style={{ color: 'var(--c-unread)' }}>{unreadCount > 0 ? unreadCount : ''}</span>
@@ -365,7 +369,7 @@ function ThreadCard({
             {newBadge}
             {favStar}
           {threadBadges}
-            {thread.title}
+            {titleNode}
           </div>
           <div className="flex items-center gap-2 mt-0.5 text-[0.6875rem] text-c-text-muted">
             <span className="tabular-nums">{thread.postCount} レス</span>
@@ -427,7 +431,7 @@ function ThreadCard({
                   </span>
                 )}
                 {favStar}
-                {thread.title}
+                {titleNode}
               </h3>
               {unreadBadge()}
             </div>

@@ -536,9 +536,11 @@ export default function ThreadListPanel(props: Props) {
   // キーワード(スレタイの言葉・正規表現・立てた人。板限定はこの一覧の板のものだけ)
   const kwMatcher = useMemo(() => keywordMatcher(props.keywordRules ?? [], props.boardUrl), [props.keywordRules, props.boardUrl])
   const keywordHit = (t: ThreadSummary) => kwMatcher.hit(t) !== undefined
+  /** 検索の語(そろえたもの)。絞り込みと、スレタイの当たる所を目立たせるのに使う */
+  const searchTerms = useMemo(() => normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean), [query])
   const visible = useMemo(() => {
     // 検索: 全角・半角・大文字・小文字・カナを同一視し、空白で区切った言葉はすべて含むもの(AND)。立てた人の ID も探す
-    const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
+    const terms = searchTerms
     let list = shownThreads.filter((t) => {
       if (props.isNg(t)) return false
       if (terms.length > 0) {
@@ -925,6 +927,7 @@ export default function ThreadListPanel(props: Props) {
       <ThreadCard
         key={id}
         thread={t}
+        highlight={searchTerms.length > 0 ? searchTerms : undefined}
         state={stateOf(t)}
         isActive={!isMobile && props.activeId === id}
         momentum={momenta.get(id) ?? 0}

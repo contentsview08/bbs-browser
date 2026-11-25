@@ -31,6 +31,8 @@ object Fonts {
 
     /** 端末の標準の字 */
     const val SYSTEM = "system"
+    /** 自分で選んだフォントのファイル(filesDir/fonts/user-font。Prefs.userFontName に表示用の名前)。PC 版の "file" と同じ */
+    const val FILE = "file"
     private const val BASE = "https://github.com/google/fonts/raw/main/ofl/"
     val CHOICES = listOf(
         Choice("biz-ud", "BIZ UDPゴシック", "読みやすさを重視した UD 書体(約 9MB)", "bizudpgothic/BIZUDPGothic-Regular.ttf", "bizudpgothic/BIZUDPGothic-Bold.ttf"),
@@ -62,7 +64,30 @@ object Fonts {
     private fun fileOf(context: Context, path: String) = File(dir(context), path.substringAfterLast('/'))
 
     fun isDownloaded(context: Context, key: String) =
-        CHOICES.firstOrNull { it.key == key }?.let { c -> fileOf(context, c.regular).exists() && fileOf(context, c.bold).exists() } == true
+        if (key == FILE) userFile(context).exists()
+        else CHOICES.firstOrNull { it.key == key }?.let { c -> fileOf(context, c.regular).exists() && fileOf(context, c.bold).exists() } == true
+
+    fun userFile(context: Context) = File(dir(context), "user-font")
+
+    /**
+     * フォントのファイル(ttf・otf・ttc。ttc は最初の字)を写して使えるようにする。フォントとして読めなければ false(写したものは消す)。
+     * その字にない文字(絵文字など)は端末の字で出る(Compose の FontFamily の後ろに端末の字が付く)
+     */
+    fun importUser(context: Context, uri: android.net.Uri): Boolean {
+        val f = userFile(context)
+        val tmp = File(dir(context), "user-font.tmp")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } } ?: return false
+            if (tmp.length() == 0L || android.graphics.Typeface.Builder(tmp).build() == null) { tmp.delete(); return false }
+            f.delete()
+            if (!tmp.renameTo(f)) { tmp.delete(); return false }
+            family = FontFamily(Font(f))
+            return true
+        } catch (_: Exception) {
+            tmp.delete()
+            return false
+        }
+    }
 
     /**
      * 字を選んだとき。手元にある字(と端末の標準)はすぐ onReady に渡す。ない字は取り終えてから渡す(それまで今の字のまま)。
@@ -88,6 +113,7 @@ object Fonts {
 
     /** 設定の字を使う。設定にあるのに手元にない字(バックアップから戻したときなど)は、取るまで端末の標準 */
     fun apply(context: Context, key: String) {
+        if (key == FILE) { family = userFile(context).takeIf { it.exists() }?.let { runCatching { FontFamily(Font(it)) }.getOrNull() }; return }
         val c = CHOICES.firstOrNull { it.key == key }
         if (c == null) { family = null; return }
         if (isDownloaded(context, key)) { family = load(context, c); return }
@@ -174,5 +200,6 @@ object Fonts {
     /** 取った字を消す(使っていないもの。取っている途中の字は残す) */
     fun deleteUnused(context: Context, keep: String) {
         for (c in CHOICES) if (c.key != keep && c.key != loading) listOf(c.regular, c.bold).forEach { fileOf(context, it).delete() }
+        if (keep != FILE) userFile(context).delete()
     }
 }

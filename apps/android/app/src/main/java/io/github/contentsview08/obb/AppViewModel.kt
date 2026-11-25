@@ -1160,6 +1160,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** バックアップから戻す(今あるものに足す。設定は上書き)。自分の配色のファイルを選んだときは、その配色を取り込んで使う */
     /** 配色のファイルだけを読み込む(「配色を読み込む」。設定・NG のバックアップは読まない。前の版の設定の JSON は importBackup) */
+    /** フォントのファイル(ttf・otf・ttc)を取り込んで、その字にする。読めなければ知らせる */
+    fun importUserFont(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val name = withContext(Dispatchers.IO) {
+                runCatching {
+                    app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "フォント"
+            }
+            val ok = withContext(Dispatchers.IO) { io.github.contentsview08.obb.data.Fonts.importUser(app, uri) }
+            if (!ok) { toast = "フォントとして読めませんでした(ttf・otf・ttc のファイルを選んでください)"; return@launch }
+            prefs.userFontName = name
+            prefs.fontFamily = io.github.contentsview08.obb.data.Fonts.FILE
+            toast = "「$name」の字にしました"
+        }
+    }
+
     /** スキン(JSON)か自分の配色(JSON)のファイルを読んで当てる */
     fun importScheme(uri: android.net.Uri) {
         viewModelScope.launch {

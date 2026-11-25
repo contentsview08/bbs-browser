@@ -737,9 +737,12 @@ private fun TextPage(vm: AppViewModel) {
         val f = io.github.contentsview08.obb.data.Fonts
         // ファイルがあるかの確かめは、スライダーを動かすたびに走らせない(字を取り終えた・消したときだけ調べ直す)
         var fontsDeleted by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-        val downloaded = remember(p.fontFamily, f.loading, fontsDeleted) { f.CHOICES.map { it.key }.filter { f.isDownloaded(context, it) }.toSet() }
-        FontRow(p.fontFamily, downloaded) { key -> f.pick(context, key) { p.fontFamily = it } }
-        if (f.CHOICES.any { it.key != p.fontFamily && it.key in downloaded }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.fontFamily); fontsDeleted++ }
+        val downloaded = remember(p.fontFamily, f.loading, fontsDeleted, p.userFontName) { (f.CHOICES.map { it.key } + f.FILE).filter { f.isDownloaded(context, it) }.toSet() }
+        FontRow(p.fontFamily, downloaded, fileName = p.userFontName.takeIf { f.FILE in downloaded }) { key -> f.pick(context, key) { p.fontFamily = it } }
+        // 自分のフォントのファイル(ttf・otf・ttc)。その字にない文字(絵文字など)は端末の字で出る
+        val pickFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) { vm.importUserFont(uri); fontsDeleted++ } }
+        ActionRow(if (f.FILE in downloaded) "別のフォントのファイルを選ぶ…" else "フォントのファイルから選ぶ…") { pickFont.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "font/collection", "application/octet-stream")) }
+        if ((f.CHOICES.any { it.key != p.fontFamily && it.key in downloaded }) || (p.fontFamily != f.FILE && f.FILE in downloaded)) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.fontFamily); fontsDeleted++ }
     }
     Group("見本") { SamplePosts(vm) }
 }
@@ -1708,13 +1711,15 @@ private fun fontProgressText() = io.github.contentsview08.obb.data.Fonts.progres
  * 取っている行を押すと取り消す。別の字を選ぶと、取っている分はやめて選び直した字にする。失敗したら理由を出し、今の字のまま
  */
 @Composable
-private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> Unit) {
+private fun FontRow(value: String, downloaded: Set<String>, fileName: String? = null, onPick: (String) -> Unit) {
     val f = io.github.contentsview08.obb.data.Fonts
+    /** 表示用の名前(選択肢の順。自分のファイルは入れてあるときだけ) */
+    val names = listOf(f.SYSTEM to "端末の標準") + f.CHOICES.map { it.key to it.name } + (if (fileName != null) listOf(f.FILE to "ファイル($fileName)") else emptyList())
     var open by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("字", Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
-            Text(f.CHOICES.firstOrNull { it.key == value }?.name ?: "端末の標準", color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
+            Text(names.firstOrNull { it.first == value }?.second ?: "端末の標準", color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
         }
         f.loading?.let { key ->
@@ -1728,7 +1733,7 @@ private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> 
         title = { Text("字") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                for ((k, name) in listOf(f.SYSTEM to "端末の標準") + f.CHOICES.map { it.key to it.name }) {
+                for ((k, name) in names) {
                     val on = k == value
                     val loading = f.loading == k
                     val failed = f.errorKey == k
@@ -1738,7 +1743,7 @@ private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> 
                             .clickable {
                                 onPick(k)
                                 // 取り始めたときは、進み具合が見えるように開いたままにする
-                                if (k in downloaded || k == f.SYSTEM) open = false
+                                if (k in downloaded || k == f.SYSTEM || k == f.FILE) open = false
                             }.heightIn(min = 46.dp).padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.Center,
                     ) {

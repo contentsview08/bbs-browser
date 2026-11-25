@@ -359,6 +359,8 @@ class Prefs(context: Context) {
     var reduceMotion by pref("reduceMotion", false)
     /** 字(Fonts.CHOICES のキー。PC の fontFamily と同じ名前)。Fonts.SYSTEM なら端末の標準 */
     var fontFamily by pref("fontFamily", Fonts.SYSTEM)
+    /** 自分で入れたフォントのファイルの名前(表示用。ファイルは Fonts.userFile) */
+    var userFontName by pref("userFontName", "")
     /** 自分で作った配色(CustomDef の JSON)。空なら作っていない */
     var customScheme by pref("customScheme", "")
     /** 保存した見た目のテーマ(JSON の配列。data/LookTheme.kt) */

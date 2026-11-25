@@ -20,7 +20,7 @@ import {
   ID_POSITIONS,
   ID_STYLES,
   isDarkScheme,
-  MOBILE_POST_STYLES,
+  mobilePostStyles,
   POST_STYLES,
   QUOTE_STYLES,
   QUOTE_STYLE_POSTS,
@@ -120,7 +120,7 @@ function PostStyleChips({ settings, update }: { settings: AppSettings; update: U
       <Segmented
         label="レスの見た目"
         value={effectivePostStyle(settings)}
-        options={(isMobile ? MOBILE_POST_STYLES : POST_STYLES).map((b) => ({ key: b.key, name: postStyleName(b.key), note: b.note }))}
+        options={(isMobile ? mobilePostStyles(effectivePostStyle(settings)) : POST_STYLES).map((b) => ({ key: b.key, name: postStyleName(b.key), note: b.note }))}
         onChange={(v) => update('postStyle', v)}
       />
     </div>

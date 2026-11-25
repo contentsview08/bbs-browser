@@ -11,7 +11,8 @@ import {
   LINE_HEIGHT_MIN,
   PAD_PX_MAX,
   SCREEN_PX_RANGE,
-  MOBILE_POST_STYLES,
+  mobilePostStyles,
+  POST_STYLES,
   COLOR_SCHEMES,
   AUTO_REFRESH_SECS,
   ID_STYLES,
@@ -198,11 +199,11 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
             </div>
           </Group>
           {/* 表示スタイルのシートの「スタイル」のタブと同じ見出し・同じ部品(スマホ版の設定の「スタイル」と同じ) */}
-          <Group title="スタイル" note={MOBILE_POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note}>
+          <Group title="スタイル" note={POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note}>
             <SegmentRow
               label="レスの見た目"
               value={effectivePostStyle(s)}
-              options={MOBILE_POST_STYLES.map((p) => ({ key: p.key, name: postStyleName(p.key) }))}
+              options={mobilePostStyles(effectivePostStyle(s)).map((p) => ({ key: p.key, name: postStyleName(p.key) }))}
               onChange={(v) => update('postStyle', v)}
             />
           </Group>

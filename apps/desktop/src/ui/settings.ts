@@ -41,7 +41,10 @@ export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
  * スマホで選べるレスの見た目(専ブラ風は、狭い画面では読みにくいので出さない)。
  * スマホでは密度は選ばせず、見た目で決める(effectiveDensity)
  */
-export const MOBILE_POST_STYLES = POST_STYLES.filter((p) => p.key !== 'classic')
+/** スマホで選べる見た目(専ブラ風・まとめ風は外す。スマホのアプリの pickablePostStyles と同じ。描く側は全部そのまま) */
+export const MOBILE_POST_STYLES = POST_STYLES.filter((p) => p.key !== 'classic' && p.key !== 'matome')
+/** スマホの選ぶ画面に出す見た目。いま選んでいるものが外したものなら、切り替えられるように一緒に出す */
+export const mobilePostStyles = (current: string) => POST_STYLES.filter((p) => (p.key !== 'classic' && p.key !== 'matome') || p.key === current)
 /** 実際に使うレスの見た目(スマホで専ブラ風が保存されていたらカード) */
 export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle {
   return isMobile && s.postStyle === 'classic' ? 'card' : s.postStyle

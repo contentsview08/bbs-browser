@@ -16,7 +16,10 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
   return (
     <>
       <StickySample settings={s} />
-      <Section title="開く位置">
+      {/* 段は 1 つの話題ずつ(開いたとき / 名前と ID / 日時 / 人気のレス / リンクと本文 / ミニマップ)。行の名前は「もの」の名前、説明は 1 行。
+          スマホのアプリの設定「スレ表示」と同じ段・同じ順(docs/settings-plan.md)。PC だけの段はその後ろ */}
+      <Section title="開いたとき">
+        <p className="text-xs text-c-text-muted mb-1.5">開く位置</p>
         <Choice
           value={s.openPosition}
           options={[
@@ -26,36 +29,16 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           ]}
           onChange={(v) => update('openPosition', v)}
         />
+        <div className="mt-3">
+          <Toggle checked={s.showNextCandidatesAtEnd} onChange={(v) => update('showNextCandidatesAtEnd', v)} label="次スレの候補" note="スレが終わったら一番下に出します。「次スレを探す」でも探せます" />
+          <Toggle checked={s.showNextUnreadAtEnd} onChange={(v) => update('showNextUnreadAtEnd', v)} label="次の未読スレへのボタン" note="一番下に、いまのスレ一覧で次に未読のあるスレへ" />
+        </div>
       </Section>
-      <Section desktopOnly title="アンカー(>>1)のポップアップ" note="レス番号と ID は押すと一覧が出ます">
-        <Choice
-          value={s.anchorPopup}
-          options={[
-            { key: 'click', name: '押したら出す' },
-            { key: 'hover', name: 'マウスを乗せたら出す' },
-          ]}
-          onChange={(v) => update('anchorPopup', v)}
-        />
-      </Section>
-      <Section title="名前と ID" note="名前の省き方は、板ごとにも変えられます(設定 → 掲示板ごとの設定)">
-        <Toggle
-          checked={s.omitNoname}
-          onChange={(v) => update('omitNoname', v)}
-          label="名無しの名前を省く"
-          note="そのスレで一番多い名前(レスの 3 割以上)と、板の既定の名前(「名無しさん」など)を名無しとみなして省きます。後ろのトリップなどは残します"
-        />
-        <Toggle
-          checked={s.highlightOp}
-          onChange={(v) => update('highlightOp', v)}
-          label="スレ主に「主」の印"
-          note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
-        />
-        <Toggle
-          checked={s.idShort}
-          onChange={(v) => update('idShort', v)}
-          label="ID を短く出す"
-          note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
-        />
+      <Section title="名前と ID" note="名前の省き方は、板ごとにも変えられます(掲示板ごとの設定)">
+        <Toggle checked={s.omitNoname} onChange={(v) => update('omitNoname', v)} label="名無しの名前を省く" note="そのスレで一番多い名前(3 割以上)と、板の既定の名前。後ろのトリップなどは残します" />
+        <Toggle checked={s.nameSubtle} onChange={(v) => update('nameSubtle', v)} label="名前欄を薄く" note="日付や ID と同じ色・同じ大きさに" />
+        <Toggle checked={s.watchoiShort} onChange={(v) => update('watchoiShort', v)} label="ワッチョイを短く" note="(ワッチョイ 1a2b-3c4d) → (1a2b-3c4d)" />
+        <Toggle checked={s.idShort} onChange={(v) => update('idShort', v)} label="ID を短く" note="先頭の 6 文字だけ。数えるのと色は ID 全体で" />
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の見せ方</p>
         <div className="max-w-md">
           <Segmented label="ID の見せ方" value={s.idStyle} options={ID_STYLES} onChange={(v) => update('idStyle', v)} />
@@ -65,48 +48,24 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <div className="max-w-md">
           <Segmented label="ID の位置" value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
         </div>
-        <div className="mt-3">
-          <Toggle checked={s.nameSubtle} onChange={(v) => update('nameSubtle', v)} label="名前欄を目立たなくする" note="名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます" />
-          <Toggle checked={s.watchoiShort} onChange={(v) => update('watchoiShort', v)} label="ワッチョイを短く出す" note="「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)" />
-          <Toggle
-            checked={s.iconFromWatchoi}
-            onChange={(v) => update('iconFromWatchoi', v)}
-            label="ワッチョイがあるときは、アイコンをワッチョイから作る"
-            note="Discord 風・LINE 風・ID の見せ方「模様」のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます"
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">アイコンの種(Discord 風・LINE 風・模様の ID)</p>
+        <div className="max-w-md">
+          <Segmented
+            label="アイコンの種"
+            value={s.iconFromWatchoi ? 'watchoi' : 'id'}
+            options={[
+              { key: 'watchoi' as const, name: 'ワッチョイ(あれば)' },
+              { key: 'id' as const, name: 'ID' },
+            ]}
+            onChange={(v) => update('iconFromWatchoi', v === 'watchoi')}
           />
         </div>
+        <p className="text-[10px] text-c-text-muted mt-1">ワッチョイは週ごとなので、同じ人が同じアイコンで続きます(ID は日ごと)</p>
+        <div className="mt-3">
+          <Toggle checked={s.highlightOp} onChange={(v) => update('highlightOp', v)} label="スレ主の印" note=">>1 と同じ ID のレスに「主」(ID のない板では付きません)" />
+        </div>
       </Section>
-      <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。基本の文字の大きさは「表示」にあります">
-        <PostFontSliders settings={s} update={update} />
-      </Section>
-      <Section title="本文">
-        <Toggle
-          checked={s.tidyBlankLines}
-          onChange={(v) => update('tidyBlankLines', v)}
-          label="空行を整える"
-          note="3 行以上続いた空行を 1 行にまとめ、本文の最後の空行を消します"
-        />
-        <Toggle
-          checked={s.urlShorten}
-          onChange={(v) => update('urlShorten', v)}
-          label="URL を短く見せる"
-          note="https:// を外し、長い URL は後ろを「…」で省きます。画像の URL は「画像」の札にし、続いて並んだものは「画像 ×3」のようにまとめます。押すと元の URL を開きます"
-        />
-        <Toggle
-          checked={s.showLinkPreview}
-          onChange={(v) => update('showLinkPreview', v)}
-          label="リンクのカードを出す"
-          note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
-        />
-        <Toggle
-          checked={s.openLinksInApp}
-          onChange={(v) => update('openLinksInApp', v)}
-          label="リンクをアプリの中で開く"
-          note="掲示板でないリンクを、外のブラウザではなくアプリの中で開きます。ウェブページは題・本文・画像だけを抜き出して出し(読めないページは右上からブラウザで開けます)、画像・動画・YouTube はそのまま見られます"
-        />
-      </Section>
-      <Section title="日時の出し方" note="レスの頭の日時の形。元の形は、日時にマウスを乗せると出ます">
-        {/* 表示スタイルの窓の「細かい表示」と同じ切り替えボタン(狭いと縦に並ぶ) */}
+      <Section title="日時" note="元の形は、日時にマウスを乗せると出ます">
         <div className="max-w-md">
           <Segmented
             label="日時の出し方"
@@ -120,10 +79,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           />
         </div>
       </Section>
-      <Section desktopOnly title="レスをダブルクリックしたとき" note="1 回押したときは、今までどおりアンカーツリー(ダブルクリックに操作を割り当てると、1 回の押しは少し遅れます)">
-        <Choice value={s.postDoubleClick} options={POST_DOUBLE_CLICKS} onChange={(v) => update('postDoubleClick', v)} />
-      </Section>
-      <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">
+      <Section title="人気のレス" note="返信が 3 件からのレス。多いほど赤く">
         <Choice
           value={s.heatStyle}
           options={[
@@ -133,6 +89,31 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           ]}
           onChange={(v) => update('heatStyle', v)}
         />
+      </Section>
+      <Section title="リンクと本文">
+        <Toggle checked={s.showLinkPreview} onChange={(v) => update('showLinkPreview', v)} label="リンクのカード" note="画像でも動画でもないリンクに、ページの題・説明・画像を本文の下に(見えたときに取りに行きます)" />
+        <Toggle checked={s.openLinksInApp} onChange={(v) => update('openLinksInApp', v)} label="リンクをアプリの中で開く" note="オフ: ブラウザで開く。アプリの中では題・本文・画像だけを抜き出して出します" />
+        <Toggle checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} label="URL を短く" note="https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札に(押すと元の URL)" />
+        <Toggle checked={s.tidyBlankLines} onChange={(v) => update('tidyBlankLines', v)} label="空行を整える" note="3 行以上続いた空行を 1 行に。本文の最後の空行は消します" />
+      </Section>
+      <Section title="ミニマップ">
+        <Toggle checked={s.showMinimap} onChange={(v) => update('showMinimap', v)} label="ミニマップ" note="右端に、人気レス・自分のレス・画像の位置と、未読の始まり" />
+      </Section>
+      <Section desktopOnly title="アンカー(>>1)のポップアップ" note="レス番号と ID は押すと一覧が出ます">
+        <Choice
+          value={s.anchorPopup}
+          options={[
+            { key: 'click', name: '押したら出す' },
+            { key: 'hover', name: 'マウスを乗せたら出す' },
+          ]}
+          onChange={(v) => update('anchorPopup', v)}
+        />
+      </Section>
+      <Section desktopOnly title="レスをダブルクリックしたとき" note="1 回押したときは、今までどおりアンカーツリー(ダブルクリックに操作を割り当てると、1 回の押しは少し遅れます)">
+        <Choice value={s.postDoubleClick} options={POST_DOUBLE_CLICKS} onChange={(v) => update('postDoubleClick', v)} />
+      </Section>
+      <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。基本の文字の大きさは「表示」にあります">
+        <PostFontSliders settings={s} update={update} />
       </Section>
       <Section title="画像とサムネイル" note="本文中の画像 URL(jpg・png・gif・webp)と動画を小さく出します">
         <p className="text-xs text-c-text-muted mb-1.5">サムネイルを読み込む</p>
@@ -193,26 +174,6 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
             <ListEditor noun="目印の言葉" items={s.grossWords} onChange={(v) => update('grossWords', v)} placeholder="例: 閲覧注意" />
           </div>
         )}
-      </Section>
-      <Section title="スレ表示の画面">
-        <Toggle
-          checked={s.showMinimap}
-          onChange={(v) => update('showMinimap', v)}
-          label="ミニマップを出す"
-          note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
-        />
-        <Toggle
-          checked={s.showNextCandidatesAtEnd}
-          onChange={(v) => update('showNextCandidatesAtEnd', v)}
-          label="スレの最後に次スレの候補を出す"
-          note="スレが終わったら(dat 落ち・上限に達した)、-END- の下に次スレの候補を出します。オフでも「次スレを探す」で探せます"
-        />
-        <Toggle
-          checked={s.showNextUnreadAtEnd}
-          onChange={(v) => update('showNextUnreadAtEnd', v)}
-          label="スレの最後に次の未読スレを出す"
-          note="-END- の下に、いまのスレ一覧で次に未読のあるスレへのボタンを出します"
-        />
       </Section>
       <Section desktopOnly title="画像ビューワーを閉じるボタン" note="画像ビューワーの上でこのボタンを押すと閉じます。Esc・背景のクリックでも閉じます">
         <Choice value={s.lightboxCloseClick} options={LIGHTBOX_CLOSE_CLICKS} onChange={(v) => update('lightboxCloseClick', v)} />

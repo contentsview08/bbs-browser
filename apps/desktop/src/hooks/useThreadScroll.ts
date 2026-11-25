@@ -719,25 +719,37 @@ export function useThreadScroll(o: Options) {
     const saved = latest.current.initialPosition
     const closed = closedPosition(latest.current.threadKey)
     const savedEl = (no?: number) => (no === undefined ? null : root.querySelector<HTMLElement>(`[data-post="${no}"]`))
-    const t = openTarget({
-      saved,
-      savedFound: !!savedEl(saved?.no),
-      closed: savedEl(closed?.no) ? closed : undefined,
-      openPosition: latest.current.openPosition,
-      unreadFrom,
-      hasUnreadPost: byNo.has(unreadFrom),
-      readNo: sent.current,
-    })
-    if (t.kind === 'bottom') {
-      animateScroll(root, () => root.scrollHeight, 0)
-      pendingUnread.current = t.pendingUnread
-    } else if (t.kind === 'unread') {
-      // ツリーでは、並んでいる順で最初の未読のレスへ(番号の順と同じ見え方。あとの未読は枝に散るので、新着の印とミニマップで)
-      scrollToUnread(t.no)
-    } else if (t.kind === 'saved') {
-      pendingUnread.current = !!t.pendingUnread
-      const el = savedEl(t.position.no)
-      if (el) jumpScroll(root, el, () => headerOffset() + t.position.offset)
+    if (latest.current.tree) {
+      // ツリー表示: 未読は枝に散るので「未読の頭」を追わない。閉じたときの位置に戻すだけ(一番下で閉じたなら一番下、なければ先頭)。
+      // 設定が先頭・一番下なら、そのとおり(スマホのアプリと同じ)
+      const op = latest.current.openPosition
+      const pos = saved ?? closed
+      if (op === 'bottom' || (op !== 'top' && pos?.bottom)) animateScroll(root, () => root.scrollHeight, 0)
+      else if (op !== 'top' && pos) {
+        const el = savedEl(pos.no)
+        if (el) jumpScroll(root, el, () => headerOffset() + pos.offset)
+      }
+      pendingUnread.current = false
+    } else {
+      const t = openTarget({
+        saved,
+        savedFound: !!savedEl(saved?.no),
+        closed: savedEl(closed?.no) ? closed : undefined,
+        openPosition: latest.current.openPosition,
+        unreadFrom,
+        hasUnreadPost: byNo.has(unreadFrom),
+        readNo: sent.current,
+      })
+      if (t.kind === 'bottom') {
+        animateScroll(root, () => root.scrollHeight, 0)
+        pendingUnread.current = t.pendingUnread
+      } else if (t.kind === 'unread') {
+        scrollToUnread(t.no)
+      } else if (t.kind === 'saved') {
+        pendingUnread.current = !!t.pendingUnread
+        const el = savedEl(t.position.no)
+        if (el) jumpScroll(root, el, () => headerOffset() + t.position.offset)
+      }
     }
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
     prevCount.current = log.posts.length
@@ -889,12 +901,10 @@ export function useThreadScroll(o: Options) {
     const read = Math.max(sent.current, log.readNo)
     const fresh = log.posts.filter((p) => p.no > prevLastNo && p.no > read).map((p) => p.no)
     if (latest.current.tree) {
-      // ツリー: 未読を待っていた(開いたとき手元に未読がなかった)なら、並びで最初の未読のレスへ。
-      // 読んでいる途中の新着は途中に入るので動かさない(読んでいるレスは位置の固定が同じ所に留める)。光らせるだけ
+      // ツリー: 新着は途中に入るので動かさない(読んでいるレスは位置の固定が同じ所に留める)。光らせるだけ
       setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))
       clearTimeout(flashTimer.current)
       flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
-      if (pendingUnread.current && !heldJump.current && fresh.length > 0) scrollToUnread(unreadFrom)
       firstGrowth.current = false
       pendingUnread.current = false
       return

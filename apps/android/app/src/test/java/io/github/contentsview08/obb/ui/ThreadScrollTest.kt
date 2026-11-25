@@ -25,9 +25,9 @@ class ThreadScrollTest {
         assertEquals(OpenTarget.Unread(101), reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "unread"))
     }
 
-    @Test fun 開き直しで全部読んでいたら前の位置へ戻して新着を待つ() {
+    @Test fun 開き直しで全部読んでいたら前の位置へ戻す_途中なら新着で動かさない() {
         val closed = ScrollPos(95, -8, false, readNo = 100)
-        assertEquals(OpenTarget.Saved(closed, pendingUnread = true), reopen(closed, 100, false, "unread"))
+        assertEquals(OpenTarget.Saved(closed, pendingUnread = false), reopen(closed, 100, false, "unread"))
         // 一番下で閉じていたら一番下
         assertEquals(OpenTarget.Bottom(pendingUnread = true), reopen(ScrollPos(95, 0, true, readNo = 100), 100, false, "unread"))
     }

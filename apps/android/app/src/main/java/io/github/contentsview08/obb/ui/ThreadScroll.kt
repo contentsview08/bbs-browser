@@ -246,7 +246,8 @@ fun shouldAutoRefresh(visible: Boolean, archived: Boolean, postCount: Int, maxPo
  * 覚えた位置の no は画面の上に見えていたレスなので、既読そのものとは比べない(既読は 1 画面ぶん先にある)。
  * 既読を添えていない古い覚えは、そのまま使う
  * closed は前に閉じたときの位置(スレ一覧などから開き直したとき)。saved と違い設定より先には使わず、
- * 「最初の未読」で未読の頭がないとき(全部読んでいた)にだけ戻す(PC 版の closed と同じ)。closedFound はそのレスが手元にあるか
+ * 「最初の未読」で未読の頭がないとき(全部読んでいた)にだけ戻す(PC 版の closed と同じ)。closedFound はそのレスが手元にあるか。
+ * 途中で閉じていたなら、新着が届いてもそこから動かさない(2026-11-25。前は未読の頭へ送っていて、読んでいた所から一番下へ飛んで見えた)
  */
 fun openTarget(
     saved: ScrollPos?, savedFound: Boolean, openPosition: String, readNo: Int, unreadFrom: Int, hasUnreadPost: Boolean,
@@ -262,7 +263,8 @@ fun openTarget(
     if (openPosition == "unread" && unreadFrom > 1) {
         if (hasUnreadPost) return OpenTarget.Unread(unreadFrom)
         val c = usable(closed)
-        return if (c != null && !c.bottom && closedFound) OpenTarget.Saved(c, pendingUnread = true) else OpenTarget.Bottom(pendingUnread = true)
+        // 途中で閉じていたならそこへ戻すだけ(新着が届いても動かさない。読んでいた所から新着まで送ると読み飛ばす)。一番下で閉じていたなら一番下で新着を待つ
+        return if (c != null && !c.bottom && closedFound) OpenTarget.Saved(c, pendingUnread = false) else OpenTarget.Bottom(pendingUnread = true)
     }
     return OpenTarget.Top
 }
@@ -354,12 +356,15 @@ class ThreadScroller(
                 else -> state.scrollToItem(0)
             }
             ctl.pendingUnread = false
+            ctl.firstGrowth = false
         } else when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom }, closed, closedIdx >= 0)) {
             is OpenTarget.Bottom -> { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
             // 覚えたずれは「上の帯の下からの位置」(上へはみ出していれば負)。scrollToItem は送る量なので符号を返す
             is OpenTarget.Saved -> {
                 state.scrollToItem(if (t.pos === saved) savedIdx else closedIdx, -t.pos.offset)
                 ctl.pendingUnread = t.pendingUnread
+                // 覚えた位置へ戻したときは「開いて最初の取得の新着へ送る」をしない(読んでいた所から一番下へ飛んでしまう)
+                ctl.firstGrowth = false
             }
             is OpenTarget.Unread -> toUnreadNow(t.no)
             OpenTarget.Top -> if (jumpTo != null) jumpToNow(jumpTo) else state.scrollToItem(0)

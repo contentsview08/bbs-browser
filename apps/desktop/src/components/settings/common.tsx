@@ -119,7 +119,8 @@ export function Section({
   if (desktopOnly && isMobile) return null
   return (
     <section ref={ref} className={isMobile ? 'mb-10' : 'mb-8'}>
-      <h3 className={`${isMobile ? 'text-base mb-1.5' : 'text-sm mb-1'} font-bold text-c-text-strong flex items-center gap-2`}>
+      {/* 見出しは差し色で(説明の薄い字と見分けがつくように) */}
+      <h3 className={`${isMobile ? 'text-[15px] mb-1.5' : 'text-sm mb-1'} font-bold text-c-accent tracking-wide flex items-center gap-2`}>
         {title}
         {advanced && <span className="text-[10px] font-normal px-1.5 rounded border border-c-border text-c-text-muted">高度</span>}
       </h3>

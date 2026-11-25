@@ -1,8 +1,9 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
 // 見本・6 色・細かい色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・JSON を貼り付け・もとにする配色を選び直す
 import { useMemo, useRef, useState } from 'react'
+import { isMobile } from '../../utils/platform'
 import { COLOR_SCHEMES, accentKeyOf, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
-import { CUSTOM_KEYS, CUSTOM_LABELS, EXTRA_COLORS, customOf, customToJson, customVars, extraCount, extraValues, parseCustom, type CustomDef, type ExtraColors, type ExtraKey } from '../../ui/customScheme'
+import { CUSTOM_KEYS, CUSTOM_LABELS, EXTRA_COLORS, customChecks, customOf, customToJson, customVars, extraCount, extraValues, parseCustom, type CustomDef, type ExtraColors, type ExtraKey } from '../../ui/customScheme'
 
 /** 色選びで動かし終えてから、設定に書くまで待つ時間 */
 const COLOR_COMMIT_MS = 150
@@ -71,10 +72,9 @@ export default function CustomSchemeEditor(props: {
   const using = s.scheme === 'custom' && !s.followOsTheme
   const BTN = 'px-4 py-2.5 rounded-md text-[14px]'
 
-  return (
-    <div className="flex flex-col">
-      {/* 見本: 上の帯・スレ一覧の行(読んだ・まだ開いていない)・レス・書き込み欄を、いま作っている色で小さく描く */}
-      <div className={`m-4 rounded-lg overflow-hidden border border-c-border ${props.stickySample ? '[@media(min-height:640px)]:sticky [@media(min-height:640px)]:-top-5 z-10' : ''}`} style={{ ...(vars as React.CSSProperties), background: 'var(--c-base)' }}>
+  // 見本: 上の帯・スレ一覧の行(読んだ・まだ開いていない)・レス・書き込み欄を、いま作っている色で小さく描く
+  const sample = (
+      <div className={`${isMobile ? 'm-4' : 'mb-3'} rounded-lg overflow-hidden border border-c-border ${props.stickySample && isMobile ? '[@media(min-height:640px)]:sticky [@media(min-height:640px)]:-top-5 z-10' : ''}`} style={{ ...(vars as React.CSSProperties), background: 'var(--c-base)' }}>
         <div className="flex items-center px-3 py-2.5" style={{ background: 'var(--c-header-footer)' }}>
           <span className="flex-1 font-bold text-[15px]" style={{ color: 'var(--c-text-strong)' }}>
             ニュー速
@@ -131,6 +131,146 @@ export default function CustomSchemeEditor(props: {
         </div>
       </div>
 
+  )
+  const checks = customChecks(shown)
+  const checksView = (
+    <div className={isMobile ? 'px-4 pt-4' : 'mt-3 rounded-lg border border-c-border bg-c-surface px-3 py-2.5'}>
+      <p className="text-xs font-bold text-c-accent tracking-wide">読みやすさ(コントラスト比)</p>
+      {checks.map((c) => (
+        <div key={c.label} className="flex items-center text-[13px] mt-1">
+          <span className="flex-1 text-c-text-body">{c.label}</span>
+          <span className={`font-mono ${c.ratio >= c.min ? 'text-c-text-muted' : 'text-c-mark-danger'}`}>{c.ratio.toFixed(1)}</span>
+          <span className={`ml-2 text-xs ${c.ratio >= c.min ? 'text-c-mark-new' : 'text-c-mark-danger'}`}>{c.ratio >= c.min ? 'ok' : `低い(${c.min} 以上に)`}</span>
+        </div>
+      ))}
+    </div>
+  )
+  if (!isMobile) {
+    // PC: 左に見本・判定・操作を固定し、右で色を選ぶ(スクロールしても見本が見えたまま、変えた所がすぐ分かる)
+    return (
+      <div className="grid grid-cols-[minmax(280px,360px)_1fr] gap-6 items-start">
+        <div className="sticky top-0 self-start">
+          {sample}
+          {checksView}
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              disabled={using}
+              onClick={() => {
+                save(def)
+                update('followOsTheme', false)
+                update('scheme', 'custom')
+                update('accent', '')
+              }}
+              className={`${BTN} font-bold ${using ? 'bg-c-surface2 text-c-text-muted' : 'bg-c-accent text-[var(--c-accent-text)]'}`}
+            >
+              {using ? 'この配色を使っています' : 'この配色を使う'}
+            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void navigator.clipboard.writeText(customToJson(def, s.accent)).then(() => setNotice('JSON をコピーしました'))} className={`${BTN} flex-1 border border-c-border text-c-text-strong`}>
+                JSON をコピー
+              </button>
+              <button type="button" onClick={() => void paste()} className={`${BTN} flex-1 border border-c-border text-c-text-strong`}>
+                JSON を貼り付け
+              </button>
+            </div>
+            {notice && <p className="text-[12px] text-c-text-muted">{notice}</p>}
+            {s.accent && (
+              <p className="text-[12px] text-c-heat-very-hot">
+                差し色を選んでいるので、アプリでは「強調」の代わりに差し色が使われます。
+                <button type="button" className="ml-1 underline" onClick={() => update('accent', '')}>
+                  差し色をテーマの色に戻す
+                </button>
+              </p>
+            )}
+          </div>
+          <p className="mt-4 mb-1.5 text-xs font-bold text-c-accent tracking-wide">もとにする配色</p>
+          <p className="mb-1.5 text-[11px] text-c-text-muted">選ぶと、6 色をその配色の色に戻します(細かい色はそのまま)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {COLOR_SCHEMES.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                title={c.name}
+                onClick={() => save({ ...customOf(c.key, isDarkScheme(c.key)), colors: def.colors })}
+                data-scheme={c.key}
+                className="w-[30px] h-[30px] rounded-md flex items-center justify-center"
+                style={{ background: 'var(--c-base)', border: c.key === def.from ? '2px solid var(--c-accent)' : '1px solid var(--c-border)' }}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.accent }} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="mb-1.5 text-xs font-bold text-c-accent tracking-wide">6 色</p>
+          <div className="rounded-lg overflow-hidden bg-c-surface border border-c-border">
+            {CUSTOM_KEYS.map((k) => (
+              <label key={k} className="flex items-center gap-3 min-h-[44px] px-3.5 border-b border-c-border last:border-b-0">
+                <input type="color" value={shown[k]} onChange={(e) => pick(k, e.target.value)} className="w-[26px] h-[26px] p-0 rounded-md border border-c-border-strong cursor-pointer" />
+                <span className="flex-1 text-[14px] text-c-text-strong">{CUSTOM_LABELS[k]}</span>
+                <input
+                  type="text"
+                  defaultValue={def[k].toUpperCase()}
+                  key={def[k]}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim()
+                    if (/^#[0-9a-f]{6}$/i.test(v)) save({ ...def, [k]: v.toLowerCase() })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  className="w-[6.5em] bg-transparent border-0 p-0 text-right font-mono text-[13px] text-c-text-muted focus:ring-0"
+                />
+              </label>
+            ))}
+          </div>
+          <p className="mt-5 mb-1 text-xs font-bold text-c-accent tracking-wide">細かい色</p>
+          <p className="mb-2 text-[11px] text-c-text-muted">選んでいない色は、6 色から作った色(人気・印などは配色の決まりの色)です。選んだ色は「戻す」で元に戻せます{extraCount(def) > 0 ? `(${extraCount(def)} 色を選んでいます)` : ''}</p>
+          {[...new Set(EXTRA_COLORS.map((e) => e.group))].map((g) => (
+            <div key={g} className="mb-3">
+              <p className="px-0.5 pb-1 text-[11px] font-bold text-c-text-muted">{g}</p>
+              <div className="rounded-lg overflow-hidden bg-c-surface border border-c-border grid grid-cols-1 xl:grid-cols-2">
+                {EXTRA_COLORS.filter((e) => e.group === g).map((e) => {
+                  const val = extras[e.key]
+                  const picked = !!def.colors?.[e.key]
+                  return (
+                    <label key={e.key} className="flex items-center gap-3 min-h-[40px] pl-3.5 pr-1.5 border-b border-c-border xl:odd:border-r xl:[&:nth-last-child(-n+2)]:border-b-0 last:border-b-0">
+                      <input type="color" value={val} onChange={(ev) => pickExtra(e.key, ev.target.value)} className="w-[22px] h-[22px] p-0 rounded-md border border-c-border-strong cursor-pointer" />
+                      <span className={`flex-1 text-[13px] ${picked ? 'text-c-text-strong' : 'text-c-text-body'}`}>{e.label}</span>
+                      <input
+                        type="text"
+                        defaultValue={val.toUpperCase()}
+                        key={val}
+                        onBlur={(ev) => {
+                          const v = ev.target.value.trim()
+                          if (/^#[0-9a-f]{6}$/i.test(v)) save({ ...def, colors: { ...def.colors, [e.key]: v.toLowerCase() } })
+                        }}
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter') ev.currentTarget.blur()
+                        }}
+                        className="w-[6.5em] bg-transparent border-0 p-0 text-right font-mono text-[12px] text-c-text-muted focus:ring-0"
+                      />
+                      {picked ? (
+                        <button type="button" onClick={() => resetExtra(e.key)} className="px-2 py-1.5 text-[12px] font-bold text-c-accent">
+                          戻す
+                        </button>
+                      ) : (
+                        <span className="w-[2.9em]" />
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col">
+      {sample}
       {/* 6 色。色の札を押すと端末の色選び、右の欄に #RRGGBB を打っても変えられる */}
       <div className="mx-4 rounded-lg overflow-hidden bg-c-surface border border-c-border">
         {CUSTOM_KEYS.map((k) => (

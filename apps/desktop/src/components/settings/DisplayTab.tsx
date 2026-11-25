@@ -357,60 +357,73 @@ function LookThemeSection({ settings: s, update, onOpenCustomScheme }: Pick<Sett
         </div>
       )}
       {s.lookThemes.length === 0 && <p className="text-sm text-c-text-muted">スキンはまだありません。「いまの見た目をスキンとして保存」で作ると、上の「配色とスキン」に並びます</p>}
-      <div className="flex flex-wrap items-center gap-2 pt-2">
-        <input
-          type="text"
-          value={saveName}
-          placeholder={lookThemeKeyName(s.lookThemeKey) || 'スキンの名前'}
-          onChange={(e) => setSaveName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') saveCurrent()
-          }}
-          className={`${INPUT} w-[14em]`}
-        />
-        <button type="button" className={BTN} disabled={!saveName.trim()} onClick={saveCurrent}>
-          いまの見た目をスキンとして保存
-        </button>
+      <div className="rounded-lg border border-c-border bg-c-surface px-3.5 py-3">
+        <p className="text-xs font-bold text-c-accent tracking-wide mb-1.5">いまの見た目をスキンとして保存</p>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={saveName}
+            placeholder={lookThemeKeyName(s.lookThemeKey) || 'スキンの名前'}
+            onChange={(e) => setSaveName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveCurrent()
+            }}
+            className={`${INPUT} flex-1 max-w-[20em]`}
+          />
+          <button type="button" className={`${BTN} font-bold ${saveName.trim() ? 'bg-c-accent text-[var(--c-accent-text)] border-transparent' : ''}`} disabled={!saveName.trim()} onClick={saveCurrent}>
+            保存
+          </button>
+        </div>
+        <p className="mt-1.5 text-[11px] text-c-text-muted">同じ名前があれば入れ替えます。保存したスキンは上の「配色とスキン」に並びます</p>
       </div>
       {s.lookThemes.length > 0 && (
-        <div className="pt-2 flex flex-wrap gap-1.5">
-          {s.lookThemes.map((t) => (
-            <span key={lookThemeName(t)} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full border border-c-border text-xs text-c-text-body">
-              {lookThemeName(t)}
-              <button
-                type="button"
-                className="material-symbols-outlined text-[16px] text-c-text-muted hover:text-c-mark-danger"
-                title={`「${lookThemeName(t)}」を消す`}
-                onClick={() => {
-                  update('lookThemes', withoutSavedTheme(s.lookThemes, lookThemeName(t)))
-                  if (s.lookThemeKey === `saved:${lookThemeName(t)}`) update('lookThemeKey', '')
-                }}
-              >
-                close
-              </button>
-            </span>
-          ))}
+        <div className="mt-3 rounded-lg overflow-hidden border border-c-border bg-c-surface">
+          {s.lookThemes.map((t) => {
+            const key = `saved:${lookThemeName(t)}`
+            const on = s.lookThemeKey === key
+            return (
+              <div key={key} className="flex items-center gap-3 min-h-[42px] pl-3.5 pr-1.5 border-b border-c-border last:border-b-0">
+                <span className={`flex-1 text-[14px] truncate ${on ? 'text-c-text-strong font-bold' : 'text-c-text-body'}`}>{lookThemeName(t)}</span>
+                {on && <span className="text-xs text-c-accent font-bold">使っています</span>}
+                <button
+                  type="button"
+                  className="material-symbols-outlined text-[18px] px-2 py-1.5 text-c-text-muted hover:text-c-mark-danger"
+                  title={`「${lookThemeName(t)}」を消す`}
+                  onClick={() => {
+                    update('lookThemes', withoutSavedTheme(s.lookThemes, lookThemeName(t)))
+                    if (s.lookThemeKey === key) update('lookThemeKey', '')
+                  }}
+                >
+                  delete
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
       {showAdvanced && (
-        <div className="flex flex-wrap gap-2 pt-3">
-          <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
-            スキンの JSON を貼り付けて当てる
-          </button>
-          <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまのスキンの JSON をコピーしました'))}>
-            いまのスキンを JSON でコピー
-          </button>
-          {!isMobile && (
-            <>
-              <button type="button" className={BTN} onClick={() => void saveJson('skin', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
-                ファイルに書き出す
-              </button>
-              <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
-                ファイルを読み込む
-              </button>
-            </>
-          )}
-        </div>
+        <details className="mt-3 rounded-lg border border-c-border bg-c-surface px-3.5 py-2.5">
+          <summary className="cursor-pointer text-xs font-bold text-c-accent tracking-wide">JSON で受け渡す(配る・取り込む)</summary>
+          <div className="flex flex-wrap gap-2 pt-2.5">
+            <button type="button" className={BTN} onClick={() => void navigator.clipboard.readText().then((t) => (t.trim() ? applyText(t) : setNotice('クリップボードに JSON がありません')), () => setNotice('クリップボードを読めませんでした'))}>
+              スキンの JSON を貼り付けて当てる
+            </button>
+            <button type="button" className={BTN} onClick={() => void navigator.clipboard.writeText(lookThemeJson(s, lookThemeKeyName(s.lookThemeKey))).then(() => setNotice('いまのスキンの JSON をコピーしました'))}>
+              いまのスキンを JSON でコピー
+            </button>
+            {!isMobile && (
+              <>
+                <button type="button" className={BTN} onClick={() => void saveJson('skin', lookThemeOf(s, lookThemeKeyName(s.lookThemeKey))).then((ok) => ok && setNotice('書き出しました'))}>
+                  ファイルに書き出す
+                </button>
+                <button type="button" className={BTN} onClick={() => void openJson().then((t) => t && applyText(t))}>
+                  ファイルを読み込む
+                </button>
+              </>
+            )}
+          </div>
+          <p className="pt-2 text-[11px] text-c-text-muted">形は docs/skin.md。掲示板などに貼って配れます。貼り付けたスキンは保存され、上に並びます</p>
+        </details>
       )}
       {notice && <p className="pt-2 text-xs text-c-text-muted">{notice}</p>}
     </Section>

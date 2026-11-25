@@ -261,10 +261,13 @@ fun openTarget(
     }
     if (openPosition == "bottom") return OpenTarget.Bottom(pendingUnread = false)
     if (openPosition == "unread" && unreadFrom > 1) {
-        if (hasUnreadPost) return OpenTarget.Unread(unreadFrom)
+        // 途中で閉じていたなら、未読が手元にあってもそこへ戻す(「前回読んだところ」= 閉じたときの位置。2026-11-26。
+        // 前は未読が手元にあると未読の頭へ行き、途中で閉じて開き直すたびに「ここから未読」へ落ちていた)。新着が届いても動かさない
         val c = usable(closed)
-        // 途中で閉じていたならそこへ戻すだけ(新着が届いても動かさない。読んでいた所から新着まで送ると読み飛ばす)。一番下で閉じていたなら一番下で新着を待つ
-        return if (c != null && !c.bottom && closedFound) OpenTarget.Saved(c, pendingUnread = false) else OpenTarget.Bottom(pendingUnread = true)
+        if (c != null && !c.bottom && closedFound) return OpenTarget.Saved(c, pendingUnread = false)
+        // 一番下で閉じていた・位置を覚えていない: 未読の頭へ。まだ手元になければ一番下で新着を待つ
+        if (hasUnreadPost) return OpenTarget.Unread(unreadFrom)
+        return OpenTarget.Bottom(pendingUnread = true)
     }
     return OpenTarget.Top
 }

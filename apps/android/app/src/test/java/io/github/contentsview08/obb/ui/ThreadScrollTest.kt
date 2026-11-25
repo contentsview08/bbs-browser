@@ -21,8 +21,12 @@ class ThreadScrollTest {
         assertEquals(OpenTarget.Bottom(pendingUnread = false), reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "bottom"))
     }
 
-    @Test fun 開き直しは未読があれば未読の頭() {
-        assertEquals(OpenTarget.Unread(101), reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "unread"))
+    @Test fun 開き直しは途中で閉じていたらそこへ_未読が手元にあっても() {
+        val closed = ScrollPos(95, 0, false, readNo = 100)
+        assertEquals(OpenTarget.Saved(closed, pendingUnread = false), reopen(closed, 100, true, "unread"))
+        // 一番下で閉じていた・位置がないときは未読の頭へ
+        assertEquals(OpenTarget.Unread(101), reopen(ScrollPos(95, 0, true, readNo = 100), 100, true, "unread"))
+        assertEquals(OpenTarget.Unread(101), reopen(null, 100, true, "unread"))
     }
 
     @Test fun 開き直しで全部読んでいたら前の位置へ戻す_途中なら新着で動かさない() {

@@ -6,6 +6,8 @@ import { lookThemeName, type LookTheme } from './lookTheme'
 
 /** 一覧の置き場(obb-skins の GitHub Pages)。中身は tools/build_index.py が作る */
 export const SKIN_CATALOG_URL = 'https://contentsview08.github.io/obb-skins/index.json'
+/** 一覧(もっと探す)を出すか。配り場(obb-skins の Pages)がまだないので、整うまで UI から外しておく(2026-11-26)。取りにも行かない */
+export const SKIN_CATALOG_ENABLED = false
 
 /** 一覧の 1 つ(スキン 1 つ分の案内。scheme・settings は札を描くための写し) */
 export interface CatalogSkin {

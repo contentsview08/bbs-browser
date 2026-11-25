@@ -4,12 +4,13 @@
 import { useEffect, useRef } from 'react'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { updateInstalledSkins } from '../host/skinCatalog'
+import { SKIN_CATALOG_ENABLED } from '../ui/skinCatalog'
 
 export function useSkinAutoUpdate(settings: AppSettings, update: UpdateSetting) {
   const ref = useRef({ settings, update })
   ref.current = { settings, update }
   useEffect(() => {
-    if (!settings.lookThemes.some((t) => t.source)) return
+    if (!SKIN_CATALOG_ENABLED || !settings.lookThemes.some((t) => t.source)) return
     const t = setTimeout(() => void updateInstalledSkins(ref.current.settings, ref.current.update).catch(() => undefined), 8000)
     return () => clearTimeout(t)
     // 起動時だけ(入れたスキンが増えたときは、スキンの窓を開いたときに見る)

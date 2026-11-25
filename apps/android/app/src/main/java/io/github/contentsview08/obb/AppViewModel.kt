@@ -299,7 +299,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openSkins() {
         drawerOpen = false
         skinOpen = true
-        loadSkinCatalog()
+        if (io.github.contentsview08.obb.data.SkinCatalog.ENABLED) loadSkinCatalog()
     }
 
     fun closeSkins() {
@@ -743,7 +743,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 期限の切れた一時 NG は自動で片づける(PC 版と同じ。どの端末でも同じ結果になるので同期には送らない)。起動時はまだスレを開いていないので判定し直しは要らない
         prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
         // 一覧(カタログ)から入れたスキンがあれば、起動の少し後に新しくなっていないかを見る(なければ取りに行かない)
-        if (io.github.contentsview08.obb.data.LookTheme.saved(prefs).any { it.has("source") }) viewModelScope.launch {
+        if (io.github.contentsview08.obb.data.SkinCatalog.ENABLED && io.github.contentsview08.obb.data.LookTheme.saved(prefs).any { it.has("source") }) viewModelScope.launch {
             kotlinx.coroutines.delay(8000)
             runCatching { updateInstalledSkins(io.github.contentsview08.obb.data.SkinCatalog.fetch()) }
         }

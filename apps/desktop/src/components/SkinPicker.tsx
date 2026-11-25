@@ -8,7 +8,7 @@ import { customOf, customToJson, customVars, parseCustom, readSchemeVars } from 
 import { BUILTIN_SKINS, isBuiltinSkinScheme, lookThemeByKey, lookThemeKeyName, lookThemeName, lookThemeOf, lookThemePatch, lookThemeShareJson, lookThemeSwatch, pickBuiltinSkin, withSavedTheme, withoutSavedTheme, type LookTheme } from '../ui/lookTheme'
 import { AccentDots, PostDisplayItems, PostStyleChips, StyleOptionItems } from './StyleMenu'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
-import { installedSkin, skinKeyOf, type CatalogSkin } from '../ui/skinCatalog'
+import { SKIN_CATALOG_ENABLED, installedSkin, skinKeyOf, type CatalogSkin } from '../ui/skinCatalog'
 import { fetchSkinCatalog, installSkin, updateInstalledSkins } from '../host/skinCatalog'
 import { openJson, saveJson } from '../host/backup'
 import { ManagerDialog } from './SettingParts'
@@ -275,7 +275,7 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
     if (done.length > 0) setNotice(`新しくなりました: ${done.join('・')}`)
   }
   useEffect(() => {
-    void load()
+    if (SKIN_CATALOG_ENABLED) void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
@@ -516,6 +516,9 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
       </div>
       <p className="mt-1.5 text-[11px] text-c-text-muted">前の方が同梱のスキン、後ろが入れた・保存したスキン。長い名前は札の下に出ます</p>
 
+      {/* 配っているスキンの一覧(もっと探す)。配り場が整うまで出さない(SKIN_CATALOG_ENABLED) */}
+      {SKIN_CATALOG_ENABLED && (
+        <>
       <Heading
         right={
           <button type="button" title="一覧を取り直す" disabled={loading} onClick={() => void load()} className={`material-symbols-outlined text-[18px] w-7 h-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong disabled:opacity-50 ${loading ? 'animate-spin' : ''}`}>
@@ -550,6 +553,8 @@ export function SkinDialog(props: Props & { onClose: () => void; onEditColors?: 
         </div>
       )}
       <p className="mt-1.5 text-[11px] text-c-text-muted">入れたスキンは、配っている側が新しくすると自動で入れ替わります</p>
+        </>
+      )}
 
       <div className="mt-5 pt-3 border-t border-c-border flex flex-wrap items-center gap-2">
         {saving ? (

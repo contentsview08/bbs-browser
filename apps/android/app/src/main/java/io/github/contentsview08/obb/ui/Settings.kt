@@ -412,7 +412,7 @@ fun SkinPanel(vm: AppViewModel) {
                         SkinCards(builtin + saved)
                     }
                     // 配っているスキンの一覧(data/SkinCatalog.kt)。押すと入る。入れてあれば押すと当てる
-                    Group("もっと探す", note = "配っているスキンの一覧です。入れたスキンは、配る側が新しくすると自動で入れ替わります") {
+                    if (sc.ENABLED) Group("もっと探す", note = "配っているスキンの一覧です。入れたスキンは、配る側が新しくすると自動で入れ替わります") {
                         val cat = vm.skinCatalog
                         val err = vm.skinCatalogError
                         when {

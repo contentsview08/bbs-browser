@@ -55,7 +55,8 @@ export function openTarget(input: {
   if (input.openPosition === 'unread' && input.unreadFrom > 1) {
     if (input.hasUnreadPost) return { kind: 'unread', no: input.unreadFrom }
     const closed = usable(input.closed)
-    return closed && !closed.bottom ? { kind: 'saved', position: closed, pendingUnread: true } : { kind: 'bottom', pendingUnread: true }
+    // 途中で閉じていたならそこへ戻すだけ(新着が届いても動かさない。読んでいた所から新着まで送ると読み飛ばす)。一番下で閉じていたなら一番下で新着を待つ
+    return closed && !closed.bottom ? { kind: 'saved', position: closed, pendingUnread: false } : { kind: 'bottom', pendingUnread: true }
   }
   return { kind: 'top' }
 }

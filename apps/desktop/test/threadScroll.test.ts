@@ -66,9 +66,9 @@ describe('openTarget: 開いたときの行き先', () => {
 
   describe('タブを閉じたときの位置', () => {
     const base = { savedFound: false, openPosition: 'unread' as const, unreadFrom: 1001, hasUnreadPost: false }
-    it('全部読み終えたスレは、閉じたときの位置へ戻し、新着が届いたら未読の頭へ移れるようにしておく', () => {
+    it('全部読み終えたスレは、閉じたときの位置へ戻すだけ(途中なら新着が届いても動かさない)', () => {
       const closed = { no: 578, offset: -12 }
-      expect(openTarget({ ...base, closed })).toEqual({ kind: 'saved', position: closed, pendingUnread: true })
+      expect(openTarget({ ...base, closed })).toEqual({ kind: 'saved', position: closed, pendingUnread: false })
     })
     it('閉じたときに一番下にいたなら一番下', () => {
       expect(openTarget({ ...base, closed: { no: 990, offset: 0, bottom: true } })).toEqual({ kind: 'bottom', pendingUnread: true })
@@ -117,7 +117,7 @@ describe('openTarget: 開いたときの行き先', () => {
     it('閉じたときの位置も、既読が進んでいれば使わない', () => {
       const closed = { no: 578, offset: 0, readNo: 1000 }
       expect(openTarget({ ...base, savedFound: false, closed, readNo: 1200, unreadFrom: 1201, hasUnreadPost: false })).toEqual({ kind: 'bottom', pendingUnread: true })
-      expect(openTarget({ ...base, savedFound: false, closed, readNo: 1000, unreadFrom: 1001, hasUnreadPost: false })).toEqual({ kind: 'saved', position: closed, pendingUnread: true })
+      expect(openTarget({ ...base, savedFound: false, closed, readNo: 1000, unreadFrom: 1001, hasUnreadPost: false })).toEqual({ kind: 'saved', position: closed, pendingUnread: false })
     })
   })
 })

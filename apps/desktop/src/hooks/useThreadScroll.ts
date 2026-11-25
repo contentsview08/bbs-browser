@@ -692,7 +692,11 @@ export function useThreadScroll(o: Options) {
     // 途切れの判定に使う「あるレス」は並んでいる枠(透明あぼーんで枠のないレスは飛ばしてよい)。絞り込み中は全部(絞って消えたレスを飛ばして既読にしない)
     markSeen()
     let last = sent.current
-    if (counting()) {
+    if (latest.current.tree && !latest.current.filtering) {
+      // ツリー表示: 新着は枝に散って下に足されるわけではないので、「下まで見たら既読」は成り立たない。
+      // 開いたとき手元にあるレスは全部読んだことにする(開いた直後でも)
+      last = Math.max(last, lastNo)
+    } else if (counting()) {
       const nos = latest.current.filtering ? latest.current.log.posts.map((p) => p.no) : frames.filter((f) => !f.hidden).map((f) => Number(f.dataset.post))
       last = treeRead({ nos, readNo: sent.current, seen: seenNos.current, atBottom: readAll, lastNo })
     }

@@ -519,11 +519,9 @@ export function useThreadScroll(o: Options) {
       if (!root) return
       // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
       // その後ろで見えている最初のレスへ送る。なければ一番下に留まる。
-      // ツリーは番号の順に並ばないので、まずそのレスそのものを探す
+      // ツリーは番号の順に並ばないので、これは「並んでいる順で最初の、番号が no 以上のレス」= ツリーでの未読の頭になる
       const frames = framesIn(listRef.current)
-      const target =
-        (latest.current.tree ? frames.find((w) => !w.hidden && Number(w.dataset.post) === no) : undefined) ??
-        frames.find((w) => !w.hidden && Number(w.dataset.post) >= no)
+      const target = frames.find((w) => !w.hidden && Number(w.dataset.post) >= no)
       const ms = behavior === 'animate' ? JUMP_MS : 0
       if (!target) return animateScroll(root, () => root.scrollHeight, ms)
       // 「ここから未読」の線はレスの直前(枠の中)にあるので、枠ごとの位置で合わせる
@@ -734,8 +732,8 @@ export function useThreadScroll(o: Options) {
       animateScroll(root, () => root.scrollHeight, 0)
       pendingUnread.current = t.pendingUnread
     } else if (t.kind === 'unread') {
-      // ツリーでは未読の頭が途中に散らばるので、既読の番号のレス(読んでいた所)へ
-      scrollToUnread(latest.current.tree ? Math.max(1, t.no - 1) : t.no)
+      // ツリーでは、並んでいる順で最初の未読のレスへ(番号の順と同じ見え方。あとの未読は枝に散るので、新着の印とミニマップで)
+      scrollToUnread(t.no)
     } else if (t.kind === 'saved') {
       pendingUnread.current = !!t.pendingUnread
       const el = savedEl(t.position.no)
@@ -891,10 +889,12 @@ export function useThreadScroll(o: Options) {
     const read = Math.max(sent.current, log.readNo)
     const fresh = log.posts.filter((p) => p.no > prevLastNo && p.no > read).map((p) => p.no)
     if (latest.current.tree) {
-      // ツリー: 新着は途中に入るので動かさない(読んでいるレスは位置の固定が同じ所に留める)。光らせるだけ
+      // ツリー: 未読を待っていた(開いたとき手元に未読がなかった)なら、並びで最初の未読のレスへ。
+      // 読んでいる途中の新着は途中に入るので動かさない(読んでいるレスは位置の固定が同じ所に留める)。光らせるだけ
       setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))
       clearTimeout(flashTimer.current)
       flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
+      if (pendingUnread.current && !heldJump.current && fresh.length > 0) scrollToUnread(unreadFrom)
       firstGrowth.current = false
       pendingUnread.current = false
       return

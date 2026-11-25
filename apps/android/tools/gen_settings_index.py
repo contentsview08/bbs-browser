@@ -27,9 +27,16 @@ def page_of(fn, body, at):
     return "sites" if "if (!menus)" in body[line_start:at] else "menus"
 
 
-for m in re.finditer(r"private fun (\w+Page)\(", src):
+# ページの外に切り出した段の関数(どのページの項目として索引に入れるか)。PostDisplayGroups はスレ表示とスキンの編集の両方で使うが、索引はスレ表示に
+SHARED_GROUPS = {"PostDisplayGroups": "thread"}
+keys.update(SHARED_GROUPS)
+
+# スキンの編集のページ("skin")は vm.editSkin から開くもので、検索から飛べない(項目は配色を編集・スキンと配色・スレ表示に同じものがある)
+SKIP_PAGES = {"SkinEditPage"}
+
+for m in re.finditer(r"private fun (\w+Page|\w+Groups)\(", src):
     fn = m.group(1)
-    if fn not in keys:
+    if fn not in keys or fn in SKIP_PAGES:
         continue
     next_decl = NEXT_DECL.search(src, m.end())
     body = src[m.end():next_decl.start() if next_decl else len(src)]

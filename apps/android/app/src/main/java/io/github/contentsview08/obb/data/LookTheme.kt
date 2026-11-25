@@ -13,6 +13,14 @@ import org.json.JSONObject
 object LookTheme {
     const val FORMAT = "obb-theme"
 
+    /**
+     * 同梱のスキン: レスの見た目と組になっている配色(Discord 風・LINE 風の色)。配色の一覧からは外し、スキンとして並べる(2026-11-25)。
+     * キーは "builtin:<配色のキー>"。PC 版の ui/lookTheme.ts の BUILTIN_SKINS と同じ
+     */
+    val BUILTIN_SKINS = listOf("discord-dark" to "discord", "line-light" to "line", "line-dark" to "line", "x-dim" to "discord")
+    val BUILTIN_SCHEME_KEYS = BUILTIN_SKINS.map { it.first }.toSet()
+    fun builtinStyle(schemeKey: String): String? = BUILTIN_SKINS.firstOrNull { it.first == schemeKey }?.second
+
     /** PC 版の ui/lookTheme.ts の COMMON_KEYS と同じ並び(名前も意味も同じ項目) */
     val COMMON_KEYS = setOf(
         "followOsTheme", "scheme", "darkScheme", "lightScheme", "accent",

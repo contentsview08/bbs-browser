@@ -106,7 +106,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "skin" to "スキンを編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -183,6 +183,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
             "nglist" -> "ng"
             "kwlist" -> "list"
             "custom" -> "theme"
+            "skin" -> "theme"
             else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
         viaSearch = viaSearch && sub != null
@@ -222,11 +223,12 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage(vm) { sub = it }
                 "custom" -> CustomSchemeEditor(vm.prefs)
+                "skin" -> SkinEditPage(vm)
                 "sync" -> SyncPage(vm, LocalAdvanced.current)
                 else -> if (sub?.startsWith(SITE_PAGE) == true) SiteSettings(vm, sub.orEmpty().removePrefix(SITE_PAGE))
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
-            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts", "history") && sub?.startsWith(SITE_PAGE) != true && !(vm.prefs.showAdvanced || viaSearch)) {
+            if (sub != null && sub !in setOf("about", "backup", "custom", "skin", "sites", "menus", "accounts", "history") && sub?.startsWith(SITE_PAGE) != true && !(vm.prefs.showAdvanced || viaSearch)) {
                 Text(
                     "詳しい設定も出す",
                     Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
@@ -348,6 +350,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
 private fun currentSkinName(p: io.github.contentsview08.obb.data.Prefs): String {
     val key = p.lookThemeKey
     if (key.startsWith("saved:")) return key.removePrefix("saved:")
+    if (key.startsWith("builtin:")) return schemeOf(key.removePrefix("builtin:")).name
     if (p.followOsTheme) return "OS に合わせる"
     return schemeOf(p.scheme).name
 }
@@ -363,26 +366,50 @@ fun SkinPanel(vm: AppViewModel) {
         androidx.compose.runtime.CompositionLocalProvider(LocalNavLong provides null, LocalAdvanced provides vm.prefs.showAdvanced) {
             val p = vm.prefs
             val lt = io.github.contentsview08.obb.data.LookTheme
+            val sc = io.github.contentsview08.obb.data.SkinCatalog
             val savedThemes = remember(p.lookThemes) { lt.saved(p) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            // 配色だけのものと、スキン(見た目まで含む)に二分する。Discord 風・LINE 風の配色は同梱のスキンとして並べる
+            val plain = SCHEMES.filter { it.key !in lt.BUILTIN_SCHEME_KEYS }
+            fun schemeEntry(s: Scheme, on: Boolean, onPick: () -> Unit) = SkinEntry(
+                s, Palette.extraOf(s, "own"), s.name, if (s.dark) "暗い配色" else "明るい配色", on = on,
+                menu = listOf("この配色を元にスキンを作る…" to { vm.editSkin("scheme:${s.key}") }),
+                onPick = onPick,
+            )
             Column(Modifier.fillMaxSize().background(Palette.base)) {
                 HeaderBar("スキン", onNav = { vm.closeSkins() }, navIsBack = true, actions = { BarIcon(Icons.Filled.Close, "閉じる") { vm.closeSkins() } })
                 HorizontalDivider(color = Palette.border)
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     // OS のダーク・ライトに合わせる切り替えは設定のページに(ここは選ぶだけ)。合わせているときはダーク・ライトを分けて並べる
                     if (!p.followOsTheme) {
-                        Group("配色", note = "同梱の配色です。押すとその場で切り替わります") {
-                            SkinCards(SCHEMES.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, if (sc.dark) "暗い配色" else "明るい配色", on = p.lookThemeKey.isEmpty() && p.scheme == sc.key) { p.scheme = sc.key; p.lookThemeKey = "" } })
+                        Group("配色", note = "色だけを変えます。押すとその場で切り替わります。長押しで、その配色を元にスキンを作れます") {
+                            SkinCards(plain.map { s -> schemeEntry(s, on = p.lookThemeKey.isEmpty() && p.scheme == s.key) { p.scheme = s.key; p.lookThemeKey = "" } })
                         }
                     } else {
-                        Group("ダークのとき") { SkinCards(SCHEMES.filter { it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "暗い配色", on = p.darkScheme == sc.key) { p.darkScheme = sc.key } }) }
-                        Group("ライトのとき") { SkinCards(SCHEMES.filter { !it.dark }.map { sc -> SkinEntry(sc, Palette.extraOf(sc, "own"), sc.name, "明るい配色", on = p.lightScheme == sc.key) { p.lightScheme = sc.key } }) }
+                        Group("ダークのとき") { SkinCards(plain.filter { it.dark }.map { s -> schemeEntry(s, on = p.darkScheme == s.key) { p.darkScheme = s.key } }) }
+                        Group("ライトのとき") { SkinCards(plain.filter { !it.dark }.map { s -> schemeEntry(s, on = p.lightScheme == s.key) { p.lightScheme = s.key } }) }
                     }
-                    Group("入れたスキン", note = if (savedThemes.isEmpty()) "下の「もっと探す」から入れたスキンと、保存したスキンがここに並びます。配色・レスの見た目・細かい表示・文字と余白をまとめたもので、色だけのスキンも作れます" else "保存した・取り込んだスキン。押すとその場で切り替わります(入っている項目だけを上書きします)") {
-                        SkinCards(savedThemes.map { t ->
+                    Group("スキン", note = "配色とレスの見た目(と細かい表示・文字と余白)をまとめたものです。前の方が同梱、後ろが入れた・保存したスキン。長押しで、編集・消す") {
+                        val builtin = lt.BUILTIN_SKINS.map { (key, style) ->
+                            val s = schemeOf(key)
+                            SkinEntry(
+                                s, Palette.extraOf(s, "own"), s.name, "レスの見た目: " + postStyleName(style), on = p.lookThemeKey == "builtin:$key",
+                                menu = listOf("このスキンを元に編集…" to { vm.editSkin("builtin:$key") }),
+                            ) { vm.pickLookTheme("builtin:$key") }
+                        }
+                        val saved = savedThemes.map { t ->
                             val key = "saved:${lt.nameOf(t)}"
-                            val sc = lt.schemeOf(t) ?: Palette.scheme
-                            SkinEntry(sc, lt.ownOf(t, sc), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key) { vm.pickLookTheme(key) }
-                        })
+                            val s = lt.schemeOf(t) ?: Palette.scheme
+                            SkinEntry(
+                                s, lt.ownOf(t, s), lt.nameOf(t), lt.captionOf(t), on = p.lookThemeKey == key,
+                                menu = listOf(
+                                    "編集…" to { vm.editSkin(key) },
+                                    "文字(JSON)でコピー" to { copyText(context, t.toString(2)); vm.toast = "コピーしました。掲示板などに貼って配れます" },
+                                    "消す" to { vm.removeLookTheme(lt.nameOf(t)) },
+                                ),
+                            ) { vm.pickLookTheme(key) }
+                        }
+                        SkinCards(builtin + saved)
                     }
                     // 配っているスキンの一覧(data/SkinCatalog.kt)。押すと入る。入れてあれば押すと当てる
                     Group("もっと探す", note = "配っているスキンの一覧です。入れたスキンは、配る側が新しくすると自動で入れ替わります") {
@@ -396,12 +423,12 @@ fun SkinPanel(vm: AppViewModel) {
                             cat == null -> Text("一覧を取っています…", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 13.sp)
                             cat.isEmpty() -> Text("配っているスキンはまだありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 13.sp)
                             else -> SkinCards(cat.map { e ->
-                                val have = io.github.contentsview08.obb.data.SkinCatalog.installedOf(savedThemes, e.id)
+                                val have = sc.installedOf(savedThemes, e.id)
                                 val def = e.scheme?.let { CustomDef.parse(it.toString()) }
-                                val sc = def?.let { buildScheme(it) } ?: SCHEMES.firstOrNull { it.key == e.settings?.optString("scheme") } ?: Palette.scheme
+                                val s = def?.let { buildScheme(it) } ?: SCHEMES.firstOrNull { it.key == e.settings?.optString("scheme") } ?: Palette.scheme
                                 val caption = e.note.ifEmpty { e.settings?.optString("postStyle")?.takeIf { it.isNotEmpty() }?.let { "レスの見た目: " + postStyleName(it) } ?: "" }
                                 SkinEntry(
-                                    sc, def?.own ?: Palette.extraOf(sc, "own"), e.name, caption,
+                                    s, def?.own ?: Palette.extraOf(s, "own"), e.name, caption,
                                     on = have != null && p.lookThemeKey == "saved:${lt.nameOf(have)}",
                                     action = if (have == null) "入れる" else null, busy = vm.skinBusy == e.id,
                                 ) { if (have != null) vm.pickLookTheme("saved:${lt.nameOf(have)}") else vm.installCatalogSkin(e) }
@@ -417,6 +444,43 @@ fun SkinPanel(vm: AppViewModel) {
     }
 }
 
+/**
+ * スキンの編集のページ(設定 "skin")。vm.editSkin で開く。そのスキンが当たっていて、配色は「自分の配色」に写してあるので、
+ * 配色の編集・差し色・スタイル・レスの出し方を変えるとすぐ映る。終わったら「このスキンに保存」
+ */
+@Composable
+private fun SkinEditPage(vm: AppViewModel) {
+    val p = vm.prefs
+    val name = vm.editingSkin
+    var saveDialog by remember { mutableStateOf(false) }
+    PageLead(if (name != null) "スキン「$name」を編集しています。変えるとすぐ映ります。終わったら一番下の「このスキンに保存」" else "同梱のものを元に、新しいスキンを作ります。変えるとすぐ映ります。終わったら一番下の「スキンとして保存…」")
+    Spacer(Modifier.height(8.dp))
+    CustomSchemeEditor(p)
+    Group("差し色") {
+        ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
+    }
+    Group("スタイル") {
+        SegmentRow("レスの見た目", p.postStyle, pickablePostStyles(p.postStyle)) { p.postStyle = it }
+    }
+    StyleOptionsGroup(p)
+    PostDisplayGroups(vm)
+    Group {
+        if (name != null) ActionRow("このスキンに保存", Icons.Filled.Check) { vm.saveEditedSkin(name) }
+        ActionRow(if (name != null) "別の名前で保存…" else "スキンとして保存…") { saveDialog = true }
+    }
+    if (name != null) Text("入れたスキンを編集して保存すると、配る側が新しくしても自動では入れ替わらなくなります", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp)
+    if (saveDialog) {
+        var newName by remember { mutableStateOf(name ?: "") }
+        AlertDialog(
+            onDismissRequest = { saveDialog = false },
+            title = { Text("スキンとして保存") },
+            text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text("名前") }) },
+            confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { vm.saveEditedSkin(newName); saveDialog = false }) { Text("保存") } },
+            dismissButton = { TextButton(onClick = { saveDialog = false }) { Text("やめる") } },
+        )
+    }
+}
+
 /** スキン(配色)の札 1 枚分の中身 */
 private class SkinEntry(
     val scheme: Scheme, val own: Color, val name: String, val caption: String, val on: Boolean,
@@ -424,6 +488,8 @@ private class SkinEntry(
     val action: String? = null,
     /** 入れている途中(ボタンを「…」に) */
     val busy: Boolean = false,
+    /** 長押しで出すメニュー(名前と操作)。空なら長押しは何もしない */
+    val menu: List<Pair<String, () -> Unit>> = emptyList(),
     val onPick: () -> Unit,
 )
 
@@ -444,10 +510,12 @@ private fun SkinCards(entries: List<SkinEntry>) {
 /** スキン(配色)1 つの札: 小さな見本(上の帯・スレ一覧の行・レス・書き込み欄)と、名前・一言。押すと当てる */
 @Composable
 private fun SkinCard(e: SkinEntry) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
             .border(if (e.on) 2.dp else 1.dp, if (e.on) Palette.accent else Palette.border, RoundedCornerShape(8.dp))
-            .background(Palette.surface).clickable(onClick = e.onPick),
+            .background(Palette.surface).combinedClickable(onClick = e.onPick, onLongClick = if (e.menu.isEmpty()) null else ({ menuOpen = true })),
     ) {
         SkinMiniPreview(e.scheme, e.own)
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -462,6 +530,14 @@ private fun SkinCard(e: SkinEntry) {
                 color = Palette.accentText, fontSize = 12.sp, fontWeight = FontWeight.Bold,
             )
         }
+    }
+    // 長押しのメニュー(編集・消す など)
+    androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        for ((label, act) in e.menu) androidx.compose.material3.DropdownMenuItem(
+            text = { Text(label, color = if (label == "消す") Palette.markDanger else Palette.textBody, fontSize = 14.sp) },
+            onClick = { menuOpen = false; act() },
+        )
+    }
     }
 }
 
@@ -748,6 +824,13 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("次スレの候補", p.showNextCandidatesAtEnd, desc = "スレが終わったら一番下に出します。︙ の「次スレを探す」でも探せます") { p.showNextCandidatesAtEnd = it }
         SwitchRow("次の未読スレへのボタン", p.showNextUnreadAtEnd, desc = "一番下に、スレ一覧で次に未読のあるスレへ") { p.showNextUnreadAtEnd = it }
     }
+    PostDisplayGroups(vm)
+}
+
+/** レスの出し方の段(名前と ID / 日時 / 人気のレス / リンクと本文 / ミニマップ)。スレ表示のページと、スキンの編集のページで使う */
+@Composable
+private fun PostDisplayGroups(vm: AppViewModel) {
+    val p = vm.prefs
     Group("名前と ID") {
         SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前") { p.omitNoname = it }
         SwitchRow("名前欄を薄く", p.nameSubtle, desc = "日付や ID と同じ色・同じ大きさに") { p.nameSubtle = it }

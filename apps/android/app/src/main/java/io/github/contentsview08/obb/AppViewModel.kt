@@ -1203,8 +1203,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** ドロップダウンで選んだスキンを当てる */
     fun pickLookTheme(key: String) {
-        val text = io.github.contentsview08.obb.data.LookTheme.byKey(prefs, key) ?: return
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        if (key.startsWith("builtin:")) {
+            // 同梱のスキン(配色 + レスの見た目)
+            val schemeKey = key.removePrefix("builtin:")
+            val style = lt.builtinStyle(schemeKey) ?: return
+            prefs.followOsTheme = false
+            prefs.scheme = schemeKey
+            prefs.postStyle = style
+            prefs.lookThemeKey = key
+            return
+        }
+        val text = lt.byKey(prefs, key) ?: return
         applyLookJsonNow(text, key)
+    }
+
+    // ── スキンの編集(設定のページ "skin")。入れたスキンは名前、同梱の配色・スキンを元にするときは null ──
+    /** 編集しているスキンの名前(null なら、同梱のものを元にした新しいスキン) */
+    var editingSkin by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * スキンの編集を始める: そのスキンを当て、配色を「自分の配色」に写して(同梱の配色なら 6 色を写す)、編集のページを開く。
+     * 変えた所はすぐ映る。終わったら「このスキンに保存」で書き戻す(途中で戻っても、見た目は変えたまま)
+     */
+    fun editSkin(key: String) {
+        viewModelScope.launch {
+            val lt = io.github.contentsview08.obb.data.LookTheme
+            if (key.startsWith("saved:")) {
+                lt.byKey(prefs, key)?.let { runCatching { applyLookJson(it, key) } }
+                editingSkin = key.removePrefix("saved:")
+            } else {
+                pickLookTheme(key)
+                if (!key.startsWith("builtin:")) { prefs.followOsTheme = false; prefs.scheme = key.removePrefix("scheme:"); prefs.lookThemeKey = "" }
+                editingSkin = null
+            }
+            // 配色を「自分の配色」に(同梱の配色なら、その 6 色から)
+            if (prefs.scheme != "custom" || io.github.contentsview08.obb.ui.CustomDef.parse(prefs.customScheme) == null) {
+                val base = io.github.contentsview08.obb.ui.schemeOf(prefs.scheme).takeIf { it.key != "custom" } ?: io.github.contentsview08.obb.ui.SCHEMES[0]
+                prefs.customScheme = io.github.contentsview08.obb.ui.CustomDef.of(base).toJson()
+                prefs.scheme = "custom"
+                prefs.followOsTheme = false
+            }
+            openSettings("skin")
+        }
+    }
+
+    /** 編集した見た目を、そのスキンに書き戻す(名前を渡せば、その名前で。入れたスキンの出どころは外し、以後は自動で入れ替えない) */
+    fun saveEditedSkin(name: String) {
+        val lt = io.github.contentsview08.obb.data.LookTheme
+        val n = name.trim().ifEmpty { return }
+        val old = lt.saved(prefs).firstOrNull { lt.nameOf(it) == n }
+        val theme = lt.export(prefs, n)
+        old?.optString("note")?.takeIf { it.isNotEmpty() }?.let { theme.put("note", it) }
+        if (editingSkin != null && editingSkin != n) lt.remove(prefs, editingSkin!!)
+        lt.save(prefs, theme)
+        prefs.lookThemeKey = "saved:$n"
+        editingSkin = n
+        toast = "スキン「$n」に保存しました"
     }
 
     /** いまの見た目を、名前を付けてスキンとして保存する(同じ名前は入れ替え) */

@@ -89,14 +89,14 @@ describe('設定の読み込み: 壊れたファイルでアプリを壊さな�
   const read = (settings: Record<string, unknown>) => importableSettings(file(settings), DEFAULT_SETTINGS)
 
   it('文字の配列に文字以外が混ざっていても捨てて読む', () => {
-    const got = read({ keywords: ['実況', 1, null], grossWords: [{}], quickPhrases: ['a'], postToolbar: [true, 'copy'], listTabs: [0, 'unread'] })
+    const got = read({ keywords: ['実況', 1, null], grossWords: [{}], quickPhrases: ['a'], postToolbar2: [true, 'copy'], listTabs: [0, 'unread'] })
     expect(got.keywordRules?.map((r) => r.pattern)).toEqual(['実況'])
     delete got.keywordRules
     expect(got).toEqual({
       keywords: ['実況'],
       grossWords: [],
       quickPhrases: ['a'],
-      postToolbar: ['copy'],
+      postToolbar2: ['copy'],
       listTabs: ['unread'],
     })
   })

@@ -2438,7 +2438,7 @@ export default function ThreadView(props: Props) {
       showThumbnails: settings.thumbLoad !== 'never',
       showIdenticon: settings.idStyle === 'icon',
       showLinkPreview: settings.showLinkPreview,
-      toolbar: settings.postToolbar,
+      toolbar: settings.postToolbar2,
       phrases: settings.quickPhrases,
       display,
       opId,
@@ -2446,7 +2446,7 @@ export default function ThreadView(props: Props) {
       replyToOwn,
       reactions: props.reactions,
     }),
-    [mainHandlers, searchTerms, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, heatCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+    [mainHandlers, searchTerms, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, heatCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar2, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
   const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**

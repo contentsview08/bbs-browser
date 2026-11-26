@@ -139,7 +139,7 @@ interface Props {
   display?: DisplayOptions
   /** スレ主(>>1 と同じ ID)の書き込み */
   isOp?: boolean
-  /** 操作バーに並べるもの(設定の postToolbar)と、定型文 */
+  /** 操作バーに並べるもの(設定の postToolbar2。'more' は ⋯ のメニュー)と、定型文 */
   toolbar?: string[]
   phrases?: string[]
   /** 自動更新などで新しく届いたレス。一瞬光らせる */
@@ -507,7 +507,7 @@ function PostArticle(props: Props) {
       ? [{ label: '本文の言葉を NG に…', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
       : []),
   ]
-  const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng']
+  const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng', 'more']
   const reply = handlers.onReply
   const quick = handlers.onQuickReply
   const actions: MenuItem[] = [
@@ -1109,16 +1109,8 @@ function PostArticle(props: Props) {
    * マウスを乗せたレスに出す操作バー(返信・定型文・コピー・NG・︙)。at は置き場所の class。
    * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
    */
-  const toolbarAt = (at: string, style?: { top: number }) => (
-      <div
-        data-post-toolbar
-        className={`absolute ${at} z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
-          menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
-        }`}
-        style={style}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {toolbarItems.map((item) => {
+  const toolbarAt = (at: string, style?: { top: number }) => {
+    const nodes = toolbarItems.map((item) => {
           if (item === 'reply' && reply)
             return (
               <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="返信" onClick={() => reply(post.no)}>
@@ -1153,11 +1145,24 @@ function PostArticle(props: Props) {
               </button>
             )
           }
+          if (item === 'more') return <MenuButton key={item} icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
           return null
-        })}
-        <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
+        })
+    // 出すものが 1 つもなければ(設定で全部外した・このレスでは使えるものがない)、バーそのものを出さない
+    if (!nodes.some((n) => n !== null)) return null
+    return (
+      <div
+        data-post-toolbar
+        className={`absolute ${at} z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
+          menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+        }`}
+        style={style}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {nodes}
       </div>
-  )
+    )
+  }
 
   // ── LINE 風 ──
   // 吹き出しで並べる。ほかの人は左にアイコンと名前、自分の書き込みは右に緑の吹き出し(アイコンなし)。

@@ -509,10 +509,10 @@ export interface AppSettings {
   /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
   quickPhrases: string[]
   /**
-   * レスの操作バーに並べるもの(左から順)。'reply' | 'copy' | 'ng' | 'tree' | 'phrase:定型文'。
-   * ⋯ はいつも一番右に出す
+   * レスの操作バーに並べるもの(左から順)。'reply' | 'copy' | 'ng' | 'tree' | 'more'(⋯) | 'phrase:定型文'。
+   * 全部外すとバーは出ない。前の postToolbar(⋯ はいつも出していた)は migrateOld で 'more' を足して読み替える
    */
-  postToolbar: string[]
+  postToolbar2: string[]
   /** キー操作の割り当て(変えたものだけ。足りない操作は既定の割り当てを使う) */
   keymap: Partial<Keymap>
   /** スレ表示・スレ一覧の操作ボタンの置き場所(変えたものだけ) */
@@ -722,7 +722,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   replyCollapsed: false,
   postAccounts: {},
   quickPhrases: [],
-  postToolbar: ['reply', 'copy', 'ng'],
+  postToolbar2: ['reply', 'copy', 'ng', 'more'],
   keymap: {},
   barLayout: {},
   mobileBarLayout: {},
@@ -944,6 +944,10 @@ export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings>
   }
   // 人気のレス「示さない」は左の帯に読み替える
   if (saved.heatStyle === 'none') out.heatStyle = 'left'
+  // レスの操作バー: 前は ⋯ をいつも出していたので、'more' を足して新しい鍵へ
+  if (saved.postToolbar2 === undefined && Array.isArray(saved.postToolbar)) {
+    out.postToolbar2 = [...saved.postToolbar.filter((x): x is string => typeof x === 'string'), 'more']
+  }
   return out
 }
 

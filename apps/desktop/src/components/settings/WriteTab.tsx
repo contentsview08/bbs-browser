@@ -7,6 +7,7 @@ const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
   { key: 'copy', name: 'コピー', icon: 'content_copy' },
   { key: 'ng', name: 'NG に追加', icon: 'block' },
   { key: 'tree', name: 'アンカーツリー', icon: 'account_tree' },
+  { key: 'more', name: 'その他(⋯ のメニュー)', icon: 'more_horiz' },
 ]
 
 export function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
@@ -24,15 +25,15 @@ export function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           onChange={(v) => {
             update('quickPhrases', v)
             // 消した定型文は、操作バーからも外す
-            update('postToolbar', s.postToolbar.filter((x) => !x.startsWith('phrase:') || v.includes(x.slice('phrase:'.length))))
+            update('postToolbar2', s.postToolbar2.filter((x) => !x.startsWith('phrase:') || v.includes(x.slice('phrase:'.length))))
           }}
-          onRename={(from, to) => update('postToolbar', s.postToolbar.map((x) => (x === `phrase:${from}` ? `phrase:${to}` : x)))}
+          onRename={(from, to) => update('postToolbar2', s.postToolbar2.map((x) => (x === `phrase:${from}` ? `phrase:${to}` : x)))}
           placeholder="例: ワロタ"
         />
       </Section>
 
-      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。上から順に左から並びます(⋯ はいつも一番右)">
-        <OrderEditor all={all} value={s.postToolbar} onChange={(v) => update('postToolbar', v)} restTitle="出していないボタン" />
+      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。上から順に左から並びます。⋯ のメニューも外せます。全部外すとバーは出ません">
+        <OrderEditor all={all} value={s.postToolbar2} onChange={(v) => update('postToolbar2', v)} restTitle="出していないボタン" />
       </Section>
 
     </>

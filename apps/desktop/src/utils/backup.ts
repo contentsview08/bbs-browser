@@ -143,7 +143,7 @@ const ARRAY_ITEM_CHECKS: Partial<Record<keyof AppSettings, (v: unknown) => boole
   keywordRules: isKeywordRule,
   grossWords: isString,
   quickPhrases: isString,
-  postToolbar: isString,
+  postToolbar2: isString,
 }
 
 /** 確かめる間隔の範囲(設定の画面と同じ)。外れた値だと、タイマーがすぐ回り続けて通信を送り続ける */

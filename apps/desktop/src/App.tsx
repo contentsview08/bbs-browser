@@ -114,6 +114,7 @@ import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox, type UploadedFile } from './host/uploader'
 import { clearCookies } from './host/postCookies'
+import { openLinkWindow } from './host/linkWindow'
 import { setSavePlaceLookup } from './host/saveImage'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
@@ -2024,7 +2025,13 @@ export default function App() {
    */
   const openLink = async (url: string) => {
     // 画像の URL はブラウザで開く(画像そのものはサムネイルからビューアーで見る)
-    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? setReaderUrl(url) : openUrl(url))
+    const outside = () => {
+      const s = settingsRef.current
+      if (!s.openLinksInApp || toImageUrl(url)) return openUrl(url)
+      // 埋め込みのブラウザ: ページをそのまま別のウィンドウで。そうでなければ題と本文を抜き出した画面
+      if (s.openLinksInWebView) return void openLinkWindow(url).catch(backgroundError('ブラウザのウィンドウ'))
+      setReaderUrl(url)
+    }
     const thread = isAppThreadUrl(url)
     if (!thread && !isAppBoardUrl(url)) return outside()
     try {

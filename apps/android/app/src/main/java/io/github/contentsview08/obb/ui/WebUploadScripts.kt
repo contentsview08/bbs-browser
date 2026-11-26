@@ -70,8 +70,9 @@ fun parseWebUploadLinks(raw: String?, pattern: String): List<String> {
  * まだ足りないときは次のリンクを長めに待つ(早く閉じると、あとのリンクを取りこぼす)
  */
 fun webUploadCloseDelayMs(passedFiles: Int, got: Int): Long = when {
-    passedFiles == 0 -> 4000
-    got >= passedFiles -> 1200
+    // 手で選んだとき(数が分からない): 最後のリンクから 2 秒(前は 4 秒。待たされる感じが強かった。続きがあれば「待つ」で止められる)
+    passedFiles == 0 -> 2000
+    got >= passedFiles -> 800
     else -> 30000
 }
 
@@ -139,7 +140,7 @@ private const val WATCH_SCRIPT = """
     ready = ready || moved
     scan()
     ready = true
-    setInterval(scan, 700)
+    setInterval(scan, 300)
   }, 3000)
 })()
 """

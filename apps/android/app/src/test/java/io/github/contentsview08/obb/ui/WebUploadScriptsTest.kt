@@ -74,8 +74,8 @@ class WebUploadScriptsTest {
     }
 
     @Test fun `渡した数だけ来たらすぐ閉じ足りなければ待つ`() {
-        assertEquals(4000L, webUploadCloseDelayMs(0, 1))
-        assertEquals(1200L, webUploadCloseDelayMs(2, 2))
+        assertEquals(2000L, webUploadCloseDelayMs(0, 1))
+        assertEquals(800L, webUploadCloseDelayMs(2, 2))
         assertEquals(30000L, webUploadCloseDelayMs(2, 1))
     }
 

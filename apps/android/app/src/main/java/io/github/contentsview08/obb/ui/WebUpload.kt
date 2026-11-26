@@ -80,16 +80,26 @@ fun WebUploadScreen(job: WebUploadJob, onLink: (url: String, hash: String?) -> U
         fileCallback = null
     }
     var lastFoundAt by remember { mutableStateOf(0L) }
+    /** この画面の選び口で画像を選んだ(上げ終わるのを待っている) */
+    var picked by remember { mutableStateOf(false) }
+    /** 自動で閉じるまでの残り(秒)。null なら閉じる予定なし */
+    var closingIn by remember { mutableStateOf<Int?>(null) }
+    /** 「待つ」を押した(続きの画像を上げるので自動では閉じない) */
+    var hold by remember { mutableStateOf(false) }
     LaunchedEffect(web) {
         val w = web ?: return@LaunchedEffect
         while (true) {
-            delay(1000)
+            // ページ側は 0.3 秒ごとに見ているので、こちらも短く(前は 1 秒。合わせて 2 秒近く遅れて見えた)
+            delay(400)
             for (u in parseWebUploadLinks(w.evaluate(WEB_UPLOAD_TAKE_SCRIPT), site.pattern)) {
                 if (u !in found) { found += u; onLink(u, job.hashForLink()); lastFoundAt = System.currentTimeMillis() }
             }
+            if (found.isEmpty() || hold) { closingIn = null; continue }
             // 手で選んだときは、渡した数に関わらず次のリンクを待ちすぎない
             val passed = if (job.manualPick || !job.accepted) 0 else job.files.size
-            if (found.isNotEmpty() && System.currentTimeMillis() - lastFoundAt > webUploadCloseDelayMs(passed, found.size)) { onDismiss(); break }
+            val remain = webUploadCloseDelayMs(passed, found.size) - (System.currentTimeMillis() - lastFoundAt)
+            closingIn = ((remain + 999) / 1000).toInt().coerceAtLeast(0)
+            if (remain <= 0) { onDismiss(); break }
         }
     }
     FullWindow(onDismiss = onDismiss) {
@@ -99,15 +109,21 @@ fun WebUploadScreen(job: WebUploadJob, onLink: (url: String, hash: String?) -> U
                 Column(Modifier.weight(1f)) {
                     Text("${site.name}で上げる", color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     val status = when {
-                        found.isNotEmpty() -> "${found.size} 件のリンクを本文に入れました"
+                        found.isNotEmpty() && hold -> "${found.size} 件のリンクを本文に入れました。続きを上げたら「閉じる」で戻ります"
+                        found.isNotEmpty() -> "${found.size} 件のリンクを本文に入れました。${closingIn?.let { "$it 秒後に自動で閉じます" } ?: "自動で閉じます"}"
                         job.note != null -> job.note
                         passState == "sending" -> "画像を渡しています…"
-                        passState == "accepted" -> "画像を渡しました。上げ終わるとリンクを本文に入れます"
+                        passState == "accepted" || picked -> "上げ終わるのを待っています。終わると自動でリンクを本文に入れて閉じます(そのままお待ちください)"
                         passState == "refused" -> "このサイトは画像を受け取りませんでした。この画面から選んでください"
                         passState == "failed" -> "ページを開けませんでした。閉じて、もう一度試してください"
-                        else -> "上げたら、出てきたリンクを本文に入れます"
+                        else -> "この画面で画像を選んで上げてください。出てきたリンクを自動で本文に入れます"
                     }
                     Text(status, color = if (found.isEmpty()) Palette.textMuted else Palette.accent, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                // リンクが入ったら: すぐ戻る / 続きを上げるので待つ
+                if (found.isNotEmpty()) {
+                    if (!hold) androidx.compose.material3.TextButton(onClick = { hold = true }) { Text("待つ", color = Palette.textMuted) }
+                    androidx.compose.material3.Button(onClick = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("閉じる") }
                 }
             }
             AndroidView(
@@ -146,6 +162,7 @@ fun WebUploadScreen(job: WebUploadJob, onLink: (url: String, hash: String?) -> U
                         webChromeClient = object : WebChromeClient() {
                             override fun onShowFileChooser(view: WebView?, callback: ValueCallback<Array<Uri>>, params: FileChooserParams?): Boolean {
                                 job.manualPick = true
+                                picked = true
                                 fileCallback?.onReceiveValue(null)
                                 fileCallback = callback
                                 chooser.launch("image/*")

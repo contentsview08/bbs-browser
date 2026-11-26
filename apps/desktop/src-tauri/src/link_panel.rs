@@ -4,9 +4,15 @@
 //! 枠の暗がり・上の帯・閉じるボタンは主の画面(JS の LinkPanelFrame)が描き、この窓はその内側に大きさを合わせて置く。
 //! 外のページなので、この窓にはアプリの命令(IPC)の権限を与えない(capabilities に入れない)。
 //! 命令は async(同期の命令はメインのスレッドで動き、窓を作る・閉じる中でメインのスレッドを待って固まる)
+use std::sync::Mutex;
+
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 const LABEL: &str = "link-panel";
+
+/// 開く・閉じるを 1 つずつ(同時に 2 つの「開く」が走ると、どちらも「まだない」と見て窓を 2 つ作り、同じ名前なので 1 つが行き場をなくして
+/// 消せなくなった。React の開発モードは effect を 2 回走らせるので起きやすい)
+static LOCK: Mutex<()> = Mutex::new(());
 
 /// 主の画面の中の位置と大きさ(CSS の px = 論理ピクセル。主の窓のクライアント領域の左上が原点)
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -44,6 +50,7 @@ fn place(main: &WebviewWindow, panel: &WebviewWindow, rect: Rect) {
 /// パネルを開く(開いていれば同じ窓でそのページへ)
 #[tauri::command]
 pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<(), String> {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let page = parse(&url)?;
     let main = app.get_webview_window("main").ok_or("主の窓がありません")?;
     if let Some(w) = app.get_webview_window(LABEL) {
@@ -77,6 +84,7 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
 /// 主の窓の大きさが変わったとき、パネルの位置と大きさを合わせる
 #[tauri::command]
 pub async fn move_link_panel(app: AppHandle, rect: Rect) -> Result<(), String> {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let (Some(main), Some(w)) = (app.get_webview_window("main"), app.get_webview_window(LABEL)) {
         place(&main, &w, rect);
     }
@@ -85,8 +93,11 @@ pub async fn move_link_panel(app: AppHandle, rect: Rect) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn close_link_panel(app: AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window(LABEL) {
-        w.close().map_err(|e| e.to_string())?;
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for (label, w) in app.webview_windows() {
+        if label == LABEL {
+            let _ = w.destroy();
+        }
     }
     Ok(())
 }

@@ -758,6 +758,10 @@ pub fn run() {
                     link_panel::on_main_focus(window.app_handle(), *f);
                 }
             }
+            // リンクのパネルが壊れ終わった(次の「開く」が待っている)
+            if window.label() == "link-panel" && matches!(event, tauri::WindowEvent::Destroyed) {
+                link_panel::on_destroyed();
+            }
             if window.label() == "reply" && matches!(event, tauri::WindowEvent::Destroyed) {
                 let _ = tauri::Emitter::emit_to(window.app_handle(), "main", "reply-popup", serde_json::json!({ "from": "reply", "payload": { "open": false } }));
             }

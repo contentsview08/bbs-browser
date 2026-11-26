@@ -16,6 +16,13 @@ static LOCK: Mutex<()> = Mutex::new(());
 /// 最後に「開く」を頼まれたときの通し番号。それより古い「閉じる」は無視する
 /// (React の開発モードは 開く → 閉じる → 開く と続けて頼み、async の命令は順に届かないので、最後に古い閉じるが効いて窓が消えていた)
 static CURRENT: Mutex<u64> = Mutex::new(0);
+/// 「閉じる」で壊すのを頼んでから、実際に壊れる(Destroyed)まで true
+static CLOSING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 窓が壊れた(lib.rs の on_window_event から)
+pub fn on_destroyed() {
+    CLOSING.store(false, std::sync::atomic::Ordering::SeqCst);
+}
 
 /// 主の画面の中の位置と大きさ(CSS の px = 論理ピクセル。主の窓のクライアント領域の左上が原点)
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -78,11 +85,17 @@ pub fn follow(app: &AppHandle) {
 /// パネルを開く(開いていれば同じ窓でそのページへ)
 #[tauri::command]
 pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect, id: u64) -> Result<(), String> {
-    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    // 「開く」はいつも効かせる(通し番号は「閉じる」が古いかを見るためだけ。画面の作り直し(HMR・再読み込み)で番号が若返ると、
-    // 開くまで無視して窓が出なくなっていた)
+    // 番号はロックを待つ前に更新する(待ってから更新すると、先にロックを取った古い「閉じる」が自分を新しいと思って窓を壊した)
     if let Ok(mut c) = CURRENT.lock() {
         *c = (*c).max(id);
+    }
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // 直前の「閉じる」が壊し終わるのを待つ(壊すのは頼んでから少し後。その隙間に「窓はある」と見て使うと、直後に壊れて何も残らない)
+    for _ in 0..40 {
+        if !CLOSING.load(std::sync::atomic::Ordering::SeqCst) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
     }
     let page = parse(&url)?;
     let main = app.get_webview_window("main").ok_or("主の窓がありません")?;
@@ -141,13 +154,17 @@ pub async fn move_link_panel(app: AppHandle, rect: Rect) -> Result<(), String> {
 #[tauri::command]
 pub async fn close_link_panel(app: AppHandle, id: u64) -> Result<(), String> {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let current = CURRENT.lock().map(|c| *c).unwrap_or(0);
     // そのあとに新しく開かれていたら、この閉じるは古い(無視)
-    if CURRENT.lock().map(|c| id < *c).unwrap_or(false) {
+    if id < current {
         return Ok(());
     }
     for (label, w) in app.webview_windows() {
         if label == LABEL {
-            let _ = w.destroy();
+            CLOSING.store(true, std::sync::atomic::Ordering::SeqCst);
+            if w.destroy().is_err() {
+                CLOSING.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
         }
     }
     Ok(())

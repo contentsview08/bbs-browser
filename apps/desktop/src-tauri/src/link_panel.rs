@@ -28,9 +28,10 @@ fn parse(url: &str) -> Result<Url, String> {
     Ok(page)
 }
 
-/// パネルを開く(開いていれば同じ webview でそのページへ)
+/// パネルを開く(開いていれば同じ webview でそのページへ)。
+/// async にしてメインのスレッドの外で走らせる: 同期の命令はメインのスレッドで動き、add_child/close の中の run_on_main_thread を待って止まる(アプリが固まった)
 #[tauri::command]
-pub fn open_link_panel(app: AppHandle, state: tauri::State<'_, LinkPanel>, url: String, rect: Rect) -> Result<(), String> {
+pub async fn open_link_panel(app: AppHandle, state: tauri::State<'_, LinkPanel>, url: String, rect: Rect) -> Result<(), String> {
     let page = parse(&url)?;
     let mut slot = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(w) = slot.as_ref() {
@@ -50,7 +51,7 @@ pub fn open_link_panel(app: AppHandle, state: tauri::State<'_, LinkPanel>, url: 
 
 /// 主の窓の大きさが変わったとき、パネルの位置と大きさを合わせる
 #[tauri::command]
-pub fn move_link_panel(state: tauri::State<'_, LinkPanel>, rect: Rect) -> Result<(), String> {
+pub async fn move_link_panel(state: tauri::State<'_, LinkPanel>, rect: Rect) -> Result<(), String> {
     let slot = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(w) = slot.as_ref() {
         w.set_position(LogicalPosition::new(rect.x, rect.y)).map_err(|e| e.to_string())?;
@@ -60,7 +61,7 @@ pub fn move_link_panel(state: tauri::State<'_, LinkPanel>, rect: Rect) -> Result
 }
 
 #[tauri::command]
-pub fn close_link_panel(state: tauri::State<'_, LinkPanel>) -> Result<(), String> {
+pub async fn close_link_panel(state: tauri::State<'_, LinkPanel>) -> Result<(), String> {
     let mut slot = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(w) = slot.take() {
         w.close().map_err(|e| e.to_string())?;
@@ -70,7 +71,7 @@ pub fn close_link_panel(state: tauri::State<'_, LinkPanel>) -> Result<(), String
 
 /// いま開いているページの URL(上の帯に出す。ページの中で移ったあとも)
 #[tauri::command]
-pub fn link_panel_url(state: tauri::State<'_, LinkPanel>) -> Result<Option<String>, String> {
+pub async fn link_panel_url(state: tauri::State<'_, LinkPanel>) -> Result<Option<String>, String> {
     let slot = state.0.lock().map_err(|e| e.to_string())?;
     Ok(slot.as_ref().and_then(|w| w.url().ok()).map(|u| u.to_string()))
 }

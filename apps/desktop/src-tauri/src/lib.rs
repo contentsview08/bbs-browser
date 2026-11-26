@@ -753,6 +753,11 @@ pub fn run() {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
                 link_panel::follow(window.app_handle());
             }
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Focused(f) = event {
+                    link_panel::on_main_focus(window.app_handle(), *f);
+                }
+            }
             if window.label() == "reply" && matches!(event, tauri::WindowEvent::Destroyed) {
                 let _ = tauri::Emitter::emit_to(window.app_handle(), "main", "reply-popup", serde_json::json!({ "from": "reply", "payload": { "open": false } }));
             }

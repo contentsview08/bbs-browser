@@ -52,6 +52,27 @@ fn place(main: &WebviewWindow, panel: &WebviewWindow, rect: Rect) {
     }
 }
 
+/// 主の窓の焦点が変わったとき(lib.rs の on_window_event から)。
+/// 主の窓に戻ったらパネルを出す。主の窓が焦点を失い、少し待ってもパネルにも焦点がなければ(ほかのアプリへ移った)パネルを隠す
+pub fn on_main_focus(app: &AppHandle, focused: bool) {
+    let Some(w) = app.get_webview_window(LABEL) else { return };
+    if focused {
+        let _ = w.show();
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let main_focused = app.get_webview_window("main").and_then(|m| m.is_focused().ok()).unwrap_or(false);
+        let panel_focused = app.get_webview_window(LABEL).and_then(|p| p.is_focused().ok()).unwrap_or(false);
+        if !main_focused && !panel_focused {
+            if let Some(p) = app.get_webview_window(LABEL) {
+                let _ = p.hide();
+            }
+        }
+    });
+}
+
 /// 主の窓が動いた・大きさが変わったとき(lib.rs の on_window_event から)、パネルを追いかけさせる
 pub fn follow(app: &AppHandle) {
     let Some(rect) = LAST.lock().ok().and_then(|l| *l) else { return };
@@ -87,15 +108,14 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
     if let (Ok(origin), Ok(scale)) = (main.inner_position(), main.scale_factor()) {
         b = b.position(origin.x as f64 / scale + rect.x, origin.y as f64 / scale + rect.y);
     }
-    // Windows: 主の窓に所有された窓(いつも主の窓より手前。主の窓を小さくすると一緒に隠れる)。
-    // 子ウィンドウ(parent)にすると主の webview の HWND の下に入ってページが見えなかった
+    // いつも手前に(描く順の問題: 所有された窓にしても、リンクを押した主の窓が焦点を取り返してパネルがその下に入り、
+    // 枠の内側にページが見えなかった。2 回目の開き直し = set_focus で前に出した方だけ見えていた)。
+    // ほかのアプリへ移ったときに居座らないよう、主の窓もパネルも焦点を失ったら隠し、主の窓に戻ったら出す(lib.rs の on_window_event → on_main_focus)
+    b = b.always_on_top(true);
+    // Windows: 主の窓に所有された窓(主の窓を小さくすると一緒に隠れる)
     #[cfg(windows)]
     {
         b = b.owner(&main).map_err(|e| e.to_string())?;
-    }
-    #[cfg(not(windows))]
-    {
-        b = b.always_on_top(true);
     }
     if let Ok(mut last) = LAST.lock() {
         *last = Some(rect);

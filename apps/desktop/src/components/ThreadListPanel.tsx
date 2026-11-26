@@ -941,6 +941,7 @@ export default function ThreadListPanel(props: Props) {
         onCopy={onCopyCard}
         onKeyword={props.onKeyword ? onKeywordCard : undefined}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
+        toolbar={props.style?.settings.threadToolbar}
         onRemoveFromHistory={props.onRemoveFromHistory ? onRemoveCard : undefined}
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}

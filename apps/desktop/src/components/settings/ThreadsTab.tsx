@@ -6,7 +6,19 @@ import KeywordManager from '../KeywordManager'
 import { isMobile } from '../../utils/platform'
 import { canOpenToolWindow, openToolWindow } from '../../host/crossWindow'
 import { BTN_PRIMARY } from '../DialogParts'
-import { type SettingsProps, Section, Choice, ListTabsEditor } from './common'
+import { type SettingsProps, Section, Choice, ListTabsEditor, OrderEditor } from './common'
+
+/** スレの操作バーに並べられるもの(右クリックのメニューにある操作と同じ) */
+const THREAD_TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
+  { key: 'open', name: '新しいタブで開く', icon: 'open_in_new' },
+  { key: 'favorite', name: 'お気に入りのスレに足す / 外す', icon: 'star' },
+  { key: 'copy', name: 'スレタイと URL をコピー', icon: 'content_copy' },
+  { key: 'keyword', name: 'キーワードに登録', icon: 'sell' },
+  { key: 'ng', name: 'NG に追加', icon: 'block' },
+  { key: 'removeHistory', name: '履歴から外す(履歴の一覧だけ)', icon: 'history_toggle_off' },
+  { key: 'deleteLog', name: 'ログを削除', icon: 'delete' },
+  { key: 'more', name: 'その他(⋯ のメニュー)', icon: 'more_horiz' },
+]
 
 export function ThreadsTab({ settings: s, update, onPruneLogs, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'onPruneLogs' | 'favorites'>) {
   const [pruneMessage, setPruneMessage] = useState<string>()
@@ -72,6 +84,9 @@ export function ThreadsTab({ settings: s, update, onPruneLogs, favorites }: Pick
       </Section>
       <Section title="スレ一覧のタブ" note="スレ一覧の上に出すタブと、その並び(上が左)です。数字キーの 1・2・3… は左から順に当たります">
         <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
+      </Section>
+      <Section advanced desktopOnly title="スレの操作バー" note="スレにマウスを乗せたとき、右上に出すボタンです。右クリックのメニューにある操作はどれも並べられ、上から順に左から並びます。⋯ も外せ、全部外すとバーは出ません(そのスレで使えない操作は出ません)">
+        <OrderEditor all={THREAD_TOOLBAR_ITEMS} value={s.threadToolbar} onChange={(v) => update('threadToolbar', v)} restTitle="出していないボタン" />
       </Section>
       <Section title="ログの削除">
         <Toggle

@@ -137,6 +137,7 @@ const ARRAY_ITEM_CHECKS: Partial<Record<keyof AppSettings, (v: unknown) => boole
   ngRules: isNgRule,
   aiNgRules: (v) => !!v && typeof v === 'object' && ['id', 'name', 'prompt'].every((k) => typeof (v as Record<string, unknown>)[k] === 'string'),
   listTabs: isString,
+  threadToolbar: isString,
   pastTabs: isString,
   keywords: isString,
   keywordAuthors: isString,

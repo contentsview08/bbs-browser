@@ -6,7 +6,7 @@ import ActionSheet from './ActionSheet'
 import { useLongPress } from '../hooks/useLongPress'
 import { isMobile } from '../utils/platform'
 import { memo, useCallback, useState } from 'react'
-import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } from './PostMenu'
+import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 import { highlightNodes } from '../utils/postBody'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
@@ -39,6 +39,8 @@ interface Props {
   onKeyword?: (t: ThreadSummary, kind: 'title' | 'author') => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
+  /** 操作バーに並べるもの(設定 threadToolbar)。省くと既定の並び */
+  toolbar?: string[]
   onRemoveFromHistory?: (t: ThreadSummary) => void
   /** 前回この板の一覧を見たあとに立ったスレ(「新」の印を出す) */
   isNew?: boolean
@@ -82,6 +84,7 @@ function ThreadCard({ highlight,
   onCopy,
   onKeyword,
   onDeleteLog,
+  toolbar,
   onRemoveFromHistory,
   isFavorite,
   onToggleFavorite,
@@ -306,6 +309,41 @@ function ThreadCard({ highlight,
     { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => ngAuthor(thread, true) },
   ]
 
+  /**
+   * スレへの操作の一覧(右クリックのメニューの中身)。id は設定「スレの操作バー」の鍵で、同じものをバーにも並べられる。
+   * children のあるもの(キーワード・NG)はバーでは小さなメニューのボタンになる
+   */
+  type ThreadAction = MenuItem & { id: string; hover?: string; active?: boolean }
+  const actionDefs: ThreadAction[] = [
+    ...(newTabEnabled ? [{ id: 'open', label: '新しいタブで開く', icon: 'open_in_new', hover: 'hover:!text-c-accent', onClick: () => onOpen(thread, true) }] : []),
+    ...(onToggleFavorite
+      ? [{ id: 'favorite', label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', hover: 'hover:!text-mark-fav', active: isFavorite, onClick: () => onToggleFavorite(thread) }]
+      : []),
+    ...(onCopy ? [{ id: 'copy', label: 'スレタイと URL をコピー', icon: 'content_copy', hover: 'hover:!text-mark-link', onClick: () => onCopy(thread) }] : []),
+    ...(onKeyword ? [{ id: 'keyword', label: 'キーワードに登録', icon: 'sell', hover: 'hover:!text-c-accent', children: keywordChoices(onKeyword) }] : []),
+    // NG: まず「スレタイで」か「立てた人で」を選ぶ。立てた人が分からないスレは、スレタイの NG の画面へすぐ
+    ...(onNg && onNgAuthor && thread.authorId
+      ? [{ id: 'ng', label: 'NG', icon: 'block', hover: 'hover:!text-mark-danger', children: ngChoices(onNg, onNgAuthor, thread.authorId) }]
+      : onNg
+        ? [{ id: 'ng', label: 'スレタイを NG に追加', icon: 'block', hover: 'hover:!text-mark-danger', onClick: () => onNg(thread) }]
+        : []),
+    ...(onRemoveFromHistory ? [{ id: 'removeHistory', label: '履歴から外す', icon: 'history_toggle_off', onClick: () => onRemoveFromHistory(thread) }] : []),
+    ...(onDeleteLog && state ? [{ id: 'deleteLog', label: 'ログを削除', icon: 'delete', hover: 'hover:!text-mark-danger', onClick: () => onDeleteLog(thread) }] : []),
+  ]
+  const menuItems: MenuItem[] = actionDefs.map(({ id: _id, hover: _hover, active: _active, ...m }) => m)
+  /** 操作バー(マウスを乗せたスレの右上)。設定の順に並べ、'more' は ⋯ のメニュー。このスレで使えないものは飛ばし、1 つもなければ出さない */
+  const toolbarNodes = (toolbar ?? ['favorite', 'copy', 'ng', 'deleteLog']).flatMap((item) => {
+    if (item === 'more') return [<MenuButton key={item} icon="more_horiz" title="その他" items={menuItems} onOpenChange={setNgMenu} />]
+    const d = actionDefs.find((x) => x.id === item)
+    if (!d) return []
+    if (d.children) return [<MenuButton key={d.id} icon={d.icon} title={d.label} hoverClass={d.hover} onOpenChange={setNgMenu} items={d.children} />]
+    return [
+      <button key={d.id} type="button" onClick={d.onClick} className={`${TOOL} ${d.active ? 'text-mark-fav' : d.hover ?? ''}`} title={d.label}>
+        <span className={`material-symbols-outlined text-base leading-none ${d.active ? 'fill' : ''}`}>{d.icon}</span>
+      </button>,
+    ]
+  })
+
   const content =
     historyMeta ? (
       historyRow(historyMeta)
@@ -504,30 +542,7 @@ function ThreadCard({ highlight,
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />
       )}
-      {ctxMenu && (
-        <FloatingMenu
-          pos={ctxMenu}
-          onClose={closeCtxMenu}
-          items={[
-            ...(newTabEnabled ? [{ label: '新しいタブで開く', icon: 'open_in_new', onClick: () => onOpen(thread, true) }] : []),
-            ...favCopyItems(),
-            ...keywordItems(),
-            ...(onNg && onNgAuthor && thread.authorId
-              ? [
-                  {
-                    label: 'NG',
-                    icon: 'block',
-                    children: ngChoices(onNg, onNgAuthor, thread.authorId),
-                  },
-                ]
-              : onNg
-                ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread) }]
-                : []),
-            ...(onRemoveFromHistory ? [{ label: '履歴から外す', icon: 'history_toggle_off', onClick: () => onRemoveFromHistory(thread) }] : []),
-            ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread) }] : []),
-          ]}
-        />
-      )}
+      {ctxMenu && <FloatingMenu pos={ctxMenu} onClose={closeCtxMenu} items={menuItems} />}
       {/* スマホ: 長押しで出す操作の一覧(マウスを乗せて出す操作バーの代わり) */}
       {sheet && (
         <ActionSheet
@@ -556,45 +571,14 @@ function ThreadCard({ highlight,
         />
       )}
       {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す(スマホは長押しの一覧) */}
-      {!isMobile && (onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
+      {!isMobile && toolbarNodes.length > 0 && (
         <div
-          className={`absolute ${CAN_OVERHANG ? '-top-3.5' : 'top-0.5'} right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${ngMenu ? '!opacity-100 !pointer-events-auto' : ''}`}
+          className={`absolute ${CAN_OVERHANG ? '-top-3.5' : 'top-0.5'} right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${
+            ngMenu ? '!opacity-100 !pointer-events-auto' : ''
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {onToggleFavorite && (
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(thread)}
-              className={`${TOOL} ${isFavorite ? 'text-mark-fav' : 'hover:!text-mark-fav'}`}
-              title={isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す'}
-            >
-              <span className={`material-symbols-outlined text-base leading-none ${isFavorite ? 'fill' : ''}`}>star</span>
-            </button>
-          )}
-          {onCopy && (
-            <button type="button" onClick={() => onCopy(thread)} className={`${TOOL} hover:!text-mark-link`} title="スレタイと URL をコピー">
-              <span className="material-symbols-outlined text-base leading-none">content_copy</span>
-            </button>
-          )}
-          {/* NG: まず「スレタイで」か「立てた人で」を選ぶ。立てた人が分からないスレは、スレタイの NG の画面へすぐ */}
-          {onNg && onNgAuthor && thread.authorId ? (
-            <MenuButton
-              icon="block"
-              title="NG に追加"
-              hoverClass="hover:!text-mark-danger"
-              onOpenChange={setNgMenu}
-              items={ngChoices(onNg, onNgAuthor, thread.authorId)}
-            />
-          ) : onNg ? (
-            <button type="button" onClick={() => onNg(thread)} className={`${TOOL} hover:!text-mark-danger`} title="スレタイを NG に追加">
-              <span className="material-symbols-outlined text-base leading-none">block</span>
-            </button>
-          ) : null}
-          {onDeleteLog && state && (
-            <button type="button" onClick={() => onDeleteLog(thread)} className={`${TOOL} hover:!text-mark-danger`} title="このスレのログ(閲覧履歴)を削除">
-              <span className="material-symbols-outlined text-base leading-none">delete</span>
-            </button>
-          )}
+          {toolbarNodes}
         </div>
       )}
       {content}

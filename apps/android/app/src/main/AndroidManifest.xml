@@ -6,6 +6,19 @@
     <!-- 同期の端末を足すときの QR を読むだけ。押したときに聞く -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Android 11 からは、ほかのアプリを見つけるのに queries が要る。カスタムタブに対応したブラウザ(Chrome など)を探して明示するため。
+         これがないと CustomTabsClient.getPackageName が null になり、リンクが別のアプリとしてブラウザで開いていた -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ObbApp"
         android:label="OBB"

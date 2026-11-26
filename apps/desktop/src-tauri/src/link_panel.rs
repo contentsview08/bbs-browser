@@ -79,11 +79,10 @@ pub fn follow(app: &AppHandle) {
 #[tauri::command]
 pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect, id: u64) -> Result<(), String> {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // 「開く」はいつも効かせる(通し番号は「閉じる」が古いかを見るためだけ。画面の作り直し(HMR・再読み込み)で番号が若返ると、
+    // 開くまで無視して窓が出なくなっていた)
     if let Ok(mut c) = CURRENT.lock() {
-        if id < *c {
-            return Ok(());
-        }
-        *c = id;
+        *c = (*c).max(id);
     }
     let page = parse(&url)?;
     let main = app.get_webview_window("main").ok_or("主の窓がありません")?;

@@ -11,7 +11,11 @@ export interface PanelRect {
 
 /** 開く・閉じるの通し番号(閉じるは、そのあとに開き直されていれば効かない。開く → 閉じる → 開く が入れ違っても窓が消えないように) */
 let seq = 0
-export const nextPanelId = () => ++seq + Date.now() * 0
+/** 単調に増える番号(時刻を元にする。画面を作り直しても若返らない) */
+export const nextPanelId = () => {
+  seq = Math.max(seq + 1, Date.now())
+  return seq
+}
 export const openLinkPanel = (url: string, rect: PanelRect, id: number) => invoke<void>('open_link_panel', { url, rect, id })
 export const moveLinkPanel = (rect: PanelRect) => invoke<void>('move_link_panel', { rect })
 export const closeLinkPanel = (id: number) => invoke<void>('close_link_panel', { id })

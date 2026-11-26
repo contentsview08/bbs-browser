@@ -199,6 +199,8 @@ interface Props {
   boardUrl?: string
   /** 外のブラウザで開く */
   onOpenExternal?: (url: string) => void
+  /** この掲示板(板の URL の主ドメイン)の書き込み・ログインの Cookie を消す(PC だけ) */
+  onClearCookies?: (boardUrl: string) => void
 }
 
 /** 1 画面のとき、スレ一覧を広げる幅の上限(これより広いと 1 行が長くて読みにくい) */
@@ -1357,6 +1359,7 @@ export default function ThreadListPanel(props: Props) {
             { label: '先頭へ', icon: 'vertical_align_top', onClick: () => scrollRef.current?.scrollTo({ top: 0 }) },
             ...(props.onRefresh ? [{ label: '更新', icon: 'refresh', onClick: () => void props.onRefresh?.() }] : []),
             ...(props.boardUrl && props.onOpenExternal ? [{ label: 'ブラウザで開く', icon: 'open_in_new', onClick: () => props.onOpenExternal!(props.boardUrl!) }] : []),
+            ...(props.boardUrl && props.onClearCookies ? [{ label: 'この掲示板の Cookie を消す', icon: 'cookie_off', onClick: () => props.onClearCookies!(props.boardUrl!) }] : []),
           ] satisfies SheetItem[]}
         />
       )}

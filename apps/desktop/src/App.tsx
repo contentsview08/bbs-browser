@@ -14,6 +14,7 @@ import {
   postNoInUrl,
   registerConnector,
   findConnector,
+  siteDomain,
   type Board,
   type BoardInfo,
   type NewThreadInput,
@@ -112,6 +113,7 @@ import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox, type UploadedFile } from './host/uploader'
+import { clearCookies } from './host/postCookies'
 import { setSavePlaceLookup } from './host/saveImage'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
@@ -396,6 +398,15 @@ export default function App() {
     },
     [notifyInApp],
   )
+  /** スレ一覧のヘッダーの ︙「この掲示板の Cookie を消す」: 板の URL の主ドメイン(サブドメインも)の書き込み・ログインの Cookie を消す */
+  const clearBoardCookies = (boardUrl: string) => {
+    const domain = siteDomain(boardUrl)
+    if (!domain) return
+    void clearCookies(domain).then(
+      (n) => notify({ icon: 'cookie_off', title: n > 0 ? `${domain} の Cookie を ${n} 件消しました` : `${domain} の Cookie はありません` }),
+      backgroundError('Cookie を消す'),
+    )
+  }
   /** 通知センター(スマホ: ポップアップ)を開いているか */
   const [notifOpen, setNotifOpen] = useState(false)
   /** 通知をスレ一覧の所に出しているか(PC) */
@@ -3282,6 +3293,7 @@ export default function App() {
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           boardUrl={!history ? board?.url : undefined}
           onOpenExternal={(url) => void openUrl(url)}
+          onClearCookies={clearBoardCookies}
           hideBarsOnScroll={settings.hideBarsOnScroll}
           newSince={!history ? newSince : undefined}
           favoriteIds={favIds}

@@ -72,6 +72,7 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
         w.navigate(page).map_err(|e| e.to_string())?;
         place(&main, &w, rect);
         let _ = w.show();
+        let _ = w.set_focus();
         return Ok(());
     }
     let mut b = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(page))
@@ -80,7 +81,9 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
         .resizable(false)
         .skip_taskbar(true)
         .inner_size(rect.w, rect.h)
-        .focused(false);
+        // 前に出して焦点も渡す(焦点を渡さずに出すと、動いている主の窓の下に置かれて見えないことがある)
+        .focused(true)
+        .visible(true);
     if let (Ok(origin), Ok(scale)) = (main.inner_position(), main.scale_factor()) {
         b = b.position(origin.x as f64 / scale + rect.x, origin.y as f64 / scale + rect.y);
     }
@@ -97,7 +100,9 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
     if let Ok(mut last) = LAST.lock() {
         *last = Some(rect);
     }
-    b.build().map_err(|e| e.to_string())?;
+    let w = b.build().map_err(|e| e.to_string())?;
+    let _ = w.show();
+    let _ = w.set_focus();
     Ok(())
 }
 

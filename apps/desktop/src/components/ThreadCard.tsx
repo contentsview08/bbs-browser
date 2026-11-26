@@ -334,7 +334,8 @@ function ThreadCard({ highlight,
   /** 操作バー(マウスを乗せたスレの右上)。設定の順に並べ、'more' は ⋯ のメニュー。このスレで使えないものは飛ばし、1 つもなければ出さない */
   const toolbarNodes = (toolbar ?? ['favorite', 'copy', 'ng', 'deleteLog']).flatMap((item) => {
     if (item === 'more') return [<MenuButton key={item} icon="more_horiz" title="その他" items={menuItems} onOpenChange={setNgMenu} />]
-    const d = actionDefs.find((x) => x.id === item)
+    // 履歴から外すは、メニューにだけ(バーには並べない。ログの削除と見分けがつきにくい)
+    const d = actionDefs.find((x) => x.id === item && x.id !== 'removeHistory')
     if (!d) return []
     if (d.children) return [<MenuButton key={d.id} icon={d.icon} title={d.label} hoverClass={d.hover} onOpenChange={setNgMenu} items={d.children} />]
     return [

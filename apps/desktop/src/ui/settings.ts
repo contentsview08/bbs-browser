@@ -340,7 +340,7 @@ export interface AppSettings {
   listTabs: ListTabKey[]
   /**
    * スレの操作バー(マウスを乗せたスレに出すボタン)に並べるもの(左から順)。
-   * 'open'(新しいタブで開く) | 'favorite' | 'copy' | 'keyword' | 'ng' | 'removeHistory' | 'deleteLog' | 'more'(⋯: 右クリックと同じメニュー)。全部外すとバーは出ない
+   * 'open'(新しいタブで開く) | 'favorite' | 'copy' | 'keyword' | 'ng' | 'deleteLog' | 'more'(⋯: 右クリックと同じメニュー)。全部外すとバーは出ない
    */
   threadToolbar: string[]
   /** スマホの履歴の画面のタブと並び(スマホ版の pastTabs と同じ。PC の履歴は 1 つの一覧なので使わない) */

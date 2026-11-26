@@ -15,7 +15,6 @@ const THREAD_TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
   { key: 'copy', name: 'スレタイと URL をコピー', icon: 'content_copy' },
   { key: 'keyword', name: 'キーワードに登録', icon: 'sell' },
   { key: 'ng', name: 'NG に追加', icon: 'block' },
-  { key: 'removeHistory', name: '履歴から外す(履歴の一覧だけ)', icon: 'history_toggle_off' },
   { key: 'deleteLog', name: 'ログを削除', icon: 'delete' },
   { key: 'more', name: 'その他(⋯ のメニュー)', icon: 'more_horiz' },
 ]

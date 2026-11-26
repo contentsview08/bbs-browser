@@ -786,7 +786,6 @@ pub fn run() {
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
-            app.manage(link_panel::LinkPanel::default());
             app.manage(fonts::FontJobs::default());
             // フォルダは最初に保存するときに作る(起動時に読み書きしない)
             let media_cache = MediaCache::new(data_dir(app.handle())?.join("media-cache"), media_cache::is_auto_loadable)?;

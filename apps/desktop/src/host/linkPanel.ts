@@ -1,4 +1,4 @@
-// リンクのパネル(設定「リンクをアプリの中で開く」): 外のページを、画像ビューアーのように主の窓の上に重ねた子の webview で開く(Rust の link_panel.rs)。
+// リンクのパネル(設定「リンクをアプリの中で開く」): 外のページを、画像ビューアーのように主の窓の上に重ねた枠のない小さな窓で開く(Rust の link_panel.rs)。
 // 枠の暗がり・上の帯は components/LinkPanelFrame が描き、その内側の位置と大きさ(CSS の px)をここから渡す
 import { invoke } from '@tauri-apps/api/core'
 

@@ -14,8 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # protocol-asset: 背景画像(アプリのデータフォルダにコピーしたもの)を画面から読むため
-# unstable: 子 webview(リンクを画像ビューアーのように上に重ねて開くパネル。link_panel.rs)
-tauri = { version = "2", features = ["protocol-asset", "unstable"] }
+tauri = { version = "2", features = ["protocol-asset"] }
 # unsafe-headers: User-Agent などを JS から設定するため / cookies: 読む通信の Cookie を持つため
 tauri-plugin-http = { version = "2", features = ["unsafe-headers", "cookies"] }
 # ファイル・フォルダを選ぶ画面

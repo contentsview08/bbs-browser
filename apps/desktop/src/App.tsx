@@ -2023,8 +2023,8 @@ export default function App() {
    */
   const openLink = async (url: string) => {
     // 画像の URL はブラウザで開く(画像そのものはサムネイルからビューアーで見る)
-    // アプリの中で開く = 画像ビューアーのように上に重ねたパネル(子の webview)。画像の URL と、オフのときは OS のブラウザ
-    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? setLinkPanel(url) : openUrl(url))
+    // アプリの中で開く = 画像ビューアーのように上に重ねたパネル(画像の URL も同じ。前は画像だけブラウザへ飛ばしていて、まちまちに見えた)。オフなら OS のブラウザ
+    const outside = () => (settingsRef.current.openLinksInApp ? setLinkPanel(url) : openUrl(url))
     const thread = isAppThreadUrl(url)
     if (!thread && !isAppBoardUrl(url)) return outside()
     try {

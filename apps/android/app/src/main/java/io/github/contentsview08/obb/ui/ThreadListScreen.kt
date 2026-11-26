@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -552,6 +553,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
                     )) {},
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, page.board.url, false) },
+                    // この掲示板(主ドメイン。サブドメインも)の書き込み・ログインの Cookie を消す。次の書き込みで認証からやり直し
+                    MenuItem("この掲示板の Cookie を消す", Icons.Filled.Delete) {
+                        val domain = io.github.contentsview08.obb.bbs.siteDomain(page.board.url)
+                        val n = if (domain.isEmpty()) 0 else io.github.contentsview08.obb.data.Http.clearCookies(domain)
+                        vm.toast = if (n > 0) "$domain の Cookie を $n 件消しました" else "$domain の Cookie はありません"
+                    },
                 ),
             ),
             header = { MenuInfo(page.board.name, "${page.threads.size}スレ") },

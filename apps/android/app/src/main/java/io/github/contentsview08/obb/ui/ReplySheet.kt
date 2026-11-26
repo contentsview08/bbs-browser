@@ -550,7 +550,7 @@ private fun startImagePick(vm: AppViewModel, r: io.github.contentsview08.obb.Rep
     if (problem != null) r.notice = problem else picker()
 }
 
-/** 写真の選択画面(何枚でも選べる。一度に 10 枚まで)を開く関数。選んだ画像は順番に上げる */
+/** 画像のボタン: API で上げる上げ先は写真の選択画面(何枚でも。一度に 10 枚まで)、サイトの画面で上げる上げ先はそのままサイトの画面 */
 @Composable
 fun rememberImagePicker(vm: AppViewModel, r: io.github.contentsview08.obb.ReplyState): () -> Unit {
     // API で上げる上げ先は、選んだらすぐ上げずに確かめの窓(PickConfirm)へ(どれを上げるか・スレタイと URL を描き込むか)。
@@ -559,7 +559,12 @@ fun rememberImagePicker(vm: AppViewModel, r: io.github.contentsview08.obb.ReplyS
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         if (vm.siteFor(r) != null) vm.attach(r, uris) else r.pendingPick = uris
     }
-    return { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+    return {
+        // サイトの画面で上げる上げ先なら、写真を選ばずにそのままサイトの画面を開く(画像はその画面の選び口で選ぶ。PC 版と同じ感覚)
+        val site = vm.siteFor(r)
+        if (site != null) r.webUpload = io.github.contentsview08.obb.ui.WebUploadJob(site, emptyList(), null)
+        else launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+    }
 }
 
 /**

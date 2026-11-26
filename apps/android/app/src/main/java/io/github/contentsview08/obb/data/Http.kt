@@ -51,6 +51,20 @@ object Http {
             .build()
     }
 
+    /** Cookie のあるドメインと数(読む通信と書き込みの両方の置き場。設定の「Cookie」の一覧) */
+    fun cookieDomains(): List<Pair<String, Int>> {
+        if (!::jar.isInitialized) return emptyList()
+        val counts = LinkedHashMap<String, Int>()
+        for (d in jar.domains() + postJar.domains()) counts[d] = (counts[d] ?: 0) + 1
+        return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).map { it.key to it.value }
+    }
+
+    /** Cookie を消す。domain を渡せばそのドメイン(サブドメインも)だけ、null なら全部。消した数を返す */
+    fun clearCookies(domain: String?): Int {
+        if (!::jar.isInitialized) return 0
+        return jar.removeDomain(domain) + postJar.removeDomain(domain)
+    }
+
     /** アプリの起動時に一度呼ぶ(Cookie の置き場を開く) */
     fun init(context: Context) {
         if (::jar.isInitialized) return
@@ -200,6 +214,21 @@ private class SavedCookieJar(context: Context, name: String) : CookieJar {
         val now = System.currentTimeMillis()
         if (cookies.removeAll { it.expiresAt <= now }) save()
         return cookies.filter { it.matches(url) }
+    }
+
+    /** Cookie 1 つごとのドメイン(先頭の . は外す) */
+    @Synchronized
+    fun domains(): List<String> = cookies.map { it.domain.trimStart('.') }
+
+    /** そのドメイン(サブドメインも)の Cookie を消す。null なら全部。消した数を返す */
+    @Synchronized
+    fun removeDomain(domain: String?): Int {
+        val d = domain?.trimStart('.')?.lowercase()
+        val before = cookies.size
+        if (d == null) cookies.clear()
+        else cookies.removeAll { val cd = it.domain.trimStart('.').lowercase(); cd == d || cd.endsWith(".$d") }
+        save()
+        return before - cookies.size
     }
 
     private fun save() {

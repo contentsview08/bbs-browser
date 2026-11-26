@@ -1323,6 +1323,26 @@ private fun boardKeyOf(url: String): String? = when (val r = io.github.contentsv
  * 掲示板ごとの設定(PC 版と同じ分け方)。全体の設定の上に、サイトごと・板ごとに変えたいものを重ねる。
  * サイトは BBS メニュー・板一覧・お気に入り・閲覧履歴・板ごとの設定の URL の主ドメイン(bbs/SiteDomain.kt)
  */
+/**
+ * 書き込み・ログインの Cookie(5ch の書き込みの認証・エッヂの認証・BE のログインなど)。ドメインごとに消せる。
+ * 消すと、その掲示板では次の書き込みで認証からやり直しになる。PC 版の設定「掲示板ごとの設定」の Cookie の段と同じ
+ */
+@Composable
+private fun CookieGroup(vm: AppViewModel) {
+    val http = io.github.contentsview08.obb.data.Http
+    var seq by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val domains = remember(seq) { http.cookieDomains() }
+    Group("Cookie", note = "書き込みとログインで掲示板から受け取った Cookie。消すと、その掲示板では次の書き込みで認証からやり直しになります") {
+        if (domains.isEmpty()) Text("Cookie はありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 13.sp)
+        for ((d, n) in domains) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(d, Modifier.weight(1f), color = Palette.textStrong, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("$n 件", color = Palette.textMuted, fontSize = 12.sp)
+            TextButton(onClick = { val k = http.clearCookies(d); vm.toast = "$d の Cookie を $k 件消しました"; seq++ }) { Text("消す", color = Palette.markDanger) }
+        }
+        if (domains.isNotEmpty()) ActionRow("すべての Cookie を消す", danger = true) { val k = http.clearCookies(null); vm.toast = "Cookie を $k 件消しました"; seq++ }
+    }
+}
+
 @Composable
 private fun AccountsPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
@@ -1377,6 +1397,7 @@ private fun AccountsPage(vm: AppViewModel, open: (String) -> Unit) {
             dismissButton = { TextButton(onClick = { adding = false }) { Text("やめる") } },
         )
     }
+    CookieGroup(vm)
 }
 
 /** サイトの行: 主ドメインと、分かっていればサイトの名前 */

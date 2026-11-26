@@ -10,6 +10,7 @@ import { BTN_PRIMARY, INPUT } from '../DialogParts'
 import BoardIcon from '../BoardIcon'
 import { type SettingsProps, Section, withBoardMeta, BoardMetaEditor } from './common'
 import { SearchInput } from '../ClearButton'
+import { clearCookies, listCookieDomains, type CookieDomainCount } from '../../host/postCookies'
 
 /** アカウント 1 つぶんの欄(メールアドレス・パスワード・自動ログイン・ログイン) */
 function AccountForm(props: {
@@ -280,6 +281,53 @@ export function AccountsTab(
           </button>
         </form>
       </Section>
+      <CookieSection />
     </>
+  )
+}
+
+/**
+ * 書き込み・ログインの Cookie(5ch の書き込みの認証・エッヂの edge-token・BE のログインなど)。ドメインごとに消せる。
+ * 消すと、その掲示板では次の書き込みで認証からやり直しになる。画面(WebView)の Cookie は別(ここでは触らない)
+ */
+function CookieSection() {
+  const [domains, setDomains] = useState<CookieDomainCount[]>()
+  const [notice, setNotice] = useState<string>()
+  const reload = () => void listCookieDomains().then(setDomains, () => setDomains([]))
+  useEffect(() => reload(), [])
+  const clear = async (domain?: string) => {
+    const n = await clearCookies(domain)
+    setNotice(domain ? `${domain} の Cookie を ${n} 件消しました` : `Cookie を ${n} 件消しました`)
+    reload()
+  }
+  return (
+    <Section
+      title="Cookie"
+      note="書き込みとログインで掲示板から受け取った Cookie(5ch の書き込みの認証、エッヂの認証、BE のログインなど)。消すと、その掲示板では次の書き込みで認証からやり直しになります。画面の中で開いたページの Cookie は含みません"
+    >
+      {!domains ? (
+        <p className="text-sm text-c-text-muted">読んでいます…</p>
+      ) : domains.length === 0 ? (
+        <p className="text-sm text-c-text-muted">Cookie はありません</p>
+      ) : (
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
+          {domains.map((d) => (
+            <div key={d.domain} className="flex items-center gap-3 px-3 py-2">
+              <span className="flex-1 min-w-0 truncate text-sm text-c-text-strong">{d.domain}</span>
+              <span className="text-xs text-c-text-muted">{d.count} 件</span>
+              <button type="button" className="px-2 py-1 text-xs rounded border border-c-border text-c-mark-danger hover:bg-c-surface2" onClick={() => void clear(d.domain)}>
+                消す
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!!domains?.length && (
+        <button type="button" className="px-3 py-1.5 text-sm rounded-md border border-c-border text-c-mark-danger hover:bg-c-surface2" onClick={() => void clear()}>
+          すべての Cookie を消す
+        </button>
+      )}
+      {notice && <p className="mt-2 text-xs text-c-text-muted">{notice}</p>}
+    </Section>
   )
 }

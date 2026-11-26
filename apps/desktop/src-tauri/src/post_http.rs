@@ -50,6 +50,68 @@ impl PostCookies {
     }
 }
 
+/// Cookie のあるドメインと数(設定の「Cookie」の一覧。期限の切れたものも数える)
+#[derive(serde::Serialize)]
+pub struct CookieDomainCount {
+    domain: String,
+    count: usize,
+}
+
+fn domain_of(c: &cookie_store::Cookie<'static>) -> String {
+    match &c.domain {
+        cookie_store::CookieDomain::HostOnly(h) | cookie_store::CookieDomain::Suffix(h) => h.trim_start_matches('.').to_string(),
+        _ => String::new(),
+    }
+}
+
+/// 書き込み・ログインの Cookie があるドメインの一覧(多い順)
+#[tauri::command]
+pub fn post_cookie_domains(state: tauri::State<'_, PostCookies>) -> Result<Vec<CookieDomainCount>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for c in store.iter_any() {
+        *counts.entry(domain_of(c)).or_insert(0) += 1;
+    }
+    let mut out: Vec<CookieDomainCount> = counts.into_iter().filter(|(d, _)| !d.is_empty()).map(|(domain, count)| CookieDomainCount { domain, count }).collect();
+    out.sort_by(|a, b| b.count.cmp(&a.count).then(a.domain.cmp(&b.domain)));
+    Ok(out)
+}
+
+/// Cookie を消す。domain を渡せばそのドメイン(サブドメインも)だけ、なければ全部。消した数を返す
+#[tauri::command]
+pub fn clear_post_cookies(state: tauri::State<'_, PostCookies>, domain: Option<String>) -> Result<usize, String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let n;
+    match domain.as_deref().map(|d| d.trim_start_matches('.').to_ascii_lowercase()) {
+        None => {
+            n = store.iter_any().count();
+            store.clear();
+        }
+        Some(d) => {
+            let targets: Vec<(String, String, String)> = store
+                .iter_any()
+                .filter(|c| {
+                    let cd = domain_of(c).to_ascii_lowercase();
+                    cd == d || cd.ends_with(&format!(".{d}"))
+                })
+                .map(|c| {
+                    let key = match &c.domain {
+                        cookie_store::CookieDomain::HostOnly(h) | cookie_store::CookieDomain::Suffix(h) => h.clone(),
+                        _ => String::new(),
+                    };
+                    (key, c.path.to_string(), c.name().to_string())
+                })
+                .collect();
+            n = targets.len();
+            for (dom, path, name) in &targets {
+                store.remove(dom, path, name);
+            }
+        }
+    }
+    state.save(&store);
+    Ok(n)
+}
+
 /// リダイレクトの次の一歩。決まりは packages/conformance/post-redirect.json(スマホ版の data/Http.kt の nextRequest と同じ)
 #[derive(Debug)]
 struct NextRequest {

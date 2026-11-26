@@ -101,6 +101,9 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
         *last = Some(rect);
     }
     let w = b.build().map_err(|e| e.to_string())?;
+    // 作ってから、物理ピクセルの画面の座標で置き直す。作るときの position(論理)は倍率の違う画面で別の所に置かれ、
+    // 枠の内側にページが見えなかった(2 回目の開き直し = place を通る方だけ見えていたのが手がかり)
+    place(&main, &w, rect);
     let _ = w.show();
     let _ = w.set_focus();
     Ok(())

@@ -749,6 +749,10 @@ pub fn run() {
         // 書き込み欄のポップアップ(reply の窓)が閉じたら、メインに知らせる(欄を元の場所に戻す)。
         // JS の onCloseRequested で知らせると、閉じるのに destroy の権限が要って窓が閉じなくなるので、こちらで見る
         .on_window_event(|window, event| {
+            // 主の窓が動いた・大きさが変わったら、リンクのパネル(所有された窓)を追いかけさせる
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                link_panel::follow(window.app_handle());
+            }
             if window.label() == "reply" && matches!(event, tauri::WindowEvent::Destroyed) {
                 let _ = tauri::Emitter::emit_to(window.app_handle(), "main", "reply-popup", serde_json::json!({ "from": "reply", "payload": { "open": false } }));
             }

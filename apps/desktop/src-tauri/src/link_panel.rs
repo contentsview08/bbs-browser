@@ -1,12 +1,12 @@
 //! リンクのパネル(設定「リンクをアプリの中で開く」)。外のページを、画像ビューアーのように主の窓の上に重ねて開く。
 //! 外のページは iframe に入れられない(X-Frame-Options)ので、枠のない小さな窓(WebviewWindow)を主の窓の中に置く。
-//! Windows では主の窓の子ウィンドウ(parent)にするので、主の窓と一緒に動き・隠れ、主の画面(webview)より手前に出る。
+//! Windows では主の窓に所有された窓(owner)にするので、いつも主の窓より手前に出て、主の窓を小さくすると一緒に隠れる。主の窓が動いたら追いかける(follow)。
 //! 枠の暗がり・上の帯・閉じるボタンは主の画面(JS の LinkPanelFrame)が描き、この窓はその内側に大きさを合わせて置く。
 //! 外のページなので、この窓にはアプリの命令(IPC)の権限を与えない(capabilities に入れない)。
 //! 命令は async(同期の命令はメインのスレッドで動き、窓を作る・閉じる中でメインのスレッドを待って固まる)
 use std::sync::Mutex;
 
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 const LABEL: &str = "link-panel";
 
@@ -31,20 +31,35 @@ fn parse(url: &str) -> Result<Url, String> {
     Ok(page)
 }
 
-/// 窓を枠の内側に合わせる。Windows は子ウィンドウなので主の窓のクライアント領域からの位置、ほかは画面の位置に直す
+/// 最後に渡された枠の内側(主の窓が動いたときに追いかけるため)
+static LAST: Mutex<Option<Rect>> = Mutex::new(None);
+
+/// 枠の内側の画面上の位置(物理ピクセル)。主の窓のクライアント領域の左上 + 論理ピクセル × 倍率
+fn screen_position(main: &WebviewWindow, rect: Rect) -> Option<tauri::PhysicalPosition<i32>> {
+    let origin = main.inner_position().ok()?;
+    let scale = main.scale_factor().ok()?;
+    Some(tauri::PhysicalPosition::new(origin.x + (rect.x * scale).round() as i32, origin.y + (rect.y * scale).round() as i32))
+}
+
+/// 窓を枠の内側に合わせる(位置は画面の座標。所有された窓なので主の窓より手前に出る)
 fn place(main: &WebviewWindow, panel: &WebviewWindow, rect: Rect) {
-    #[cfg(windows)]
-    {
-        let _ = main;
-        let _ = panel.set_position(LogicalPosition::new(rect.x, rect.y));
-    }
-    #[cfg(not(windows))]
-    {
-        if let (Ok(origin), Ok(scale)) = (main.inner_position(), main.scale_factor()) {
-            let _ = panel.set_position(tauri::PhysicalPosition::new(origin.x + (rect.x * scale) as i32, origin.y + (rect.y * scale) as i32));
-        }
+    if let Some(p) = screen_position(main, rect) {
+        let _ = panel.set_position(p);
     }
     let _ = panel.set_size(LogicalSize::new(rect.w, rect.h));
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some(rect);
+    }
+}
+
+/// 主の窓が動いた・大きさが変わったとき(lib.rs の on_window_event から)、パネルを追いかけさせる
+pub fn follow(app: &AppHandle) {
+    let Some(rect) = LAST.lock().ok().and_then(|l| *l) else { return };
+    if let (Some(main), Some(w)) = (app.get_webview_window("main"), app.get_webview_window(LABEL)) {
+        if let Some(p) = screen_position(&main, rect) {
+            let _ = w.set_position(p);
+        }
+    }
 }
 
 /// パネルを開く(開いていれば同じ窓でそのページへ)
@@ -66,16 +81,21 @@ pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<
         .skip_taskbar(true)
         .inner_size(rect.w, rect.h)
         .focused(false);
+    if let (Ok(origin), Ok(scale)) = (main.inner_position(), main.scale_factor()) {
+        b = b.position(origin.x as f64 / scale + rect.x, origin.y as f64 / scale + rect.y);
+    }
+    // Windows: 主の窓に所有された窓(いつも主の窓より手前。主の窓を小さくすると一緒に隠れる)。
+    // 子ウィンドウ(parent)にすると主の webview の HWND の下に入ってページが見えなかった
     #[cfg(windows)]
     {
-        b = b.parent(&main).map_err(|e| e.to_string())?.position(rect.x, rect.y);
+        b = b.owner(&main).map_err(|e| e.to_string())?;
     }
     #[cfg(not(windows))]
     {
         b = b.always_on_top(true);
-        if let (Ok(origin), Ok(scale)) = (main.inner_position(), main.scale_factor()) {
-            b = b.position(origin.x as f64 / scale + rect.x, origin.y as f64 / scale + rect.y);
-        }
+    }
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some(rect);
     }
     b.build().map_err(|e| e.to_string())?;
     Ok(())

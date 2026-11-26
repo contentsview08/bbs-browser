@@ -219,7 +219,6 @@ const NewThreadDialog = lazyComponent(() => import('./components/NewThreadDialog
 const MobileSettings = lazyComponent(() => import('./components/mobile/MobileSettings'))
 const UploadHistoryDialog = lazyComponent(() => import('./components/UploadHistoryDialog'))
 const PostHistoryDialog = lazyComponent(() => import('./components/PostHistoryDialog'))
-const ReaderView = lazyComponent(() => import('./components/ReaderView'))
 const CommandPalette = lazyComponent(() => import('./components/CommandPalette'))
 const KeyHelp = lazyComponent(() => import('./components/KeyHelp'))
 
@@ -457,7 +456,6 @@ export default function App() {
   /** スマホ: サイドバーの引き出しを開いているか(左上のメニュー・左の端からのスワイプで開き、何か開いたら閉じる) */
   const [drawerOpen, setDrawerOpen] = useState(false)
   /** アプリの中で開いているリンク(リーダー表示) */
-  const [readerUrl, setReaderUrl] = useState<string>()
   /** スマホ: URL を入れて開く小さな画面(URL 欄の帯の代わり)。開いている間は入れている文字 */
   const [urlPrompt, setUrlPrompt] = useState<string>()
   /** キー操作の割り当て(スレ表示とスレ一覧で同じものを使う) */
@@ -2025,13 +2023,8 @@ export default function App() {
    */
   const openLink = async (url: string) => {
     // 画像の URL はブラウザで開く(画像そのものはサムネイルからビューアーで見る)
-    const outside = () => {
-      const s = settingsRef.current
-      if (!s.openLinksInApp || toImageUrl(url)) return openUrl(url)
-      // 埋め込みのブラウザ: ページをそのまま別のウィンドウで。そうでなければ題と本文を抜き出した画面
-      if (s.openLinksInWebView) return void openLinkWindow(url).catch(backgroundError('ブラウザのウィンドウ'))
-      setReaderUrl(url)
-    }
+    // アプリの中で開く = アプリのブラウザのウィンドウ(画像ビューアーのように前に出る)。画像の URL と、オフのときは OS のブラウザ
+    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? void openLinkWindow(url).catch(backgroundError('ブラウザのウィンドウ')) : openUrl(url))
     const thread = isAppThreadUrl(url)
     if (!thread && !isAppBoardUrl(url)) return outside()
     try {
@@ -3477,16 +3470,6 @@ export default function App() {
         />
       )}
 
-      {readerUrl && (
-        <ReaderView
-          url={readerUrl}
-          // ウェブページはブラウザの名乗り(User-Agent)で取る(専ブラの名乗りだと、スマホ向けでない・断られるページがある)
-          fetchPage={(url) => ctx.http.get(url, { headers: { 'User-Agent': BROWSER_UA } })}
-          saveTo={imageSaveTo}
-          onClose={() => setReaderUrl(undefined)}
-          onOpenExternal={(url) => void openUrl(url)}
-        />
-      )}
       {urlPrompt !== undefined && (
         <UrlPrompt
           onClose={() => setUrlPrompt(undefined)}

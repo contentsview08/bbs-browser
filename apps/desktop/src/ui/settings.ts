@@ -402,9 +402,8 @@ export interface AppSettings {
   /** 画像でも動画でもないリンクに、埋め込みのカード(タイトル・説明・画像)を出す */
   showLinkPreview: boolean
   /** 掲示板でないリンク(ウェブページ・画像・動画)を、アプリの中で開く(リーダー表示。ReaderView)。スマホの既定 */
+  /** リンクをアプリの中で開く。スマホは Chrome のカスタムタブ(既定オン)、PC はアプリのブラウザのウィンドウ(既定オフ)。オフなら OS のブラウザ */
   openLinksInApp: boolean
-  /** アプリの中で開くとき、題と本文を抜き出した画面ではなく、別のウィンドウのブラウザで開く */
-  openLinksInWebView: boolean
   /** 名前が板の既定の名前(名無し)なら省く */
   omitNoname: boolean
   /** 空行を整える(3 行以上続く空行は 1 行にまとめ、本文の最後の空行は消す) */
@@ -669,7 +668,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hideBarsOnScroll: true,
   showLinkPreview: true,
   openLinksInApp: isMobile,
-  openLinksInWebView: false,
   omitNoname: !isMobile,
   tidyBlankLines: true,
   urlShorten: true,

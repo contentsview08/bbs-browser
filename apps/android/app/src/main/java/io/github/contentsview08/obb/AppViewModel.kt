@@ -2022,12 +2022,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** OS の既定のアプリで開く(YouTube のリンクなら YouTube のアプリ) */
+    /** アプリでは開けなかった URL(板のような形だが板ではなかった など)を開く。設定「リンクをアプリの中で開く」に従う(前は必ず OS のブラウザで、本文のリンクの開き方がまちまちに見えた) */
     private fun openInOs(url: String) {
-        runCatching {
-            getApplication<Application>().startActivity(
-                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }.onFailure { toast = "開けるアプリがありません" }
+        runCatching { io.github.contentsview08.obb.ui.openExternal(getApplication(), url, prefs.openLinksInApp) }.onFailure { toast = "開けるアプリがありません" }
     }
 
     fun deleteLog(page: Page.Thread) {

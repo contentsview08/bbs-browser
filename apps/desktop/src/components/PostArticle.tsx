@@ -510,18 +510,24 @@ function PostArticle(props: Props) {
   const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng', 'more']
   const reply = handlers.onReply
   const quick = handlers.onQuickReply
-  const actions: MenuItem[] = [
-    ...(reply ? [{ label: '返信', icon: 'reply', onClick: () => reply(post.no) }] : []),
+  /**
+   * レスへの操作の一覧(⋯ のメニューの中身)。id は設定「レスの操作バー」の鍵で、同じものをバーにも並べられる。
+   * children のあるもの(共有・NG)はバーでは小さなメニューのボタンになる
+   */
+  type PostAction = MenuItem & { id: string; hover?: string }
+  const actionDefs: PostAction[] = [
+    ...(reply ? [{ id: 'reply', label: '返信', icon: 'reply', hover: 'hover:!text-mark-link', onClick: () => reply(post.no) }] : []),
     ...(quick
-      ? (props.phrases ?? []).map((text) => ({ label: `「${text}」とすぐ書き込む`, icon: 'bolt', onClick: () => quick(post.no, text) }))
+      ? (props.phrases ?? []).map((text) => ({ id: `phrase:${text}`, label: `「${text}」とすぐ書き込む`, icon: 'bolt', hover: 'hover:!text-mark-new', onClick: () => quick(post.no, text) }))
       : []),
     ...(hasConnections
-      ? [{ label: 'アンカーツリーを表示', icon: 'account_tree', onClick: () => handlers.onBody(post.no, articleRef.current!) }]
+      ? [{ id: 'tree', label: 'アンカーツリーを表示', icon: 'account_tree', hover: 'hover:!text-mark-hot', onClick: () => handlers.onBody(post.no, articleRef.current!) }]
       : []),
-    { label: 'ヘッダ含めてコピー', icon: 'content_copy', onClick: () => copy(`${header}\n${post.body}`) },
-    { label: '本文のみコピー', icon: 'content_copy', onClick: () => copy(post.body) },
-    ...(handlers.shareOf ? [{ label: '共有', icon: 'share', children: handlers.shareOf(post) }] : []),
+    { id: 'copyHeader', label: 'ヘッダ含めてコピー', icon: 'content_copy', hover: 'hover:!text-mark-link', onClick: () => copy(`${header}\n${post.body}`) },
+    { id: 'copy', label: '本文のみコピー', icon: 'content_paste', hover: 'hover:!text-mark-link', onClick: () => copy(post.body) },
+    ...(handlers.shareOf ? [{ id: 'share', label: '共有', icon: 'share', children: handlers.shareOf(post) }] : []),
     {
+      id: 'aa',
       label: isAA ? '文字列として表示' : 'AAとして表示',
       icon: isAA ? 'notes' : 'grid_on',
       onClick: () => setAaOverride(!isAA),
@@ -530,30 +536,31 @@ function PostArticle(props: Props) {
     ...(handlers.onMarkOwn
       ? [
           props.isOwn
-            ? { label: '自分のレスの印を外す', icon: 'person_remove', onClick: () => handlers.onMarkOwn!(post, false, false) }
-            : { label: '自分のレスの印を付ける', icon: 'how_to_reg', onClick: () => handlers.onMarkOwn!(post, true, false) },
+            ? { id: 'markOwn', label: '自分のレスの印を外す', icon: 'person_remove', onClick: () => handlers.onMarkOwn!(post, false, false) }
+            : { id: 'markOwn', label: '自分のレスの印を付ける', icon: 'how_to_reg', onClick: () => handlers.onMarkOwn!(post, true, false) },
           ...(post.id
             ? [
                 props.isOwn
-                  ? { label: '同じ ID のレスすべての印を外す', icon: 'group_remove', onClick: () => handlers.onMarkOwn!(post, false, true) }
-                  : { label: '同じ ID のレスすべてに印を付ける', icon: 'group', onClick: () => handlers.onMarkOwn!(post, true, true) },
+                  ? { id: 'markOwnId', label: '同じ ID のレスすべての印を外す', icon: 'group_remove', onClick: () => handlers.onMarkOwn!(post, false, true) }
+                  : { id: 'markOwnId', label: '同じ ID のレスすべてに印を付ける', icon: 'group', onClick: () => handlers.onMarkOwn!(post, true, true) },
               ]
             : []),
         ]
       : []),
     // NG は 1 つの枠にまとめ、押すと小項目を広げる
-    ...(ngActions.length > 0 ? [{ label: 'NG', icon: 'block', children: ngActions }] : []),
+    ...(ngActions.length > 0 ? [{ id: 'ng', label: 'NG', icon: 'block', hover: 'hover:!text-mark-danger', children: ngActions }] : []),
     // 掲示板ごとの操作(通報など)。自分の書き込みにだけ出すものもある
     ...(handlers.onPostAction
       ? (handlers.postActions ?? [])
           .filter((a) => !a.ownOnly || props.isOwn)
-          .map((a) => ({ label: a.label, icon: a.icon, onClick: () => handlers.onPostAction!(post, a.id) }))
+          .map((a) => ({ id: `postAction:${a.id}`, label: a.label, icon: a.icon, onClick: () => handlers.onPostAction!(post, a.id) }))
       : []),
     // 自分の書き込みは、掲示板から消せる(消せる掲示板だけ)
     ...(props.isOwn && handlers.onDeletePost
-      ? [{ label: 'この書き込みを削除', icon: 'delete_forever', onClick: () => handlers.onDeletePost!(post) }]
+      ? [{ id: 'delete', label: 'この書き込みを削除', icon: 'delete_forever', hover: 'hover:!text-mark-danger', onClick: () => handlers.onDeletePost!(post) }]
       : []),
   ]
+  const actions: MenuItem[] = actionDefs.map(({ id: _id, hover: _hover, ...m }) => m)
 
   /** ID・名前の上で右クリックしたときの項目 */
   const headMenuItems = (head: { kind: 'id' | 'name'; el: HTMLElement }): MenuItem[] =>
@@ -1110,46 +1117,26 @@ function PostArticle(props: Props) {
    * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
    */
   const toolbarAt = (at: string, style?: { top: number }) => {
-    const nodes = toolbarItems.map((item) => {
-          if (item === 'reply' && reply)
-            return (
-              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="返信" onClick={() => reply(post.no)}>
-                <span className="material-symbols-outlined text-lg leading-none">reply</span>
-              </button>
-            )
-          if (item === 'copy')
-            return (
-              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="本文をコピー" onClick={() => copy(post.body)}>
-                <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
-              </button>
-            )
-          if (item === 'ng' && ngActions.length > 0)
-            return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} hoverClass="hover:!text-mark-danger" />
-          if (item === 'tree' && hasConnections)
-            return (
-              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-hot`} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
-                <span className="material-symbols-outlined text-lg leading-none">account_tree</span>
-              </button>
-            )
-          if (item.startsWith('phrase:') && quick) {
-            const text = item.slice('phrase:'.length)
-            return (
-              <button
-                key={item}
-                type="button"
-                className={`${TOOL_BTN} hover:!text-mark-new text-sm font-bold max-w-[6rem]`}
-                title={`「${text}」とすぐ書き込む`}
-                onClick={() => quick(post.no, text)}
-              >
-                <span className="truncate">{text}</span>
-              </button>
-            )
-          }
-          if (item === 'more') return <MenuButton key={item} icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
-          return null
-        })
+    // 設定の順に並べる。'postActions' は掲示板ごとの操作をまとめて、'more' は ⋯ のメニュー。このレスで使えないものは飛ばす
+    const nodes = toolbarItems.flatMap((item) => {
+      if (item === 'more') return [<MenuButton key={item} icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />]
+      const defs = item === 'postActions' ? actionDefs.filter((d) => d.id.startsWith('postAction:')) : actionDefs.filter((d) => d.id === item)
+      return defs.map((d) =>
+        d.children ? (
+          <MenuButton key={d.id} icon={d.icon} title={d.label} items={d.children} onOpenChange={d.id === 'ng' ? setNgOpen : setMoreOpen} hoverClass={d.hover} />
+        ) : d.id.startsWith('phrase:') ? (
+          <button key={d.id} type="button" className={`${TOOL_BTN} ${d.hover ?? ''} text-sm font-bold max-w-[6rem]`} title={d.label} onClick={d.onClick}>
+            <span className="truncate">{d.id.slice('phrase:'.length)}</span>
+          </button>
+        ) : (
+          <button key={d.id} type="button" className={`${TOOL_BTN} ${d.hover ?? ''}`} title={d.label} onClick={d.onClick}>
+            <span className="material-symbols-outlined text-lg leading-none">{d.icon}</span>
+          </button>
+        ),
+      )
+    })
     // 出すものが 1 つもなければ(設定で全部外した・このレスでは使えるものがない)、バーそのものを出さない
-    if (!nodes.some((n) => n !== null)) return null
+    if (nodes.length === 0) return null
     return (
       <div
         data-post-toolbar

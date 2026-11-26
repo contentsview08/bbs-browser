@@ -855,7 +855,6 @@ private fun PostDisplayGroups(vm: AppViewModel) {
     Group("リンクと本文") {
         SwitchRow("リンクのカード", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }
         SwitchRow("リンクをアプリの中で開く", p.openLinksInApp, desc = "オフ: ブラウザで開く") { p.openLinksInApp = it }
-        if (p.openLinksInApp) SwitchRow("埋め込みのブラウザで開く", p.openLinksInWebView, desc = "画像ビューアーのように、今の画面の上に重ねて開きます。オフ: Chrome のカスタムタブ") { p.openLinksInWebView = it }
         SwitchRow("URL を短く", p.urlShorten, desc = "https:// を外し、画像の URL は「画像」の札に") { p.urlShorten = it }
         SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行に") { p.tidyBlankLines = it }
     }

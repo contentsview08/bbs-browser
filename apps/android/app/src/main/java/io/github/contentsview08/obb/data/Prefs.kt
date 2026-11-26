@@ -394,8 +394,6 @@ class Prefs(context: Context) {
     var showNextUnreadAtEnd by pref("showNextUnreadAtEnd", true)
     var showLinkPreview by pref("showLinkPreview", true)
     var openLinksInApp by pref("openLinksInApp", true)
-    /** アプリの中で開くとき、Chrome のカスタムタブではなく、アプリに重ねた埋め込みのブラウザ(WebView)で開く */
-    var openLinksInWebView by pref("openLinksInWebView", false)
 
     // ── 画像と動画 ──
     private var thumbLoad by pref("thumbLoad", ThumbMode.WIFI.key)

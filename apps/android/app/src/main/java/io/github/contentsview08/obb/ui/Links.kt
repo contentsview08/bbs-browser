@@ -16,14 +16,6 @@ val LocalPrefs = staticCompositionLocalOf<Prefs> { error("Prefs が渡されて�
  * 外のページを開く。inApp ならアプリの中のブラウザ(Custom Tabs。上の帯は配色の色)で、そうでなければいつものブラウザで。
  * YouTube などアプリのあるリンクは、そのアプリで開く(Custom Tabs でもアプリに渡る)
  */
-/**
- * 本文などのリンクを開く(設定どおり): アプリの中で開く + 埋め込みのブラウザ → アプリに重ねた WebView。
- * アプリの中で開く → Chrome のカスタムタブ。それ以外 → ブラウザ
- */
-fun openLink(context: Context, vm: io.github.contentsview08.obb.AppViewModel, url: String) {
-    if (vm.prefs.openLinksInApp && vm.prefs.openLinksInWebView) vm.openWebLink(url) else openExternal(context, url, vm.prefs.openLinksInApp)
-}
-
 fun openExternal(context: Context, url: String, inApp: Boolean) {
     val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return
     runCatching {

@@ -258,8 +258,6 @@ class MainActivity : ComponentActivity() {
                             SettingsPanel(vm)
                             // スキンは設定からも開くので、設定より上に重ねる(スキンから設定を開くときはスキンを閉じる)
                             io.github.contentsview08.obb.ui.SkinPanel(vm)
-                            // 埋め込みのブラウザ(本文のリンク)。画像ビューアーと同じく一番上に重ねる
-                            io.github.contentsview08.obb.ui.WebLinkScreen(vm)
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->

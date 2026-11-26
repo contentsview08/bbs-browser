@@ -49,7 +49,6 @@ val SETTINGS_INDEX = listOf(
     Triple("thread", "リンクと本文", ""),
     Triple("thread", "リンクのカード", "ページの題と画像を、本文の下に小さく"),
     Triple("thread", "リンクをアプリの中で開く", "オフ: ブラウザで開く"),
-    Triple("thread", "埋め込みのブラウザで開く", "画像ビューアーのように、今の画面の上に重ねて開きます。オフ: Chrome のカスタムタブ"),
     Triple("thread", "URL を短く", "https:// を外し、画像の URL は「画像」の札に"),
     Triple("thread", "空行を整える", "3 行以上続いた空行を 1 行に"),
     Triple("thread", "ミニマップ", "右端に、人気レス・自分のレス・画像の位置"),

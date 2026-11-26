@@ -433,10 +433,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'u' -> when {
                     // 画像はサムネイルから見るので URL はブラウザで開く。サムネイルを出さない設定ならビューアーでしか見られない
                     toImageUrl(v)?.let { it in index.allImages } == true && vm.prefs.thumbMode == io.github.contentsview08.obb.data.ThumbMode.NEVER -> viewer = toImageUrl(v)
-                    toImageUrl(v)?.let { it in index.allImages } == true -> openLink(context, vm, v)
+                    toImageUrl(v)?.let { it in index.allImages } == true -> openExternal(context, v, vm.prefs.openLinksInApp)
                     // 動画はアプリの中のブラウザの再生に任せる。10 秒送り・速さの切り替えなどがそのまま使える
                     io.github.contentsview08.obb.bbs.isVideoFileUrl(v) -> openExternal(context, v, true)
-                    !vm.openUrl(v) -> openLink(context, vm, v)
+                    !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }
         }

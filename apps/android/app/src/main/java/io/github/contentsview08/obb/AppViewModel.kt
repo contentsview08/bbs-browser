@@ -306,13 +306,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         skinOpen = false
     }
 
-    // ── 埋め込みのブラウザ(設定「埋め込みのブラウザで開く」。画像ビューアーのように今の画面の上に重ねる) ──
-    /** 開いている URL(null なら閉じている) */
-    var webLink by mutableStateOf<String?>(null)
-        private set
-    fun openWebLink(url: String) { drawerOpen = false; webLink = url }
-    fun closeWebLink() { webLink = null }
-
     // ── スキンの一覧(カタログ。data/SkinCatalog.kt)。スキンのパネルの「もっと探す」 ──
     var skinCatalog by mutableStateOf<List<io.github.contentsview08.obb.data.SkinCatalog.Entry>?>(null)
         private set

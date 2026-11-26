@@ -2,7 +2,7 @@
 // ページそのものは Rust が置く枠のない小さな窓(host/linkPanel.ts)で、この枠の内側(ref の矩形)に重なる。窓の大きさが変わったら位置を合わせ直す。
 // 周りの暗がりを押す・Esc・× で閉じる
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { closeLinkPanel, linkPanelUrl, moveLinkPanel, openLinkPanel, type PanelRect } from '../host/linkPanel'
+import { closeLinkPanel, linkPanelUrl, moveLinkPanel, nextPanelId, openLinkPanel, type PanelRect } from '../host/linkPanel'
 import { backgroundError } from '../utils/backgroundError'
 
 const ICON_BTN = 'w-9 h-9 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10'
@@ -10,6 +10,10 @@ const ICON_BTN = 'w-9 h-9 rounded-full flex items-center justify-center text-whi
 export default function LinkPanelFrame(props: { url: string; onClose: () => void; onOpenExternal: (url: string) => void }) {
   const inner = useRef<HTMLDivElement>(null)
   const [current, setCurrent] = useState(props.url)
+  /** 窓を作れなかったときの理由(枠の中に出す) */
+  const [error, setError] = useState<string>()
+  /** 最後に頼んだ「開く」の通し番号(閉じるときに渡す) */
+  const opened = useRef(0)
   const rectOf = (): PanelRect | undefined => {
     const el = inner.current
     if (!el) return undefined
@@ -19,7 +23,15 @@ export default function LinkPanelFrame(props: { url: string; onClose: () => void
   // 開く(位置は枠を描いてから測る)。URL が変われば同じ窓で開き直す
   useLayoutEffect(() => {
     const rect = rectOf()
-    if (rect) void openLinkPanel(props.url, rect).catch(backgroundError('リンクのパネル'))
+    setError(undefined)
+    if (rect) {
+      const id = nextPanelId()
+      opened.current = id
+      void openLinkPanel(props.url, rect, id).catch((e) => {
+        setError(String(e))
+        backgroundError('リンクのパネル')(e)
+      })
+    }
     setCurrent(props.url)
   }, [props.url])
   // 窓の大きさに合わせる
@@ -42,7 +54,7 @@ export default function LinkPanelFrame(props: { url: string; onClose: () => void
     return () => clearInterval(t)
   }, [])
   // 閉じるときは窓も消す
-  useEffect(() => () => void closeLinkPanel().catch(() => undefined), [])
+  useEffect(() => () => void closeLinkPanel(opened.current).catch(() => undefined), [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') props.onClose()
@@ -66,7 +78,9 @@ export default function LinkPanelFrame(props: { url: string; onClose: () => void
           </button>
         </div>
         {/* この内側にページの窓が重なる */}
-        <div ref={inner} className="flex-1 min-h-0 rounded-lg bg-c-base" />
+        <div ref={inner} className="flex-1 min-h-0 rounded-lg bg-c-base flex items-center justify-center p-6">
+          {error && <p className="text-sm text-c-mark-danger break-all">ページの窓を作れませんでした: {error}</p>}
+        </div>
       </div>
     </div>
   )

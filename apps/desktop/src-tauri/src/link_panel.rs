@@ -13,6 +13,9 @@ const LABEL: &str = "link-panel";
 /// 開く・閉じるを 1 つずつ(同時に 2 つの「開く」が走ると、どちらも「まだない」と見て窓を 2 つ作り、同じ名前なので 1 つが行き場をなくして
 /// 消せなくなった。React の開発モードは effect を 2 回走らせるので起きやすい)
 static LOCK: Mutex<()> = Mutex::new(());
+/// 最後に「開く」を頼まれたときの通し番号。それより古い「閉じる」は無視する
+/// (React の開発モードは 開く → 閉じる → 開く と続けて頼み、async の命令は順に届かないので、最後に古い閉じるが効いて窓が消えていた)
+static CURRENT: Mutex<u64> = Mutex::new(0);
 
 /// 主の画面の中の位置と大きさ(CSS の px = 論理ピクセル。主の窓のクライアント領域の左上が原点)
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -56,21 +59,10 @@ fn place(main: &WebviewWindow, panel: &WebviewWindow, rect: Rect) {
 /// 主の窓に戻ったらパネルを出す。主の窓が焦点を失い、少し待ってもパネルにも焦点がなければ(ほかのアプリへ移った)パネルを隠す
 pub fn on_main_focus(app: &AppHandle, focused: bool) {
     let Some(w) = app.get_webview_window(LABEL) else { return };
+    // 隠すのはやめた(is_focused は webview に焦点があると false を返し、出した直後に隠していた)。主の窓に戻ったら前に出すだけ
     if focused {
         let _ = w.show();
-        return;
     }
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(250));
-        let main_focused = app.get_webview_window("main").and_then(|m| m.is_focused().ok()).unwrap_or(false);
-        let panel_focused = app.get_webview_window(LABEL).and_then(|p| p.is_focused().ok()).unwrap_or(false);
-        if !main_focused && !panel_focused {
-            if let Some(p) = app.get_webview_window(LABEL) {
-                let _ = p.hide();
-            }
-        }
-    });
 }
 
 /// 主の窓が動いた・大きさが変わったとき(lib.rs の on_window_event から)、パネルを追いかけさせる
@@ -85,8 +77,14 @@ pub fn follow(app: &AppHandle) {
 
 /// パネルを開く(開いていれば同じ窓でそのページへ)
 #[tauri::command]
-pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect) -> Result<(), String> {
+pub async fn open_link_panel(app: AppHandle, url: String, rect: Rect, id: u64) -> Result<(), String> {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if let Ok(mut c) = CURRENT.lock() {
+        if id < *c {
+            return Ok(());
+        }
+        *c = id;
+    }
     let page = parse(&url)?;
     let main = app.get_webview_window("main").ok_or("主の窓がありません")?;
     if let Some(w) = app.get_webview_window(LABEL) {
@@ -140,8 +138,12 @@ pub async fn move_link_panel(app: AppHandle, rect: Rect) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn close_link_panel(app: AppHandle) -> Result<(), String> {
+pub async fn close_link_panel(app: AppHandle, id: u64) -> Result<(), String> {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // そのあとに新しく開かれていたら、この閉じるは古い(無視)
+    if CURRENT.lock().map(|c| id < *c).unwrap_or(false) {
+        return Ok(());
+    }
     for (label, w) in app.webview_windows() {
         if label == LABEL {
             let _ = w.destroy();

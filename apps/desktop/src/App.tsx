@@ -3044,6 +3044,11 @@ export default function App() {
   const [skinsOpen, setSkinsOpen] = useState(false)
   /** リンクのパネル(設定「リンクをアプリの中で開く」)で開いている URL */
   const [linkPanel, setLinkPanel] = useState<string>()
+  // 開発のとき、VITE_DEBUG_LINK があれば起動してすぐそのページをパネルで開く(見た目の確かめ用。本番には入らない)
+  useEffect(() => {
+    const u = import.meta.env.DEV ? (import.meta.env.VITE_DEBUG_LINK as string | undefined) : undefined
+    if (u) setLinkPanel(u)
+  }, [])
   // 一覧から入れたスキンが新しくなっていたら、起動時に入れ替える
   useSkinAutoUpdate(settings, updateSetting)
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'

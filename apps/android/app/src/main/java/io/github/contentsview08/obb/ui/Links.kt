@@ -21,7 +21,13 @@ fun openExternal(context: Context, url: String, inApp: Boolean) {
     runCatching {
         if (inApp) {
             val colors = CustomTabColorSchemeParams.Builder().setToolbarColor(Palette.bar.toArgb()).build()
-            CustomTabsIntent.Builder().setDefaultColorSchemeParams(colors).setShowTitle(true).build().launchUrl(context, uri)
+            val intent = CustomTabsIntent.Builder().setDefaultColorSchemeParams(colors).setShowTitle(true).build()
+            // カスタムタブに対応したブラウザを明示する。指定しないと、既定のブラウザ(Xiaomi の Mi ブラウザなど)が対応していないときに
+            // ふつうの ACTION_VIEW として渡り、別のアプリとしてブラウザが開いていた。対応したものがなければブラウザで開く
+            val pkg = androidx.browser.customtabs.CustomTabsClient.getPackageName(context, null)
+            if (pkg == null) { context.startActivity(Intent(Intent.ACTION_VIEW, uri)); return }
+            intent.intent.setPackage(pkg)
+            intent.launchUrl(context, uri)
         } else {
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
         }

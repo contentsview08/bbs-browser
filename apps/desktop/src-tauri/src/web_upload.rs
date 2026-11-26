@@ -130,29 +130,6 @@ pub struct PasteFile {
 }
 
 /// アップロードの画面を閉じる(上げ終わったとき)
-/// 設定「埋め込みのブラウザで開く」: リンクをアプリのブラウザのウィンドウ(label "link")で開く。開いていれば同じ窓で開き直して前に出す。
-/// 外のページなので、この窓にはアプリの命令(IPC)の権限を与えない(capabilities に入れない)
-#[tauri::command]
-pub async fn open_link_window(app: AppHandle, url: String) -> Result<(), String> {
-    let page = Url::parse(&url).map_err(|e| e.to_string())?;
-    if !matches!(page.scheme(), "http" | "https") {
-        return Err("http か https のリンクだけ開けます".into());
-    }
-    if let Some(w) = app.get_webview_window("link") {
-        w.navigate(page).map_err(|e| e.to_string())?;
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-        return Ok(());
-    }
-    WebviewWindowBuilder::new(&app, "link", WebviewUrl::External(page))
-        .title("OBB のブラウザ")
-        .inner_size(1000.0, 760.0)
-        .min_inner_size(400.0, 300.0)
-        .build()
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn close_web_upload(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window(LABEL) {

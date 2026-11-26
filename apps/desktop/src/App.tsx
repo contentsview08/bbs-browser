@@ -114,7 +114,7 @@ import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox, type UploadedFile } from './host/uploader'
 import { clearCookies } from './host/postCookies'
-import { openLinkWindow } from './host/linkWindow'
+import LinkPanelFrame from './components/LinkPanelFrame'
 import { setSavePlaceLookup } from './host/saveImage'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
@@ -2023,8 +2023,8 @@ export default function App() {
    */
   const openLink = async (url: string) => {
     // 画像の URL はブラウザで開く(画像そのものはサムネイルからビューアーで見る)
-    // アプリの中で開く = アプリのブラウザのウィンドウ(画像ビューアーのように前に出る)。画像の URL と、オフのときは OS のブラウザ
-    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? void openLinkWindow(url).catch(backgroundError('ブラウザのウィンドウ')) : openUrl(url))
+    // アプリの中で開く = 画像ビューアーのように上に重ねたパネル(子の webview)。画像の URL と、オフのときは OS のブラウザ
+    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? setLinkPanel(url) : openUrl(url))
     const thread = isAppThreadUrl(url)
     if (!thread && !isAppBoardUrl(url)) return outside()
     try {
@@ -3042,6 +3042,8 @@ export default function App() {
   }, [])
   /** スキンを選ぶ窓(表示スタイルの窓の「ほかのスキンも見る…」) */
   const [skinsOpen, setSkinsOpen] = useState(false)
+  /** リンクのパネル(設定「リンクをアプリの中で開く」)で開いている URL */
+  const [linkPanel, setLinkPanel] = useState<string>()
   // 一覧から入れたスキンが新しくなっていたら、起動時に入れ替える
   useSkinAutoUpdate(settings, updateSetting)
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
@@ -3470,6 +3472,7 @@ export default function App() {
         />
       )}
 
+      {linkPanel && <LinkPanelFrame url={linkPanel} onClose={() => setLinkPanel(undefined)} onOpenExternal={(u) => void openUrl(u)} />}
       {urlPrompt !== undefined && (
         <UrlPrompt
           onClose={() => setUrlPrompt(undefined)}

@@ -92,7 +92,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
       </Section>
       <Section title="リンクと本文">
         <Toggle checked={s.showLinkPreview} onChange={(v) => update('showLinkPreview', v)} label="リンクのカード" note="画像でも動画でもないリンクに、ページの題・説明・画像を本文の下に(見えたときに取りに行きます)" />
-        <Toggle checked={s.openLinksInApp} onChange={(v) => update('openLinksInApp', v)} label="リンクをアプリの中で開く" note="アプリのブラウザのウィンドウでページを開きます(画像ビューアーのように前に出ます)。オフ: OS のブラウザで開く" />
+        <Toggle checked={s.openLinksInApp} onChange={(v) => update('openLinksInApp', v)} label="リンクをアプリの中で開く" note="画像ビューアーのように、今の画面の上に重ねたパネルでページを開きます。オフ: OS のブラウザで開く" />
         <Toggle checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} label="URL を短く" note="https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札に(押すと元の URL)" />
         <Toggle checked={s.tidyBlankLines} onChange={(v) => update('tidyBlankLines', v)} label="空行を整える" note="3 行以上続いた空行を 1 行に。本文の最後の空行は消します" />
       </Section>

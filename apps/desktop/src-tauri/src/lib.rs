@@ -24,6 +24,7 @@ mod sync_start;
 mod web_upload;
 #[cfg(desktop)]
 mod window_state;
+mod link_panel;
 
 use chosen_paths::ChosenPaths;
 use media_cache::MediaCache;
@@ -785,6 +786,7 @@ pub fn run() {
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
+            app.manage(link_panel::LinkPanel::default());
             app.manage(fonts::FontJobs::default());
             // フォルダは最初に保存するときに作る(起動時に読み書きしない)
             let media_cache = MediaCache::new(data_dir(app.handle())?.join("media-cache"), media_cache::is_auto_loadable)?;
@@ -858,7 +860,10 @@ pub fn run() {
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,
             web_upload::close_web_upload,
-            web_upload::open_link_window
+            link_panel::open_link_panel,
+            link_panel::move_link_panel,
+            link_panel::close_link_panel,
+            link_panel::link_panel_url
         ])
         .run(context)
         .expect("error while running tauri application");

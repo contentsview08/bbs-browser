@@ -33,8 +33,10 @@ serde_json = "1"
 # 書き込みの Cookie を自分で持つ(post_http.rs)。plugin-http が使っているものと同じ版。
 # どの OS でも使うので、Windows だけの依存(下)には入れない(入れると Android・Linux でビルドできない)
 cookie_store = "0.22"
-# 同期の通信(sync_http.rs)。plugin-http が使っているものと同じ
-reqwest = "0.12"
+# 同期の通信(sync_http.rs)。plugin-http が使っているものと同じ。
+# gzip: 読む通信(plugin-http も同じ reqwest を使う)で Accept-Encoding: gzip を送り、圧縮された応答を解く。
+# スレ一覧(subject.txt)は毎回 100KB 前後なので、圧縮で転送量が 1/3 ほどになる。dat の差分(Range)は identity を明示して圧縮を頼まない
+reqwest = { version = "0.12", features = ["gzip"] }
 # 同期の鍵を OS の鍵保管に置く(sync_key.rs)。使う OS の分だけ、下の target に足す
 keyring-core = "1"
 # 画像のキャッシュのファイル名(URL のハッシュ)と同期の鍵の名前(置き場のハッシュ)。tauri が使っているものと同じ版

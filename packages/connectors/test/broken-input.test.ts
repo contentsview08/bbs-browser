@@ -205,9 +205,9 @@ describe('dat の差分取得の分かれ道', () => {
   it('1 バイト手前から取り、更新日時があれば If-Modified-Since を付ける', async () => {
     const { ctx, sent } = fake({ status: 304 }, { status: 304 })
     await twoChConnector.fetchPosts(thread, cursorOf(two, LM), ctx)
-    expect(sent[0]).toEqual({ Range: `bytes=${enc(two).length - 1}-`, 'If-Modified-Since': LM })
+    expect(sent[0]).toEqual({ Range: `bytes=${enc(two).length - 1}-`, 'If-Modified-Since': LM, 'Accept-Encoding': 'identity' })
     await twoChConnector.fetchPosts(thread, cursorOf(two), ctx)
-    expect(sent[1]).toEqual({ Range: `bytes=${enc(two).length - 1}-` })
+    expect(sent[1]).toEqual({ Range: `bytes=${enc(two).length - 1}-`, 'Accept-Encoding': 'identity' })
   })
 
   it.each([

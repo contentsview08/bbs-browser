@@ -24,6 +24,14 @@ describe('https を先に試す', () => {
     expect(toHttps('http://d.test/')).toBe('https://d.test/')
   })
 
+  it('https も http も失敗の返事なら、次からは https の返事をそのまま使う(http で取り直さない)', async () => {
+    const sent: string[] = []
+    const send = async (u: string) => (sent.push(u), 404)
+    expect(await fetchHttpsFirst('http://g.test/1.dat', send, (s) => s < 400)).toBe(404)
+    expect(await fetchHttpsFirst('http://g.test/2.dat', send, (s) => s < 400)).toBe(404)
+    expect(sent).toEqual(['https://g.test/1.dat', 'http://g.test/1.dat', 'https://g.test/2.dat'])
+  })
+
   it('https でつながらなければ http に戻し、次から直接 http へ行く', async () => {
     const sent: string[] = []
     const send = async (u: string) => {

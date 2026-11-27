@@ -17,6 +17,7 @@ import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, p
 import { createdAtOfKey, parseKeyValue } from '../common'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { declaredCharset, detectEncoding, encodeUtf8Form } from '../encoding'
+import { getConditional } from '../conditional'
 import { gunzip, isGzip } from '../gzip'
 
 /** dat 差分取得の続き */
@@ -226,9 +227,16 @@ export function createdAtOf(key: string, now = Date.now()): Date | undefined {
 /** 立てた人の ID が付いたスレ一覧(subject-metadent.txt)がある掲示板(エッヂ) */
 const hasAuthorSubject = (boardUrl: string) => /^https?:\/\/[^/]*eddibb\.cc\//.test(boardUrl)
 
-/** スレ一覧のファイルを読む。boardUrl を渡すと、ないときに「板が見つかりません」と分かる言葉で断る */
+/**
+ * subject-metadent.txt が読めなかった板と、その時刻。しばらくは subject.txt だけを読む
+ * (前は毎回 metadent を試してから subject.txt を読み、一覧 1 回が 2 リクエストになっていた)
+ */
+const metaFailedAt = new Map<string, number>()
+const META_RETRY_MS = 60 * 60 * 1000
+
+/** スレ一覧のファイルを読む。条件付きで取り、変わっていなければ前の本文。boardUrl を渡すと、ないときに「板が見つかりません」と分かる言葉で断る */
 async function readSubject(url: string, ctx: ConnectorContext, boardUrl?: string): Promise<string> {
-  const res = await ctx.http.get(url)
+  const res = await getConditional(url, ctx)
   if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${boardUrl ?? url}`)
   ensureOk(res, url)
   const text = ctx.decode(res.body, encodingOf(res))
@@ -398,7 +406,13 @@ export const twoChConnector: Connector = {
   async listThreads(board, ctx) {
     // エッヂは、スレタイの後ろに立てた人の ID が付いたスレ一覧(subject-metadent.txt)も出している。読めればそちらを使う
     const base = to5chIo(board.url)
-    const meta = hasAuthorSubject(board.url) ? await readSubject(`${base}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
+    const tryMeta = hasAuthorSubject(board.url) && Date.now() - (metaFailedAt.get(base) ?? 0) >= META_RETRY_MS
+    const meta = tryMeta
+      ? await readSubject(`${base}subject-metadent.txt`, ctx).catch(() => {
+          metaFailedAt.set(base, Date.now())
+          return undefined
+        })
+      : undefined
     const text = meta ?? (await readSubject(`${base}subject.txt`, ctx, board.url))
     return parseSubjectTxt(text).map((e, order): ThreadSummary => {
       // スレタイの後ろの角かっこは、立てた人(エッヂの ID・BE 番号・ほかの板の名前や ID)
@@ -474,7 +488,8 @@ export const twoChConnector: Connector = {
     if (!cursor || cursor.bytes === 0) return fetchAll()
 
     // 1 バイト手前から取り、その 1 バイトが改行であることで「前回までの内容が変わっていない」と確かめる
-    const headers: Record<string, string> = { Range: `bytes=${cursor.bytes - 1}-` }
+    // 差分は圧縮しないで(gzip だとバイトの位置がずれる。OkHttp も Range のときは頼まない)
+    const headers: Record<string, string> = { Range: `bytes=${cursor.bytes - 1}-`, 'Accept-Encoding': 'identity' }
     if (cursor.lastModified) headers['If-Modified-Since'] = cursor.lastModified
     const res = await ctx.http.get(url, { headers, noRedirect: true })
 

@@ -7,6 +7,11 @@ import { isAutoLoadable } from './safeUrl'
 
 /** https で届かなかったホスト(毎回つながるのを待たない) */
 const httpOnlyHosts = new Set<string>()
+/**
+ * https が失敗の返事(4xx など)で、http でも失敗の返事だったホスト。https の返事をそのまま使い、http で取り直さない
+ * (前は dat 落ちの 404 などが毎回 2 リクエストになっていた。http だけ取れるホストなら、1 度目に取れた時点でここには入らない)
+ */
+const httpsAgreedHosts = new Set<string>()
 const fallbacks = new Map<string, string>()
 const MAX_FALLBACKS = 5000
 
@@ -33,14 +38,19 @@ export function toHttps(url: string): string | undefined {
 export async function fetchHttpsFirst<T>(url: string, send: (url: string) => Promise<T>, ok: (res: T) => boolean): Promise<T> {
   const https = toHttps(url)
   if (!https) return send(url)
+  const host = hostOf(url)
+  let answered = false
   try {
     const res = await send(https)
-    if (ok(res)) return res
+    answered = true
+    if (ok(res) || (host && httpsAgreedHosts.has(host))) return res
   } catch {
-    const host = hostOf(url)
     if (host) httpOnlyHosts.add(host)
   }
-  return send(url)
+  const res = await send(url)
+  // https も http も失敗の返事なら、このホストは https の返事を信じてよい
+  if (answered && !ok(res) && host) httpsAgreedHosts.add(host)
+  return res
 }
 
 /** キャッシュが扱う形式に入らないもの(中身で見分けて保存するので、形式の分からないものは WebView に任せる) */

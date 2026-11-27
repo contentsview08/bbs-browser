@@ -150,6 +150,8 @@ sealed interface Page {
     class Threads(val board: Board) : Page {
         // 画面の状態(タブ・検索・スクロールの位置)は画面ではなくここに持つ。スレを開いて戻っても、そのまま残るように
         val listState = androidx.compose.foundation.lazy.LazyListState()
+        /** 最後に一覧を取りに行った時刻(手での更新のクールダウン) */
+        var fetchedAt = 0L
         var tab by mutableStateOf<String?>(null)
         var searching by mutableStateOf(false)
         var query by mutableStateOf("")
@@ -183,6 +185,8 @@ sealed interface Page {
     class Thread(val summary: ThreadSummary) : Page {
         /** 未読(履歴)のパネルから開いた。戻るとパネルを開き直す(未読を続けて消化できるように。板の一覧へは戻さない) */
         var fromPanel = false
+        /** 最後に取りに行った時刻(手での更新のクールダウン) */
+        var fetchedAt = 0L
         // 画面の状態(スクロールの位置・絞り込み・検索・読んだところの覚え)はここに持つ。一覧へ戻って「進む」で開き直しても、そのまま残るように
         val listState = androidx.compose.foundation.lazy.LazyListState()
         val scroll = io.github.contentsview08.obb.ui.ThreadScrollCtl(this)
@@ -536,8 +540,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味)。
      * 板ごとにスレ一覧を 1 回だけ取り、載っていればそのレス数を新しい数にする(dat を 1 つずつ取りに行かない)
      */
-    fun loadAllUnread() {
+    /** 開くたびの確認の最短の間隔。引っぱって更新(force)はいつでも */
+    private val CHECK_COOLDOWN_MS = 60_000L
+    private var lastCheckAt = 0L
+
+    fun loadAllUnread(force: Boolean = false) {
         if (checking) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastCheckAt < CHECK_COOLDOWN_MS) return
+        lastCheckAt = now
         viewModelScope.launch {
             checking = true
             try {
@@ -607,10 +618,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 閲覧履歴・お気に入りのスレの新着を確かめる(板ごとにスレ一覧を 1 回だけ読む) */
-    fun checkNew(entries: List<HistoryEntry>) {
+    fun checkNew(entries: List<HistoryEntry>, force: Boolean = false) {
         // 通信の成否によらず、同期が書いた最新を出す
         viewModelScope.launch { reflectSyncedReads() }
         if (checking || entries.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastCheckAt < CHECK_COOLDOWN_MS) return
+        lastCheckAt = now
         viewModelScope.launch {
             checking = true
             val next = remoteCounts.toMutableMap()
@@ -1500,12 +1514,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** スレ一覧を取り直す。取り直しの印が一瞬で消えて、取れたか分からなくならないよう、印は 0.8 秒は出しておく */
-    fun refreshBoard(page: Page.Threads): Job? {
+    /** 手での更新(更新ボタン・引っぱって更新)の最短の間隔(PC 版の manualListRefresh・refreshThread と同じ) */
+    private val LIST_REFRESH_COOLDOWN_MS = 5_000L
+    private val THREAD_REFRESH_COOLDOWN_MS = 3_000L
+
+    /** manual: 更新ボタン・引っぱって更新。前の取得から 5 秒は取り直さない(取ったばかりの一覧をもう一度頼まない) */
+    fun refreshBoard(page: Page.Threads, manual: Boolean = false): Job? {
         if (page.loading) return null
+        val start = System.currentTimeMillis()
+        if (manual && start - page.fetchedAt < LIST_REFRESH_COOLDOWN_MS) return null
         return viewModelScope.launch {
             page.loading = true
             page.error = null
-            val start = System.currentTimeMillis()
+            page.fetchedAt = start
             // 取得に失敗しても未読の数は DB の最新にする
             page.states = db.threadStates(page.board.url)
             try {
@@ -1595,11 +1616,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する。quiet: 自動更新から呼ぶとき(今は動きを変えない) */
-    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false, quiet: Boolean = false): Job? {
+    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false, quiet: Boolean = false, manual: Boolean = false): Job? {
         if (page.loading) return null
+        val now = System.currentTimeMillis()
+        if (manual && now - page.fetchedAt < THREAD_REFRESH_COOLDOWN_MS) return null
         return viewModelScope.launch {
             page.loading = true
             page.error = null
+            page.fetchedAt = now
             try {
                 val t = page.summary
                 val log = db.loadThread(t)

@@ -17,6 +17,11 @@ import javax.net.ssl.SSLException
 object HttpsFirst : Interceptor {
     /** https で届かなかったホスト(毎回つながるのを待たない) */
     private val httpOnlyHosts = ConcurrentHashMap.newKeySet<String>()
+    /**
+     * https が失敗の返事(4xx など)で、http でも失敗の返事だったホスト。https の返事をそのまま使い、http で取り直さない
+     * (前は dat 落ちの 404 などが毎回 2 リクエストになっていた。http だけ取れるホストなら、1 度目に取れた時点でここには入らない)
+     */
+    private val httpsAgreedHosts = ConcurrentHashMap.newKeySet<String>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val req = chain.request()
@@ -24,20 +29,25 @@ object HttpsFirst : Interceptor {
         if (url.scheme != "http" || url.host in httpOnlyHosts) return chain.proceed(req)
         val reading = req.method == "GET" || req.method == "HEAD"
         val https = req.newBuilder().url(url.newBuilder().scheme("https").build()).build()
+        var answered = false
         try {
             val res = chain.proceed(https)
-            if (!reading || res.code < 400) return res
+            if (!reading || res.code < 400 || url.host in httpsAgreedHosts) return res
+            answered = true
             res.close()
         } catch (e: IOException) {
             if (chain.call().isCanceled()) throw e
             if (!reading && !notConnected(e)) throw e
             httpOnlyHosts += url.host
         }
-        return chain.proceed(req)
+        val res = chain.proceed(req)
+        // https も http も失敗の返事なら、このホストは https の返事を信じてよい
+        if (answered && res.code >= 400) httpsAgreedHosts += url.host
+        return res
     }
 
     private fun notConnected(e: IOException) = e is ConnectException || e is UnknownHostException || e is SSLException
 
     /** 試験用: 覚えたホストを忘れる */
-    internal fun reset() = httpOnlyHosts.clear()
+    internal fun reset() { httpOnlyHosts.clear(); httpsAgreedHosts.clear() }
 }

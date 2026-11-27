@@ -276,7 +276,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             "forward" to { vm.forward() },
             "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, rows.size - 1)) }; Unit },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
-            "refresh" to { vm.refreshBoard(page) },
+            "refresh" to { vm.refreshBoard(page, manual = true) },
             "newThread" to { vm.openNewThread(page) },
             "search" to { searching = true; bars.show() },
             "quick" to { vm.openQuick() },
@@ -324,7 +324,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         pullRefreshing = true
                         Haptics.confirm(hapticView)
                         pullPx.animateTo(holdPull, tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
-                        vm.refreshBoard(page)?.join()
+                        vm.refreshBoard(page, manual = true)?.join()
                         pullPx.animateTo(0f, tween(250, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
                         pullRefreshing = false
                     } else pullPx.animateTo(0f, tween(250))
@@ -505,7 +505,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 }
                 val footerH = vm.prefs.footerHeight
                 Box(
-                    Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page) },
+                    Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page, manual = true) },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
             }
@@ -542,7 +542,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 listOf(
                     MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
                     MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Filled.StarBorder) { vm.toggleFavorite(page.board) },
-                    MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
+                    MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page, manual = true) },
                     MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
                     styleMenuItem { styleSheet = true },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },

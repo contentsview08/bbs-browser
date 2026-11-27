@@ -15,10 +15,13 @@ internal class FakeServer(private val answer: (Sent) -> HttpResponse) {
 
     fun <T> run(block: suspend () -> T): T {
         Http.fake = { method, url, headers, body -> Sent(method, url, headers, body).let { sent += it; answer(it) } }
+        // 条件付き取得が覚えた前の応答を、試験どうしで持ち越さない
+        io.github.contentsview08.obb.data.ConditionalGet.reset()
         try {
             return runBlocking { block() }
         } finally {
             Http.fake = null
+            io.github.contentsview08.obb.data.ConditionalGet.reset()
         }
     }
 }

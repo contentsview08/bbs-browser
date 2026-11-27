@@ -1,5 +1,6 @@
 package io.github.contentsview08.obb.bbs
 
+import io.github.contentsview08.obb.data.ConditionalGet
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
 import kotlinx.coroutines.Dispatchers
@@ -308,8 +309,9 @@ object TwoCh {
         return synchronized(utf8Boards) { utf8Boards.getOrPut(key) { false } }
     }
 
+    /** スレ一覧のファイルを読む。条件付きで取り、変わっていなければ前の本文 */
     private suspend fun readSubject(url: String): String {
-        val res = Http.get(url)
+        val res = ConditionalGet.get(url)
         if (res.status == 404) throw IllegalStateException("板が見つかりません(HTTP 404)")
         ensureOk(res, url)
         val text = textOf(res)
@@ -373,12 +375,17 @@ object TwoCh {
         if (HonoBbs.isBoardUrl(board.url)) return HonoBbs.listThreads(board)
         if (Shitaraba.isBoardUrl(board.url)) return Shitaraba.listThreads(board)
         if (Machi.isBoardUrl(board.url)) return Machi.listThreads(board)
-        if (board.url.contains("eddibb.cc/")) {
+        // metadent が読めなかった板は 1 時間は subject.txt だけを読む(前は毎回 metadent を試してから subject.txt を読み、一覧 1 回が 2 リクエストになっていた)
+        if (board.url.contains("eddibb.cc/") && System.currentTimeMillis() - (metaFailedAt[board.url] ?: 0L) >= META_RETRY_MS) {
             val meta = runCatching { readSubject("${board.url}subject-metadent.txt") }.getOrNull()
             if (meta != null) return parseSubjectTxt(meta, board.url)
+            metaFailedAt[board.url] = System.currentTimeMillis()
         }
         return parseSubjectTxt(readSubject("${board.url}subject.txt"), board.url)
     }
+
+    private val metaFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private const val META_RETRY_MS = 60 * 60 * 1000L
 
     /** dat を取る。cursor があれば、その続き(Range)だけ */
     suspend fun fetchPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult = withContext(Dispatchers.Default) { readPosts(thread, cursor) }

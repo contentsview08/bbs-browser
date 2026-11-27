@@ -13,6 +13,14 @@ class ThreadScrollTest {
     private fun reopen(closed: ScrollPos?, readNo: Int, hasUnread: Boolean, position: String) =
         openTarget(null, false, position, readNo, readNo + 1, hasUnread, closed, closed != null)
 
+    @Test fun 失敗が続いたら待ちが倍々に延び_上限は5分() {
+        assertEquals(5000L, backoffMs(5000, 0))
+        assertEquals(10000L, backoffMs(5000, 1))
+        assertEquals(40000L, backoffMs(5000, 3))
+        assertEquals(BACKOFF_MAX_MS, backoffMs(5000, 10))
+        assertEquals(BACKOFF_MAX_MS, backoffMs(60000, 100))
+    }
+
     @Test fun 開き直しは設定が先頭なら前の位置があっても先頭() {
         assertEquals(OpenTarget.Top, reopen(ScrollPos(95, 0, false, readNo = 100), 100, true, "top"))
     }

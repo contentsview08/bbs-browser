@@ -366,7 +366,7 @@ internal fun postedHeadLine(body: String): String? = body.lines().firstOrNull { 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null, panel: Boolean = false) {
-    val refresh = onRefresh ?: { vm.checkNew(entries) }
+    val refresh = onRefresh ?: { vm.checkNew(entries, force = true) }
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { p -> ThreadPeek(vm, p, hasLog = true) { menuFor = null } }
@@ -604,7 +604,7 @@ fun UnreadPanel(vm: AppViewModel) {
                 "fav" -> ThreadEntryList(vm, "fav", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)", panel = true)
                 "posts" -> PostHistoryScreen(vm, panel = true)
                 "uploads" -> UploadsScreen(vm, panel = true)
-                else -> ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() }, panel = true)
+                else -> ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread(force = true) }, panel = true)
             }
         }
     }

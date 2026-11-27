@@ -314,7 +314,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun refresh(): kotlinx.coroutines.Job? {
         // 実況モードの間は、実況モードの間隔で取りに行くので、手では取りに行かない(更新ボタンは残りの時間を出して押せなくしている)
         if (ctl.liveOn) { vm.toast = "実況モードの間は自動で更新します"; return null }
-        reportRead(ctl, scroller, vm, page); return vm.refreshThread(page)
+        reportRead(ctl, scroller, vm, page); return vm.refreshThread(page, manual = true)
     }
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
@@ -638,6 +638,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 入ったらすぐ取りに行き、取り終えてから間隔ごとに。次に取りに行く時刻を更新ボタンに出す
     if (ctl.liveOn) LaunchedEffect(prefs.liveRefreshSec, page) {
         val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
+        var fails = 0
         try {
             while (true) {
                 ctl.liveNextAt = 0L
@@ -646,10 +647,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (vm.appVisible && shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) {
                     reportRead(ctl, scroller, vm, page)
                     vm.refreshThread(page, quiet = true)?.join()
+                    // 失敗が続いたら次までの待ちを倍々に延ばす(掲示板が落ちているときに 3 秒ごとに叩き続けない)
+                    fails = if (page.error != null) fails + 1 else 0
                 }
                 // 届いたレスが並んでから(高さが変わってから)ライブの段に入れるよう、少し描くのを待つ
                 if (!ctl.livePrimed) { repeat(2) { androidx.compose.runtime.withFrameNanos { } }; ctl.livePrimed = true }
-                val ms = prefs.liveRefreshSec * 1000L
+                val ms = backoffMs(prefs.liveRefreshSec * 1000L, fails)
                 ctl.liveNextAt = System.currentTimeMillis() + ms
                 delay(ms)
             }
@@ -658,11 +661,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val refreshSec = if (ctl.liveOn) 0 else prefs.autoRefreshSec
     if (refreshSec > 0) LaunchedEffect(refreshSec, page) {
         val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
+        var fails = 0
         while (true) {
-            delay(refreshSec * 1000L)
+            // 失敗が続いたら次までの待ちを倍々に延ばす(掲示板が落ちているときに同じ間隔で叩き続けない)
+            delay(backoffMs(refreshSec * 1000L, fails))
             // アプリが裏にある間と、もう増えないスレ(dat 落ち・上限到達)では掲示板へ取りに行かない。もう増えないスレは開き直すまで止める
             if (!shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) break
-            if (vm.appVisible && !page.loading) vm.refreshThread(page, quiet = true)
+            if (vm.appVisible && !page.loading) {
+                vm.refreshThread(page, quiet = true)?.join()
+                fails = if (page.error != null) fails + 1 else 0
+            }
         }
     }
     // キーボードが出たら、スレ表示ごと縮め、本文をキーボードの高さだけ送る。下のレスが隠れずに上がるように

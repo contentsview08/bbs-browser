@@ -234,6 +234,18 @@ sealed class OpenTarget {
 const val AUTO_REFRESH_MAX_POSTS = 1000
 
 /** 開いているスレを自動で取りに行くか。PC 版 utils/autoRefresh.ts の shouldAutoRefresh と同じ。見えていないとき・もう増えないスレ(dat 落ち・上限到達)では行かない */
+/** 失敗が続いたときの次までの待ちの上限 */
+const val BACKOFF_MAX_MS = 5 * 60 * 1000L
+
+/**
+ * 自動更新・実況モードの次までの待ち。失敗が続いたら倍々に延ばす(上限 5 分。PC 版の backoffMs と同じ)。
+ * 掲示板が落ちている・つながらないときに、同じ間隔で叩き続けないため。streak は続けて失敗した回数(0 なら元の間隔)
+ */
+fun backoffMs(baseMs: Long, streak: Int): Long {
+    if (streak <= 0) return baseMs
+    return minOf(baseMs shl minOf(streak, 20), BACKOFF_MAX_MS)
+}
+
 fun shouldAutoRefresh(visible: Boolean, archived: Boolean, postCount: Int, maxPosts: Int?): Boolean =
     visible && !archived && (maxPosts == null || postCount < maxPosts)
 

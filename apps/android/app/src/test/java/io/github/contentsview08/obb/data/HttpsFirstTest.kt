@@ -64,6 +64,15 @@ class HttpsFirstTest {
         assertEquals(listOf("https://d.test/"), c.sent)
     }
 
+    @Test fun both_error_statuses_make_https_trusted() {
+        val c = FakeChain(get("http://g.test/1.dat")) { 404 }
+        assertEquals(404, HttpsFirst.intercept(c).code)
+        val c2 = FakeChain(get("http://g.test/2.dat")) { 404 }
+        assertEquals(404, HttpsFirst.intercept(c2).code)
+        assertEquals(listOf("https://g.test/1.dat", "http://g.test/1.dat"), c.sent)
+        assertEquals(listOf("https://g.test/2.dat"), c2.sent)
+    }
+
     @Test fun connect_error_falls_back_and_remembers() {
         val c = FakeChain(get("http://e.test/")) { if (it.isHttps) throw ConnectException("つながらない") else 200 }
         assertEquals(200, HttpsFirst.intercept(c).code)

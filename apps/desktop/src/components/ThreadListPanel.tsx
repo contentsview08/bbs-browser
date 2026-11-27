@@ -423,7 +423,7 @@ export default function ThreadListPanel(props: Props) {
       setCursorHidden(false)
       const last = (pageItems ?? ordered).at(-1)
       setCursorId(last && threadId(last))
-    } else if (action === 'refresh' && props.onRefresh) void props.onRefresh()
+    } else if (action === 'refresh' && props.onRefresh) void refreshList()
     else if (action === 'reply' && props.onNewThread) props.onNewThread() // スレ一覧の「書き込む」はスレ立て
     else if (action === 'search') {
       setSearchActive(true)
@@ -463,7 +463,7 @@ export default function ThreadListPanel(props: Props) {
   const refreshReadyRef = useRef(props.refreshReadyAt)
   refreshReadyRef.current = props.refreshReadyAt
   const pull = useWheelPullRefresh({
-    onRefresh: () => props.onRefresh?.(),
+    onRefresh: () => refreshList(),
     sign: 1,
     // スレ表示(120 / 240)の 1.4 倍
     revealThreshold: 170,
@@ -498,24 +498,30 @@ export default function ThreadListPanel(props: Props) {
     [threads, stateOf, props.isNg],
   )
 
-  // 「未読」を押した時点(と、一覧を取り直した時点)の未読のスレを控える。
-  // 読むたびに絞り込み直すと、読み終えたスレが急に一覧から消えてしまうので
+  // 「未読」を押した時点の未読のスレを控え、裏の確認で新しく未読になったスレは足していく。
+  // 読むたびに絞り込み直すと、読み終えたスレが急に一覧から消えてしまうので、読んだスレは手で更新するまで残す
+  // (札の数は今の未読で数えるので、残っている行は +0 で、札との合計はいつも合う)
   const [unreadSnapshot, setUnreadSnapshot] = useState<Set<string>>()
   const stateOfRef = useRef(stateOf)
   stateOfRef.current = stateOf
+  const threadsRef = useRef(threads)
+  threadsRef.current = threads
+  const unreadIdsNow = () => {
+    const of = stateOfRef.current
+    return threadsRef.current.filter((t) => threadUnread(of(t), t.postCount) > 0).map(threadId)
+  }
   const snapshotKey = props.snapshotKey ?? threads
   useEffect(() => {
     if (!unreadOnly) return setUnreadSnapshot(undefined)
-    const of = stateOfRef.current
-    setUnreadSnapshot(
-      new Set(
-        threads
-          .filter((t) => threadUnread(of(t), t.postCount) > 0)
-          .map(threadId),
-      ),
-    )
+    const now = unreadIdsNow()
+    setUnreadSnapshot((prev) => new Set([...(prev ?? []), ...now]))
     // threads は snapshotKey を渡さないときのきっかけとして入っている
   }, [unreadOnly, snapshotKey])
+  /** 手での更新。読み終えたスレはここで一覧から外す(控えを今の未読で作り直す) */
+  const refreshList = () => {
+    if (unreadOnly) setUnreadSnapshot(new Set(unreadIdsNow()))
+    return props.onRefresh?.()
+  }
   // 読むたびに行が動かないよう、未読の顔ぶれは一覧を取り直す・並びを選び直すまで変えない。
   // 未読の絞り込みの中はすべて未読なので分けない
   const unreadTop = useMemo(() => {
@@ -823,10 +829,10 @@ export default function ThreadListPanel(props: Props) {
             icon: 'refresh',
             // 押せるかは押した時点で決める(クールダウン中なら App が取りに行かない。残りは帯の更新ボタンに出る)
             disabled: props.loading,
-            onClick: () => void props.onRefresh?.(),
+            onClick: () => void refreshList(),
             render: () => (
               <RefreshButton
-                onClick={() => void props.onRefresh?.()}
+                onClick={() => void refreshList()}
                 loading={props.loading}
                 readyAt={props.refreshReadyAt}
                 cooldownMs={LIST_REFRESH_COOLDOWN_MS}
@@ -1221,7 +1227,7 @@ export default function ThreadListPanel(props: Props) {
               <LoadingCenter />
             ) : (
               props.errorText ? (
-                <LoadFailed message={props.errorText} onRetry={props.onRefresh && (() => void props.onRefresh?.())} />
+                <LoadFailed message={props.errorText} onRetry={props.onRefresh && (() => void refreshList())} />
               ) : (
                 <div className="p-8 text-center text-c-text-muted text-sm">{props.emptyText}</div>
               )
@@ -1358,7 +1364,7 @@ export default function ThreadListPanel(props: Props) {
                 ]
               : []),
             { label: '先頭へ', icon: 'vertical_align_top', onClick: () => scrollRef.current?.scrollTo({ top: 0 }) },
-            ...(props.onRefresh ? [{ label: '更新', icon: 'refresh', onClick: () => void props.onRefresh?.() }] : []),
+            ...(props.onRefresh ? [{ label: '更新', icon: 'refresh', onClick: () => void refreshList() }] : []),
             ...(props.boardUrl && props.onOpenExternal ? [{ label: 'ブラウザで開く', icon: 'open_in_new', onClick: () => props.onOpenExternal!(props.boardUrl!) }] : []),
             ...(props.boardUrl && props.onClearCookies ? [{ label: 'この掲示板の Cookie を消す', icon: 'cookie_off', onClick: () => props.onClearCookies!(props.boardUrl!) }] : []),
           ] satisfies SheetItem[]}

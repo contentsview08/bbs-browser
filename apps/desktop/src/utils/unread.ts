@@ -10,9 +10,12 @@ export function threadUnread(state: { readNo: number } | undefined, ...counts: n
   return state ? unreadCount(state.readNo, ...counts) : 0
 }
 
-/** お気に入りのスレの未読。まだ一度も取っていないスレ(手元のレス数が 0)は数えない */
+/**
+ * お気に入りのスレの未読。まだ一度も取っていないスレ(手元のレス数が 0)は数えない。
+ * 掲示板で分かった数(known)と手元の数の多い方で数える(手元が先に進んでいることもある。一覧の行と同じ見方)
+ */
 export function favUnread(fav: { postCount: number; readNo: number }, known: number | undefined): number {
-  return fav.postCount === 0 ? 0 : unreadCount(fav.readNo, known ?? fav.postCount)
+  return fav.postCount === 0 ? 0 : unreadCount(fav.readNo, fav.postCount, known ?? 0)
 }
 
 /**

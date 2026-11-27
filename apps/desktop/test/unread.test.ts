@@ -40,6 +40,8 @@ describe('favUnread: お気に入りのスレの未読', () => {
   it('見張りで分かったレス数を使い、なければ手元のレス数', () => {
     expect(favUnread({ postCount: 20, readNo: 20 }, 25)).toBe(5)
     expect(favUnread({ postCount: 20, readNo: 15 }, undefined)).toBe(5)
+    // 掲示板で分かった数が手元より少ない(古い)ときは手元の数で
+    expect(favUnread({ postCount: 30, readNo: 20 }, 25)).toBe(10)
   })
 
   it('読み終えていれば 0', () => {

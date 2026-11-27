@@ -821,6 +821,8 @@ export default function App() {
         }
         publishCounts()
         await reloadShownHistory()
+        // 札の数はここで増えるので、一覧の未読の顔ぶれもここで更新する(前は巡回の最後だけで、札にあるスレが一覧に出なかった)
+        setHistoryVersion((v) => v + 1)
       }
       const fresh = await loadHistory(store)
       setHistory((prev) => mergeHistory(prev, fresh))
@@ -1022,6 +1024,7 @@ export default function App() {
     const id = threadId(t)
     setRecentHistory((list) => list.filter((x) => threadId(x) !== id))
     setHistory((list) => list?.filter((h) => threadId(h.thread) !== id))
+    historyCache.current = historyCache.current?.filter((h) => threadId(h.thread) !== id)
     void run(null, () => new UserOps(store).historyRemove(t))
   }
 
@@ -1067,6 +1070,8 @@ export default function App() {
       setFavCounts(new Map(counts))
     }
     await reloadFavThreads(s)
+    // 札の数が変わったので、一覧の未読の顔ぶれも更新する
+    setFavVersion((v) => v + 1)
     // 裏で確かめたときだけ、新着を知らせる(まとめて更新は、利用者が一覧を見ているので知らせない)
     if (!fetchDats) {
       const byId = new Map(list.map((f) => [threadId(f.thread), f]))
@@ -1407,6 +1412,18 @@ export default function App() {
     const gone = (t: ThreadSummary) => targets.has(threadId(t))
     setRecentHistory((list) => list.filter((t) => !gone(t)))
     setHistory((list) => list?.filter((h) => !gone(h.thread)))
+    historyCache.current = historyCache.current?.filter((h) => !gone(h.thread))
+    // お気に入りのスレは、ログが消えると手元のレス数が 0(まだ取っていない扱い)。DB を読み直す前にサイドバーの札から外す
+    setFavThreads((list) => list.map((f) => (gone(f.thread) ? { ...f, postCount: 0, readNo: 0 } : f)))
+    // 掲示板で分かった数も捨てる(残すと、開き直したときに古い数で未読が出る)
+    const without = (m: Map<string, number>) => {
+      if (![...targets.keys()].some((id) => m.has(id))) return m
+      const next = new Map(m)
+      for (const id of targets.keys()) next.delete(id)
+      return next
+    }
+    setHistoryCounts(without)
+    setFavCounts(without)
     setStates((m) => {
       const boardUrl = boardRef.current?.url
       const keys = [...targets.values()].filter((t) => t.boardUrl === boardUrl).map((t) => t.key)
@@ -2971,27 +2988,28 @@ export default function App() {
   }
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
   // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
+  // 数の元は knownCount(お気に入りの確認・履歴の巡回で分かった数の大きい方)に 1 つにそろえる。札も行もこれで数える
   const historyThreads = useMemo(
     () =>
       history?.map((h) => {
-        const n = historyCounts.get(threadId(h.thread))
-        return n !== undefined && n > h.thread.postCount ? { ...h.thread, postCount: n } : h.thread
+        const n = knownCount(threadId(h.thread))
+        return n > h.thread.postCount ? { ...h.thread, postCount: n } : h.thread
       }),
-    [history, historyCounts],
+    [history, historyCounts, favCounts],
   )
   // お気に入りのスレ。ログのないスレ(足しただけでまだ開いていない)には状態を付けない(既読の線を出さない)
   const favStates = useMemo(() => new Map(favThreads.filter((f) => f.postCount > 0).map((f) => [threadId(f.thread), f as ThreadState])), [favThreads])
   const favListThreads = useMemo(
     () =>
       favThreads.map((f) => {
-        const n = favCounts.get(threadId(f.thread))
-        return n !== undefined && n > f.thread.postCount ? { ...f.thread, postCount: n } : f.thread
+        const n = knownCount(threadId(f.thread))
+        return n > f.thread.postCount ? { ...f.thread, postCount: n } : f.thread
       }),
-    [favThreads, favCounts],
+    [favThreads, favCounts, historyCounts],
   )
-  /** サイドバーに出す、お気に入りのスレの新着の合計 */
+  /** サイドバーに出す、お気に入りのスレの新着の合計。一覧の行と同じ数の元(knownCount)で数え、NG のスレは一覧に出ないので数えない */
   const favNewTotal = favThreads.reduce((sum, f) => {
-    return sum + favUnread(f, favCounts.get(threadId(f.thread)))
+    return isNgThread(f.thread) ? sum : sum + favUnread(f, knownCount(threadId(f.thread)))
   }, 0)
   // 毎回新しい関数にすると、スレ一覧が App の描き直しのたびに全部を並べ直す。使う Map が変わったときだけ作り直す
   const stateOf = useMemo(
@@ -3091,8 +3109,8 @@ export default function App() {
   const pastHeader = pastView && isMobile && (
     <PastTabs
       current={pastTab}
-      // 未読の札はレスの数の合計(スレの数ではない。スマホのアプリと同じ)
-      unreadCount={historyThreads?.reduce((n, t) => n + threadUnread(historyStates.get(threadId(t)), t.postCount), 0) ?? 0}
+      // 未読の札はレスの数の合計(スレの数ではない。スマホのアプリと同じ)。一覧と同じ顔ぶれ・同じ状態で数え、NG のスレは除く(一覧に出ないため)
+      unreadCount={pastThreads?.reduce((n, t) => (isNgThread(t) ? n : n + threadUnread(stateOf(t), t.postCount)), 0) ?? 0}
       favCount={favNewTotal}
       onPick={pickPastTab}
     />

@@ -186,6 +186,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var viewerPost by remember { mutableStateOf<Post?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
+    /** 設定「ボタンの配置」で帯に置いた操作の実行(︙ の同じ項目と同じ動き)。定義は BarActions.kt */
+    val barPlaces = barPlacements(vm.prefs, "thread")
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
     var styleSheet by remember { mutableStateOf(false) }
     val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
@@ -439,6 +441,24 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }
+        }
+    }
+
+    fun runBarAction(id: String) {
+        when (id) {
+            "search" -> { searching = true; bars.show() }
+            "refresh" -> refresh()
+            "favorite" -> vm.toggleFavoriteThread(page)
+            "gallery" -> gallery = true
+            "findNext" -> { vm.findNext(page); nextSheet = true }
+            "autoScroll" -> if (ctl.liveOn) ctl.stopLive() else ctl.startLive()
+            "top" -> scope.launch { listState.scrollToItem(0); bars.show() }
+            "bottom" -> { scroller.toBottom(); bars.show() }
+            "openBoard" -> vm.openBoardOf(page)
+            "share" -> shareText(context, page.title, "${page.title}\n${TwoCh.webUrl(page.summary)}")
+            "openBrowser" -> openExternal(context, TwoCh.webUrl(page.summary), false)
+            "style" -> styleSheet = true
+            "delete" -> askDeleteLog()
         }
     }
 
@@ -839,7 +859,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     SearchBar(query, { query = it }, "レスを探す(本文・名前・ID)") { searching = false; query = "" }
                 } else {
                     HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { menu = true }) {
-                        BarIcon(Icons.Filled.Search, "探す") { searching = true }
+                        // 設定「ボタンの配置」でヘッダーに置いた操作(既定はレス検索だけ)
+                        for (d in THREAD_BAR_ACTIONS) if (barPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runBarAction(d.id) }
                         MoreButton { menu = true }
                     }
                 }
@@ -886,7 +907,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerH = it.height.toFloat() }
                     .graphicsLayer { translationY = (1f - footerShown()) * footerH },
-            ) { ThreadFooter(vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null) { refresh() } }
+            ) {
+                ThreadFooter(
+                    vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null,
+                    showRefresh = barPlaces["refresh"] == BarPlace.FOOTER,
+                    // 設定「ボタンの配置」でフッターに置いた操作(更新は別に描く)
+                    extra = THREAD_BAR_ACTIONS.filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" }.map { d -> d to { runBarAction(d.id) } },
+                ) { refresh() }
+            }
 
         }
         pinchLabel?.let {

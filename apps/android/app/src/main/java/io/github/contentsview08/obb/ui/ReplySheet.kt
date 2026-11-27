@@ -92,7 +92,14 @@ import io.github.contentsview08.obb.bbs.shiftJisByteLength
  * 返事(エラー・書き込みました)は欄の上の面に出す。書き込めたらキーボードをしまう。キーボードが出たら、その上に持ち上がる
  */
 @Composable
-fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null, onRefresh: () -> Unit) {
+fun ThreadFooter(
+    vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
+    /** 更新ボタンを出す(設定「ボタンの配置」の更新がフッターのとき) */
+    showRefresh: Boolean = vm.prefs.showRefreshFab,
+    /** 設定「ボタンの配置」でフッターに置いたほかの操作(送るボタンの右に並ぶ) */
+    extra: List<Pair<BarActionDef, () -> Unit>> = emptyList(),
+    onRefresh: () -> Unit,
+) {
     val r = page.reply
     val focus = remember { FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -264,8 +271,13 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
                 if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
                 else Icon(Icons.AutoMirrored.Filled.Send, "送る", tint = Palette.accentText, modifier = Modifier.size(20.dp))
             }
+            // 設定「ボタンの配置」でフッターに置いた操作
+            for ((d, run) in extra) Box(
+                Modifier.padding(start = 6.dp).size((control + 4).dp).clip(CircleShape).clickable(onClick = run),
+                contentAlignment = Alignment.Center,
+            ) { Icon(d.icon, d.name, tint = Palette.textMuted, modifier = Modifier.size(26.dp)) }
             // 更新(設定で消せる)。取っている間は回る
-            if (vm.prefs.showRefreshFab) {
+            if (showRefresh) {
                 // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
                 var startCount by remember { mutableStateOf(-1) }
                 var result by remember { mutableStateOf<Boolean?>(null) }

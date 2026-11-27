@@ -476,6 +476,8 @@ class Prefs(context: Context) {
     /** 開いているスレの自動更新(秒。0 ならしない) */
     var autoRefreshSec by pref("autoRefreshSec", 0)
     var showRefreshFab by pref("showRefreshFab", true)
+    /** スレ表示・スレ一覧の操作ボタンの置き場(JSON。ui/BarActions.kt。変えたものだけ) */
+    var barLayout by pref("barLayout", "{}")
 
     /** なぞる操作の割り当て(向きの並び → 操作)。screen は list / thread */
     fun gestures(screen: String): Map<String, String> {

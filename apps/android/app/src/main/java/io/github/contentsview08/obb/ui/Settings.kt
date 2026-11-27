@@ -105,7 +105,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ボタンの配置", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "skin" to "スキンを編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
@@ -214,6 +214,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "media" -> MediaPage(vm)
                 "write" -> WritePage(vm)
                 "gestures" -> GesturesPage(vm)
+                "bars" -> BarsPage(vm)
                 "behavior" -> BehaviorPage(vm)
                 "notify" -> NotifyPage(vm)
                 "ng" -> NgPage(vm) { sub = it }
@@ -298,6 +299,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("操作") {
         NavRow(Icons.Filled.Swipe, Color(0xFFEC4899), "ジェスチャー", desc = "なぞって操作する形") { open("gestures") }
+        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ボタンの配置", desc = "ヘッダー・フッター・︙ のどこに出すか") { open("bars") }
         NavRow(Icons.Filled.Sync, Color(0xFF10B981), "スクロールと更新", desc = "自動更新・閲覧履歴の新着の確認") { open("behavior") }
         NavRow(Icons.Filled.Notifications, Color(0xFFF43F5E), "通知", desc = "OS の通知・知らせる種類") { open("notify") }
     }
@@ -979,6 +981,21 @@ private fun WritePage(vm: AppViewModel) {
     }
 }
 
+/** ボタンの配置(PC 版の「ボタンの配置」のスマホ版)。スレ表示・スレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すか */
+@Composable
+private fun BarsPage(vm: AppViewModel) {
+    val p = vm.prefs
+    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すかを決めます。︙ のメニューにはいつも全部出ます(ChMate のツールバーのように、よく使うものを帯に並べられます)")
+    for ((area, title) in listOf("thread" to "スレ表示", "list" to "スレ一覧")) {
+        val places = barPlacements(p, area)
+        Group(title) {
+            for (d in barActionsOf(area)) ChoiceRow(d.name, (places[d.id] ?: d.default).key, BarPlace.entries.map { it.key to it.label }) { k ->
+                setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k })
+            }
+        }
+    }
+}
+
 @Composable
 private fun GesturesPage(vm: AppViewModel) {
     val p = vm.prefs
@@ -1012,7 +1029,6 @@ private fun BehaviorPage(vm: AppViewModel) {
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
-        if (LocalAdvanced.current) SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshFab) { p.showRefreshFab = it }
         ChoiceRow(
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },

@@ -36,10 +36,13 @@ internal fun encodeWithEntities(text: String, charset: Charset, fixed: Map<Int, 
     while (i < text.length) {
         val cp = text.codePointAt(i)
         val ch = String(Character.toChars(cp))
+        // 異体字セレクタ(U+FE0F)・ZWJ(U+200D)・IVS・タグ文字のような「既定で無視される文字」は、Android の ICU が表にないのに
+        // 例外にせず 0 バイトにする(2026-11-27 に掲示板の管理人から指摘: 🏳️‍🌈 の FE0F と 200D が送信データから抜けていた)。
+        // 結果が空のときも &#数字; にして送る
         val bytes: ByteArray? = fixed[cp] ?: if (cp in NOT_IN_JIS_TABLE) null else runCatching {
             val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
             ByteArray(bb.remaining()).also { bb.get(it) }
-        }.getOrNull()?.takeIf { it.size <= maxBytes }
+        }.getOrNull()?.takeIf { it.isNotEmpty() && it.size <= maxBytes }
         out.write(bytes ?: "&#$cp;".toByteArray(Charsets.US_ASCII))
         i += Character.charCount(cp)
     }

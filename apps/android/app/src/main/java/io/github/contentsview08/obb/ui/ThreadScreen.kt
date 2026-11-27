@@ -453,6 +453,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun runBarAction(id: String) {
         when (id) {
             "reply" -> openReplyPanel()
+            "quickAccess" -> vm.openQuick()
             "search" -> { searching = true; bars.show() }
             "refresh" -> refresh()
             "favorite" -> vm.toggleFavoriteThread(page)

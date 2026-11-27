@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AccountCircle
@@ -766,14 +767,23 @@ private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
     Group("タブ", note = "一覧の下に出すタブと、その並び(左から)") {
         val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順", "keyword" to "キーワード")
         val on = p.listTabs.split(',').filter { k -> all.any { it.first == k } }
-        fun item(k: String) = DockItem(k, all.first { it.first == k }.second, null)
+        fun item(k: String) = DockItem(k, all.first { it.first == k }.second, ListTab.entries.firstOrNull { it.key == k }?.icon)
         ChipDock(
-            docks = listOf(DockSpec("tabs", "一覧の下のタブ", on.map(::item), emptyHint = "ここに入れる", alignEnd = false)),
+            docks = listOf(DockSpec("tabs", "一覧の下のタブ(実際のフッターと同じ並び)", on.map(::item), emptyHint = "ここに入れる", alignEnd = false)),
             palette = all.filter { it.first !in on }.map { item(it.first) },
             onPlace = { _, id, index -> p.listTabs = on.toMutableList().apply { add(index.coerceIn(0, size), id) }.joinToString(",") },
             onMove = { _, from, to -> p.listTabs = on.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") },
             onRemove = { _, index -> p.listTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
             paletteTitle = "使えるタブ",
+            plainPlaced = true,
+            // 実際のフッターのタブと同じ見た目(アイコン・名前・並べ方は下向きの矢印)。箱の外も同じ形で
+            look = { it, _ ->
+                Row(Modifier.heightIn(min = 40.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (it.icon != null) Icon(it.icon, null, tint = Palette.textMuted, modifier = Modifier.size(17.dp))
+                    Text(it.name, color = Palette.textMuted, fontSize = 14.sp)
+                    if (it.id !in setOf("unread", "visited", "keyword")) Icon(Icons.Filled.ArrowDownward, null, tint = Palette.textMuted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+                }
+            },
         )
     }
     var kwAdding by remember { mutableStateOf(false) }

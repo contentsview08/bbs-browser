@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
@@ -57,6 +58,7 @@ val THREAD_PARTS = listOf(
     ToolbarPartDef("replyField", "チャット欄", Icons.Filled.ChatBubbleOutline, fills = true),
     ToolbarPartDef("spacer", "空き", Icons.Filled.SpaceBar, fills = true),
     ToolbarPartDef("reply", "書き込む", Icons.Filled.Edit),
+    ToolbarPartDef("quickAccess", "クイックアクセス", Icons.Filled.Dashboard),
     ToolbarPartDef("search", "レス検索", Icons.Filled.Search),
     ToolbarPartDef("refresh", "更新", Icons.Filled.Refresh),
     ToolbarPartDef("favorite", "お気に入り", Icons.Filled.Bookmark),
@@ -76,6 +78,7 @@ val THREAD_PARTS = listOf(
 val LIST_PARTS = listOf(
     ToolbarPartDef("spacer", "空き", Icons.Filled.SpaceBar, fills = true),
     ToolbarPartDef("search", "スレッド検索", Icons.Filled.Search),
+    ToolbarPartDef("quickAccess", "クイックアクセス", Icons.Filled.Dashboard),
     ToolbarPartDef("refresh", "更新", Icons.Filled.Refresh),
     ToolbarPartDef("newThread", "スレを立てる", Icons.Filled.EditNote),
     ToolbarPartDef("favorite", "お気に入り板", Icons.Filled.Star),

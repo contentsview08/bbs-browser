@@ -118,7 +118,7 @@ import io.github.contentsview08.obb.data.unreadFirstOrder
 import kotlinx.coroutines.launch
 
 /** 一覧のタブ(PC 版の LIST_TABS と同じ)。どれも選ばなければ設定の並び */
-private enum class ListTab(val key: String, val label: String, val icon: ImageVector) {
+internal enum class ListTab(val key: String, val label: String, val icon: ImageVector) {
     UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread),
     VISITED("visited", "閲覧済み", Icons.Filled.History),
     /** 掲示板が返した順(order)。設定の並びがスレ順(subject)なら、どれも選んでいないときもこれを選んでいる */
@@ -260,6 +260,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     fun runListBarAction(id: String) {
         when (id) {
             "search" -> { searching = true; bars.show() }
+            "quickAccess" -> vm.openQuick()
             "refresh" -> vm.refreshBoard(page, manual = true)
             "newThread" -> vm.openNewThread(page)
             "favorite" -> vm.toggleFavorite(page.board)

@@ -89,6 +89,8 @@ fun ChipDock(
     paletteTitle: String = "使えるもの",
     /** 部品の見た目(アイコンの大きさ・字)。null なら既定 */
     look: @Composable ((item: DockItem, placed: Boolean) -> Unit)? = null,
+    /** 箱の中の部品は枠を付けず、実際の帯と同じ見た目で出す(スレ一覧のタブ) */
+    plainPlaced: Boolean = false,
 ) {
     val view = LocalView.current
     val dockBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -145,7 +147,7 @@ fun ChipDock(
                     ) { change, delta -> change.consume(); dragging?.let { it.pos += delta } }
                 },
         ) {
-            ChipFrame(item, placed = dock != null, onClick = { menu = true }) { if (look != null) look(item, dock != null) else DefaultChipLook(item, placed = dock != null) }
+            ChipFrame(item, placed = dock != null, plain = plainPlaced && dock != null, onClick = { menu = true }) { if (look != null) look(item, dock != null) else DefaultChipLook(item, placed = dock != null) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (dock != null) {
                     if (index > 0) DropdownMenuItem(text = { Text("左へ", fontSize = 14.sp) }, onClick = { menu = false; onMove(dock.key, index, index - 1) })
@@ -207,11 +209,11 @@ fun ChipDock(
 
 /** 部品の枠。掴めることが分かるよう、左に ⋮⋮ の印。幅を埋めるものは横長の枠 */
 @Composable
-private fun ChipFrame(item: DockItem, placed: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun ChipFrame(item: DockItem, placed: Boolean, plain: Boolean = false, onClick: () -> Unit, content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(if (item.fills && placed) 10.dp else 8.dp)
     Row(
         Modifier.then(if (item.fills && placed) Modifier.fillMaxWidth().heightIn(min = 40.dp) else Modifier)
-            .clip(shape).background(Palette.surface).border(1.dp, Palette.border, shape)
+            .clip(shape).then(if (plain) Modifier else Modifier.background(Palette.surface).border(1.dp, Palette.border, shape))
             .clickable(onClick = onClick).padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

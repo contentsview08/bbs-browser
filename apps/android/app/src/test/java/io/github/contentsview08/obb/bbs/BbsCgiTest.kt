@@ -125,6 +125,27 @@ class BbsCgiTest {
         assertTrue(posts(s).single().text.contains("MESSAGE=%E3%81%82&"))
     }
 
+    @Test fun 板のSETTINGがASCIIだけでもcharsetの宣言があればそれで送る() {
+        // 中身に日本語がないと形では決められない。Content-Type の charset=UTF-8 を信じて UTF-8 で送る
+        val t = ThreadSummary("https://w3.test/board/", "1700000000", "", 0, 0, null)
+        val s = FakeServer {
+            if (it.method == "POST") res(200, "<!-- 2ch_X:true --><body>ok</body>")
+            else if (it.url.endsWith("SETTING.TXT")) res(200, "BBS_TITLE=board\n", mapOf("content-type" to "text/plain; charset=UTF-8")) else res(404)
+        }
+        s.run { TwoCh.createPost(t, PostInput("", "", "あ")) }
+        assertTrue(posts(s).single().text.contains("MESSAGE=%E3%81%82&"))
+    }
+
+    @Test fun 板のSETTINGがASCIIだけで宣言もなければShiftJISで送る() {
+        val t = ThreadSummary("https://w4.test/board/", "1700000000", "", 0, 0, null)
+        val s = FakeServer {
+            if (it.method == "POST") res(200, "<!-- 2ch_X:true --><body>ok</body>")
+            else if (it.url.endsWith("SETTING.TXT")) res(200, "BBS_TITLE=board\n") else res(404)
+        }
+        s.run { TwoCh.createPost(t, PostInput("", "", "あ")) }
+        assertTrue(posts(s).single().text.contains("MESSAGE=%82%A0&"))
+    }
+
     @Test fun 失敗しても送り直さない() {
         for (status in listOf(200, 403, 500, 503)) {
             val s = answerPost { res(status, "<body>だめ</body>") }

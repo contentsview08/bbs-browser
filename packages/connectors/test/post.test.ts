@@ -105,13 +105,16 @@ describe('createPost', () => {
     order: 0,
   }
 
-  /** 送られたものを記録し、用意した応答を順に返す偽サーバー */
-  function fake(responses: { html: string; status?: number; headers?: Record<string, string> }[]) {
+  /** 送られたものを記録し、用意した応答を順に返す偽サーバー。setting を渡すと SETTING.TXT の GET にそれを返す(板の文字コードの判定に使う) */
+  function fake(responses: { html: string; status?: number; headers?: Record<string, string> }[], setting?: { body: string; contentType?: string }) {
     const sent: { url: string; body: string; headers: Record<string, string> }[] = []
     const ctx: ConnectorContext = {
       decode: (b, e) => new TextDecoder(e).decode(b),
       http: {
-        get: async () => {
+        get: async (url): Promise<HttpResponse> => {
+          if (setting && url.endsWith('SETTING.TXT')) {
+            return { status: 200, headers: setting.contentType ? { 'content-type': setting.contentType } : {}, body: new TextEncoder().encode(setting.body) }
+          }
           throw new Error('get は使わない')
         },
         async post(url, body, opts): Promise<HttpResponse> {
@@ -138,6 +141,20 @@ describe('createPost', () => {
       MESSAGE: 'うおおお！！！',
       submit: '書き込む',
     })
+  })
+
+  it('板の SETTING.TXT が ASCII だけでも、Content-Type の charset=UTF-8 があれば UTF-8 で送る', async () => {
+    const t = { ...thread, boardUrl: 'https://utf8-declared.test/board/' }
+    const { ctx, sent } = fake([{ html: EDDIST_OK }], { body: 'BBS_TITLE=board\n', contentType: 'text/plain; charset=UTF-8' })
+    await twoChConnector.createPost!(t, { name: '', mail: '', body: 'あ' }, ctx)
+    expect(sent[0].body).toContain('MESSAGE=%E3%81%82')
+  })
+
+  it('板の SETTING.TXT が ASCII だけで宣言もなければ Shift_JIS で送る', async () => {
+    const t = { ...thread, boardUrl: 'https://no-hint.test/board/' }
+    const { ctx, sent } = fake([{ html: EDDIST_OK }], { body: 'BBS_TITLE=board\n' })
+    await twoChConnector.createPost!(t, { name: '', mail: '', body: 'あ' }, ctx)
+    expect(sent[0].body).toContain('MESSAGE=%82%A0')
   })
 
   it('認証待ちはそのまま返す(勝手に送り直さない)', async () => {

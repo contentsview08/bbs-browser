@@ -282,8 +282,16 @@ object TwoCh {
     private fun boardKey(boardUrl: String) = UrlRoute.to5chIo(boardUrl).replace(Regex("^https?://"), "").trimEnd('/') + "/"
 
     /** ASCII だけの本文は手がかりにならないので覚えない */
-    private fun rememberBoardEncoding(boardUrl: String, body: ByteArray) {
-        if (body.any { it < 0 }) synchronized(utf8Boards) { utf8Boards[boardKey(boardUrl)] = looksLikeUtf8(body) }
+    /**
+     * 板の文字コードを覚える。応答の Content-Type(か HTML の meta)の charset を先に見る。本文が ASCII だけで宣言もないときは
+     * 手がかりがないので覚えない。本文に日本語があるときは中身の形で決め、宣言は矛盾しないときの裏付けにする(detectEncoding と同じ順)
+     */
+    private fun rememberBoardEncoding(boardUrl: String, res: HttpResponse, body: ByteArray = res.body) {
+        val contentType = res.headers["content-type"]
+        val hasJapanese = body.any { it < 0 }
+        if (!hasJapanese && declaredCharset(body, contentType) == null) return
+        val utf8 = detectEncoding(body, contentType) == TextEncoding.UTF8
+        synchronized(utf8Boards) { utf8Boards[boardKey(boardUrl)] = utf8 }
     }
 
     /** 書き込む前に、板が UTF-8 かを確かめる。まだ分からなければ SETTING.TXT を 1 度だけ見る。読めなければ Shift_JIS で送る */
@@ -295,7 +303,7 @@ object TwoCh {
         synchronized(utf8Boards) { utf8Boards[key]?.let { return it } }
         runCatching {
             val res = Http.get("${boardUrl}SETTING.TXT")
-            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
+            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res)
         }
         return synchronized(utf8Boards) { utf8Boards.getOrPut(key) { false } }
     }
@@ -305,7 +313,7 @@ object TwoCh {
         if (res.status == 404) throw IllegalStateException("板が見つかりません(HTTP 404)")
         ensureOk(res, url)
         val text = textOf(res)
-        rememberBoardEncoding(url.substringBeforeLast('/') + "/", res.body)
+        rememberBoardEncoding(url.substringBeforeLast('/') + "/", res)
         if (!looksLikeSubject(text)) throw IllegalStateException("スレ一覧を読めませんでした(掲示板の板ではないかもしれません)")
         return text
     }
@@ -321,7 +329,7 @@ object TwoCh {
         // null は読めなかったとき。覚えず、次に板を開いたときに読み直す
         val map = if (HonoBbs.isBoardUrl(boardUrl)) HonoBbs.setting(boardUrl) else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.setting(boardUrl) else if (Machi.isBoardUrl(boardUrl)) Machi.setting(boardUrl) else runCatching {
             val res = Http.get("${boardUrl}SETTING.TXT")
-            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
+            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res)
             if (res.status == 404) emptyMap<String, String>() // SETTING.TXT のない板
             else if (res.status !in 200..299) null
             else parseSettingText(textOf(res))
@@ -415,7 +423,7 @@ object TwoCh {
                 if (cursor != null) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)
                 throw IllegalStateException("スレを読めませんでした: $url")
             }
-            rememberBoardEncoding(thread.boardUrl, body)
+            rememberBoardEncoding(thread.boardUrl, res, body)
             val (posts, title) = parseDat(text, 1)
             // 空か改行なしの本文で置き換えると、手元のログが全部消える
             if (cursor != null && posts.isEmpty()) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)

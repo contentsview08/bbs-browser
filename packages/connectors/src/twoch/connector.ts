@@ -16,7 +16,7 @@ import type {
 import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSubjectTxt, splitAuthorId } from './parse'
 import { createdAtOfKey, parseKeyValue } from '../common'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
-import { detectEncoding, encodeUtf8Form, looksLikeUtf8 } from '../encoding'
+import { declaredCharset, detectEncoding, encodeUtf8Form } from '../encoding'
 import { gunzip, isGzip } from '../gzip'
 
 /** dat 差分取得の続き */
@@ -67,9 +67,15 @@ function encodingOf(res: HttpResponse, body: Uint8Array = res.body): Encoding {
 const utf8Boards = new Map<string, boolean>()
 const boardKey = (boardUrl: string) => to5chIo(boardUrl).replace(/^https?:\/\//, '').replace(/\/?$/, '/')
 
-/** ASCII だけの本文は手がかりにならないので覚えない */
-function rememberBoardEncoding(boardUrl: string, body: Uint8Array): void {
-  if (body.some((c) => c >= 0x80)) utf8Boards.set(boardKey(boardUrl), looksLikeUtf8(body))
+/**
+ * 板の文字コードを覚える。応答の Content-Type(か HTML の meta)の charset を先に見る。本文が ASCII だけで宣言もないときは
+ * 手がかりがないので覚えない。本文に日本語があるときは中身の形で決め、宣言は矛盾しないときの裏付けにする(detectEncoding と同じ順)
+ */
+function rememberBoardEncoding(boardUrl: string, res: HttpResponse, body: Uint8Array = res.body): void {
+  const contentType = res.headers['content-type']
+  const hasJapanese = body.some((c) => c >= 0x80)
+  if (!hasJapanese && !declaredCharset(body, contentType)) return
+  utf8Boards.set(boardKey(boardUrl), detectEncoding(body, contentType) === 'utf-8')
 }
 
 /** 書き込む前に、板が UTF-8 かを確かめる。まだ分からなければ SETTING.TXT を 1 度だけ見る。読めなければ Shift_JIS で送る */
@@ -81,7 +87,7 @@ async function isUtf8Board(postUrl: string, bbs: string | undefined, ctx: Connec
   if (known !== undefined) return known
   try {
     const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
-    if (res.status >= 200 && res.status < 300) rememberBoardEncoding(boardUrl, res.body)
+    if (res.status >= 200 && res.status < 300) rememberBoardEncoding(boardUrl, res)
   } catch {
     // 確かめられなくても書き込みは止めない
   }
@@ -173,7 +179,7 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
   try {
     const res = await ctx.http.get(`${to5chIo(boardUrl)}SETTING.TXT`)
     if (res.status < 200 || res.status >= 300) return {}
-    rememberBoardEncoding(boardUrl, res.body)
+    rememberBoardEncoding(boardUrl, res)
     const s = parseKeyValue(ctx.decode(res.body, encodingOf(res)))
     const num = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined)
     const lineNumber = num(s.BBS_LINE_NUMBER)
@@ -226,7 +232,7 @@ async function readSubject(url: string, ctx: ConnectorContext, boardUrl?: string
   if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${boardUrl ?? url}`)
   ensureOk(res, url)
   const text = ctx.decode(res.body, encodingOf(res))
-  rememberBoardEncoding(url.replace(/[^/]*$/, ''), res.body)
+  rememberBoardEncoding(url.replace(/[^/]*$/, ''), res)
   if (!looksLikeSubject(text)) throw new Error(`スレ一覧を読めませんでした(掲示板の板ではないかもしれません): ${boardUrl ?? url}`)
   return text
 }
@@ -453,7 +459,7 @@ export const twoChConnector: Connector = {
         if (cursor) return { status: 'notModified', posts: [], cursor }
         throw new Error(`スレを読めませんでした: ${url}`)
       }
-      rememberBoardEncoding(thread.boardUrl, body)
+      rememberBoardEncoding(thread.boardUrl, res, body)
       const { posts, title } = parseDat(text)
       // 空か改行なしの本文で置き換えると、手元のログが全部消える
       if (cursor && posts.length === 0) return { status: 'notModified', posts: [], cursor }

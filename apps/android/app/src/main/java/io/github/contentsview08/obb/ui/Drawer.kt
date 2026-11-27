@@ -93,14 +93,8 @@ fun DrawerContent(vm: AppViewModel) {
                     "posts" -> Icons.Filled.EditNote to "書き込み履歴"
                     else -> Icons.Filled.PhotoLibrary to "上げた画像"
                 }
-                // パネルで出しているタブか、積み重ねの中のその画面なら「今いる所」
-                val active = (vm.unreadOpen && vm.panelTab == k) || when (k) {
-                    "unread" -> false
-                    "history" -> current is Page.History
-                    "fav" -> current is Page.FavThreads
-                    "posts" -> current is Page.PostHistory
-                    else -> current is Page.Uploads
-                }
+                // パネルで出しているタブなら「今いる所」
+                val active = vm.unreadOpen && vm.panelTab == k
                 // 未読は未読のレスの数の合計を未読の札で、お気に入りのスレはスレの数(履歴のタブと同じ)
                 val badge = when (k) { "unread" -> vm.unreadTotal.takeIf { it > 0 }; "fav" -> vm.favThreads.size.takeIf { it > 0 }; else -> null }
                 DrawerRow(icon, label, if (k == "fav") Palette.markFav else Palette.textMuted, active = active, badge = badge, badgeUnread = k == "unread") { vm.openPast(k) }

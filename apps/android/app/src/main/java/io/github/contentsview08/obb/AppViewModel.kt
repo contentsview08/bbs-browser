@@ -235,13 +235,6 @@ sealed interface Page {
         var site by mutableStateOf<String?>(null)
         var category by mutableStateOf<String?>(null)
     }
-    class History : Page
-    class FavThreads : Page
-    /** 閲覧履歴のうち、新着のあるスレ */
-    class AllUnread : Page
-    class PostHistory : Page
-    /** 上げた画像(履歴の「画像」) */
-    class Uploads : Page
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -585,16 +578,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.pastTab = open
         // 同期が書いた最新を出す
         viewModelScope.launch { reflectSyncedReads(); postHistory = db.postHistory() }
-        // パネルを開いているあいだは、パネルの中でタブを切り替える(下のタブ・ドロワーのどちらから選んでも)
-        if (unreadOpen) { openPanel(open); return }
-        when (open) {
-            // 未読は画面の積み重ねに入れず、上に重ねるパネルで(閉じると見ていた所に戻る)
-            "unread" -> openUnread()
-            "fav" -> openRoot(Page.FavThreads())
-            "posts" -> openRoot(Page.PostHistory())
-            "uploads" -> openRoot(Page.Uploads())
-            else -> openRoot(Page.History())
-        }
+        // どのタブも画面の積み重ねに入れず、上に重ねるパネルで出す(閉じると見ていた所に戻る)。
+        // 前は未読だけパネルで、ほかは板の一覧を置き換える画面だったので、開き方(ドロワー・下のバー・パネルの中)で見え方が変わっていた
+        openPanel(open)
     }
 
     /** 書き込み履歴から 1 件消す(掲示板の書き込みは消えない) */
@@ -884,7 +870,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         forwardPage = left
         refreshTopAfterBack()
         // パネルから開いたスレなら、戻ったときにパネルを開き直す(未読を続けて消化できるように)
-        if (left?.fromPanel == true) { unreadOpen = true; if (panelTab == "unread") recountAllUnread() }
+        if (left?.fromPanel == true) { unreadOpen = true; refreshPanelTab() }
         return true
     }
 
@@ -897,9 +883,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun refreshTopAfterBack() {
         when (val top = stack.last()) {
             is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
-            is Page.History, is Page.FavThreads -> reloadSide()
-            is Page.AllUnread -> recountAllUnread()
             else -> {}
+        }
+    }
+
+    /** パネルに戻ったとき、出しているタブの中身を新しくする(読んだ・消したぶんを映す) */
+    private fun refreshPanelTab() {
+        when (panelTab) {
+            "unread" -> recountAllUnread()
+            "history", "fav" -> reloadSide()
+            "posts", "uploads" -> viewModelScope.launch { postHistory = db.postHistory(); uploads = db.listUploads() }
         }
     }
 
@@ -908,11 +901,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         is Page.Threads -> p.board.name
         is Page.Thread -> p.title.ifEmpty { p.summary.title }
         is Page.Boards -> "板を探す"
-        is Page.History -> "閲覧履歴"
-        is Page.FavThreads -> "お気に入りのスレ"
-        is Page.AllUnread -> "未読のスレ"
-        is Page.PostHistory -> "書き込み履歴"
-        is Page.Uploads -> "上げた画像"
     }
 
     /** 戻る先の一覧から選んだ画面まで、まとめて戻る */
@@ -947,9 +935,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stack.clear()
         stack.add(page)
         when (page) {
-            is Page.History, is Page.FavThreads -> reloadSide()
-            is Page.AllUnread -> recountAllUnread()
-            is Page.PostHistory, is Page.Uploads -> viewModelScope.launch { postHistory = db.postHistory() }
             is Page.Boards -> if (boards.isEmpty()) loadBoards()
             else -> {}
         }
@@ -1895,16 +1880,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * このスレより後ろにある、新着のある読んだスレ。なければ一覧の頭から探す。一覧の名前と、スレと未読の数を返す
      */
     fun nextUnread(page: Page.Thread): Triple<String, ThreadSummary, Int>? {
+        fun unreadOf(h: HistoryEntry) = h.thread to maxOf(0, unreadTotalOf(h, remoteCounts) - h.readNo)
+        // パネル(未読・閲覧履歴・お気に入りのスレ)から開いたスレは、そのパネルの一覧の中で次を探す
+        if (page.fromPanel) {
+            val (name, list) = when (panelTab) {
+                "history" -> "閲覧履歴" to history.map(::unreadOf)
+                "fav" -> "お気に入りのスレ" to favThreads.map(::unreadOf)
+                "unread" -> "未読のスレ" to allUnread.map(::unreadOf)
+                else -> return null
+            }
+            return nextUnreadIn(page, name, list)
+        }
         val i = stack.indexOf(page)
         val under = stack.getOrNull(i - 1) ?: return null
-        fun unreadOf(h: HistoryEntry) = h.thread to maxOf(0, unreadTotalOf(h, remoteCounts) - h.readNo)
         val (name, list) = when (under) {
             is Page.Threads -> under.board.name to under.threads.map { t -> t to (under.states[t.key]?.let { maxOf(0, t.postCount - it.readNo) } ?: 0) }
-            is Page.History -> "閲覧履歴" to history.map(::unreadOf)
-            is Page.FavThreads -> "お気に入りのスレ" to favThreads.map(::unreadOf)
-            is Page.AllUnread -> "未読のスレ" to allUnread.map(::unreadOf)
             else -> return null
         }
+        return nextUnreadIn(page, name, list)
+    }
+
+    /** list(スレと未読の数)の中で、page のスレより後ろにある未読のあるスレ。なければ頭から */
+    private fun nextUnreadIn(page: Page.Thread, name: String, list: List<Pair<ThreadSummary, Int>>): Triple<String, ThreadSummary, Int>? {
         val at = list.indexOfFirst { it.first.id == page.summary.id }
         val order = if (at >= 0) list.drop(at + 1) + list.take(at) else list
         val hit = order.firstOrNull { it.second > 0 && it.first.id != page.summary.id } ?: return null

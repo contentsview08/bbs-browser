@@ -50,10 +50,7 @@ import io.github.contentsview08.obb.ui.BbsTheme
 import io.github.contentsview08.obb.ui.BoardsScreen
 import io.github.contentsview08.obb.ui.DrawerContent
 import io.github.contentsview08.obb.ui.Palette
-import io.github.contentsview08.obb.ui.PostHistoryScreen
-import io.github.contentsview08.obb.ui.UploadsScreen
 import io.github.contentsview08.obb.ui.SettingsPanel
-import io.github.contentsview08.obb.ui.ThreadEntryList
 import io.github.contentsview08.obb.ui.swipeGestures
 import io.github.contentsview08.obb.ui.ThreadListScreen
 import io.github.contentsview08.obb.ui.ThreadScreen
@@ -215,11 +212,6 @@ class MainActivity : ComponentActivity() {
                                 is Page.Threads -> ThreadListScreen(vm, page)
                                 is Page.Thread -> ThreadScreen(vm, page)
                                 is Page.Boards -> BoardsScreen(vm, page)
-                                is Page.History -> ThreadEntryList(vm, "history", vm.history, "閲覧履歴はありません")
-                                is Page.AllUnread -> io.github.contentsview08.obb.ui.ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() })
-                                is Page.FavThreads -> ThreadEntryList(vm, "fav", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
-                                is Page.PostHistory -> PostHistoryScreen(vm)
-                                is Page.Uploads -> UploadsScreen(vm)
                                 null -> {}
                             }
                             }

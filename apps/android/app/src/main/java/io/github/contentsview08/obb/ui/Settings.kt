@@ -105,7 +105,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ボタンの配置", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ツールバー設定", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "skin" to "スキンを編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
@@ -214,7 +214,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "media" -> MediaPage(vm)
                 "write" -> WritePage(vm)
                 "gestures" -> GesturesPage(vm)
-                "bars" -> BarsPage(vm)
+                "bars" -> ToolbarPage(vm)
                 "behavior" -> BehaviorPage(vm)
                 "notify" -> NotifyPage(vm)
                 "ng" -> NgPage(vm) { sub = it }
@@ -299,7 +299,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("操作") {
         NavRow(Icons.Filled.Swipe, Color(0xFFEC4899), "ジェスチャー", desc = "なぞって操作する形") { open("gestures") }
-        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ボタンの配置", desc = "ヘッダー・フッター・︙ のどこに出すか") { open("bars") }
+        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ツールバー設定", desc = "ヘッダー・フッターのボタンと並び・大きさ・文字") { open("bars") }
         NavRow(Icons.Filled.Sync, Color(0xFF10B981), "スクロールと更新", desc = "自動更新・閲覧履歴の新着の確認") { open("behavior") }
         NavRow(Icons.Filled.Notifications, Color(0xFFF43F5E), "通知", desc = "OS の通知・知らせる種類") { open("notify") }
     }
@@ -978,31 +978,6 @@ private fun WritePage(vm: AppViewModel) {
             "大きい画像を縮める", p.uploadMaxDimension.toString(),
             listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
         ) { p.uploadMaxDimension = it.toInt() }
-    }
-}
-
-/** ボタンの配置(PC 版の「ボタンの配置」のスマホ版)。スレ表示・スレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すか */
-@Composable
-private fun BarsPage(vm: AppViewModel) {
-    val p = vm.prefs
-    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右(上)・フッターの右(下)・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます")
-    for ((area, title) in listOf("thread" to "スレ表示", "list" to "スレ一覧")) {
-        val places = barPlacements(p, area)
-        val order = barOrder(p, area)
-        Group(title, note = "≡ を掴んで並べ替え、右のボタンで置き場を選びます") {
-            if (area == "thread") SwitchRow("書き込み欄をチャットの形で出す", p.replyChat, desc = "オンなら、フッターに横いっぱいの入力欄。オフなら、書き込み欄はボタンになり、押すと画面いっぱいの書き込み画面が開きます(ChMate と同じ形)") { p.replyChat = it }
-            // チャットの形のときは、書き込み欄はフッターの欄なので置き場の行は出さない
-            ReorderableColumn(order.filter { !(it.id == "reply" && p.replyChat) }, { it.id }, { from, to -> moveBarAction(p, area, from, to) }) { d, handle, _ ->
-                val place = places[d.id] ?: d.default
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(d.icon, null, tint = if (place == BarPlace.MENU) Palette.textMuted else Palette.accent, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(d.name, Modifier.weight(1f), color = if (place == BarPlace.MENU) Palette.textMuted else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Segmented(listOf("header" to "上", "footer" to "下", "menu" to "︙"), place.key, Modifier.width(132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
-                    DragHandleIcon(handle)
-                }
-            }
-        }
     }
 }
 

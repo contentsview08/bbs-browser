@@ -254,8 +254,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     var styleSheet by remember { mutableStateOf(false) }
-    /** 設定「ボタンの配置」で帯に置いた操作(︙ の同じ項目と同じ動き)。定義は BarActions.kt */
-    val listBarPlaces = barPlacements(vm.prefs, "list")
+    /** 設定「ツールバー設定」の並び(ヘッダー・フッターの部品)。定義は BarActions.kt */
+    val listToolbar = toolbarLayout(vm.prefs, "list")
     val barContext = androidx.compose.ui.platform.LocalContext.current
     fun runListBarAction(id: String) {
         when (id) {
@@ -451,7 +451,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     onTitle = { menu = true },
                 ) {
                     // 設定「ボタンの配置」でヘッダーに置いた操作(既定はスレッド検索だけ)
-                    for (d in barOrder(vm.prefs, "list")) if (listBarPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runListBarAction(d.id) }
+                    for (id in listToolbar.header) toolbarPart("list", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs) { runListBarAction(d.id) } }
                     MoreButton { menu = true }
                 }
             }
@@ -519,15 +519,16 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 }
                 }
                 val footerH = vm.prefs.footerHeight
-                // 設定「ボタンの配置」でフッターに置いた操作(更新は既定でここ)
-                for (d in barOrder(vm.prefs, "list")) if (listBarPlaces[d.id] == BarPlace.FOOTER && d.id != "refresh") Box(
-                    Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable { runListBarAction(d.id) },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(d.icon, d.name, tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
-                if (listBarPlaces["refresh"] == BarPlace.FOOTER) Box(
-                    Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page, manual = true) },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
+                // 設定「ツールバー設定」でフッターに置いた部品(タブの右に、並びの順で。空きはタブが幅を取るので何もしない)
+                for (id in listToolbar.footer) {
+                    val d = toolbarPart("list", id) ?: continue
+                    if (d.fills) continue
+                    if (id == "refresh") Box(
+                        Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page, manual = true) },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
+                    else ToolbarButton(d, vm.prefs) { runListBarAction(id) }
+                }
             }
         }
 

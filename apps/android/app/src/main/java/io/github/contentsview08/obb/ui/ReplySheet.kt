@@ -95,17 +95,15 @@ import io.github.contentsview08.obb.bbs.shiftJisByteLength
 @Composable
 fun ThreadFooter(
     vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
-    /** 更新ボタンを出す(設定「ボタンの配置」の更新がフッターのとき) */
-    showRefresh: Boolean = vm.prefs.showRefreshFab,
-    /** 設定「ボタンの配置」でフッターに置いたほかの操作(送るボタンの右に並ぶ) */
-    extra: List<Pair<BarActionDef, () -> Unit>> = emptyList(),
-    /** 本文の欄を出す(設定「ボタンの配置」で書き込み欄がフッターの欄のとき)。出さないときはボタンだけの細い帯 */
-    showField: Boolean = true,
-    /** 書き込み欄をボタンにしてフッターに置いたとき、押したときの動き(パネルを開く) */
-    replyButton: (() -> Unit)? = null,
+    /** フッターに並べる部品(設定「ツールバー設定」。左から順。replyField = チャット欄、spacer = 空き、refresh = 更新、ほかは操作のボタン) */
+    parts: List<String> = listOf("replyField", "refresh"),
+    /** 操作のボタンを押したとき(id) */
+    run: (String) -> Unit = {},
     onRefresh: () -> Unit,
 ) {
     val r = page.reply
+    /** チャット欄を出す(出さないときはボタンだけの細い帯) */
+    val showField = "replyField" in parts
     val focus = remember { FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var plusMenu by remember { mutableStateOf(false) }
@@ -186,7 +184,11 @@ fun ThreadFooter(
         val control = (footerH - 8).coerceIn(28, 40)
         Row(Modifier.fillMaxWidth().heightIn(min = footerH.dp).padding(horizontal = 8.dp, vertical = ((footerH - control) / 2).coerceIn(2, 6).dp), verticalAlignment = Alignment.Bottom) {
             // 丸い本文の欄。左の端に ＋(画像・オプション)。欄を出さないときは空けて、ボタンを右に寄せる
-            if (!showField) Spacer(Modifier.weight(1f)) else Box(Modifier.weight(1f)) {
+            // 設定「ツールバー設定」の並びで部品を描く。幅を埋める部品(チャット欄・空き)がなければ右に寄せる
+            if (parts.none { toolbarPart("thread", it)?.fills == true }) Spacer(Modifier.weight(1f))
+            for (part in parts) when (part) {
+                "replyField" -> {
+            Box(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth().background(Palette.surface, shape).border(1.dp, if (r.open) Palette.accent else Palette.border, shape),
                     verticalAlignment = Alignment.Bottom,
@@ -265,7 +267,7 @@ fun ThreadFooter(
                 }
             }
             Spacer(Modifier.width(6.dp))
-            if (showField) Box(
+            Box(
                 Modifier.padding(bottom = 1.dp).size(control.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
                     .combinedClickable(
                         enabled = canSend,
@@ -276,19 +278,10 @@ fun ThreadFooter(
                 if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
                 else Icon(Icons.AutoMirrored.Filled.Send, "送る", tint = Palette.accentText, modifier = Modifier.size(20.dp))
             }
-            // 設定「ボタンの配置」でフッターに置いた操作
-            for ((d, run) in extra) Box(
-                Modifier.padding(start = 6.dp).size((control + 4).dp).clip(CircleShape).clickable(onClick = run),
-                contentAlignment = Alignment.Center,
-            ) { Icon(d.icon, d.name, tint = Palette.textMuted, modifier = Modifier.size(26.dp)) }
-            // 書き込み欄をボタンにしているとき(押すとパネルで書く)
-            replyButton?.let { open ->
-                Box(Modifier.padding(start = 6.dp).size((control + 4).dp).clip(CircleShape).clickable(onClick = open), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Edit, "書き込む", tint = Palette.accent, modifier = Modifier.size(26.dp))
                 }
-            }
-            // 更新(設定で消せる)。取っている間は回る
-            if (showRefresh) {
+                "spacer" -> Spacer(Modifier.weight(1f))
+                // 更新。取っている間は回る
+                "refresh" -> {
                 // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
                 var startCount by remember { mutableStateOf(-1) }
                 var result by remember { mutableStateOf<Boolean?>(null) }
@@ -321,6 +314,10 @@ fun ThreadFooter(
                             else Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp))
                         }
                     }
+                }
+            }
+                else -> toolbarPart("thread", part)?.let { d ->
+                    ToolbarButton(d, vm.prefs, Modifier.padding(start = 2.dp), tint = if (d.id == "reply") Palette.accent else Palette.textMuted) { run(d.id) }
                 }
             }
         }

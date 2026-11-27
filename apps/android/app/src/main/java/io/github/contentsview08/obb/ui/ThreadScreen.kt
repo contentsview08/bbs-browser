@@ -189,10 +189,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var viewerPost by remember { mutableStateOf<Post?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
-    /** 設定「ボタンの配置」で帯に置いた操作の実行(︙ の同じ項目と同じ動き)。定義は BarActions.kt */
-    val barPlaces = barPlacements(vm.prefs, "thread")
-    /** 書き込み欄をフッターの欄として出す(チャットの形)。そうでなければボタンで、押すと画面いっぱいの書き込みの画面が開く */
-    val replyField = vm.prefs.replyChat
+    /** 設定「ツールバー設定」の並び(ヘッダー・フッターの部品)。定義は BarActions.kt */
+    val toolbar = toolbarLayout(vm.prefs, "thread")
+    /** チャット欄をフッターに出している。出していなければ、書き込みは画面いっぱいの書き込みの画面(ReplyFullSheet) */
+    val replyField = "replyField" in toolbar.footer
     fun openReplyPanel() { page.reply.popup = true }
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
     var styleSheet by remember { mutableStateOf(false) }
@@ -867,7 +867,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 } else {
                     HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { menu = true }) {
                         // 設定「ボタンの配置」でヘッダーに置いた操作(既定はレス検索だけ)
-                        for (d in barOrder(vm.prefs, "thread")) if (barPlaces[d.id] == BarPlace.HEADER && !(d.id == "reply" && replyField)) BarIcon(d.icon, d.name) { runBarAction(d.id) }
+                        for (id in toolbar.header) toolbarPart("thread", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs, tint = if (d.id == "reply") Palette.accent else Palette.textMuted) { runBarAction(d.id) } }
                         MoreButton { menu = true }
                     }
                 }
@@ -915,14 +915,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerH = it.height.toFloat() }
                     .graphicsLayer { translationY = (1f - footerShown()) * footerH },
             ) {
-                ThreadFooter(
-                    vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null,
-                    showRefresh = barPlaces["refresh"] == BarPlace.FOOTER,
-                    // 設定「ボタンの配置」でフッターに置いた操作(更新・書き込み欄は別に描く)
-                    extra = barOrder(vm.prefs, "thread").filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" && it.id != "reply" }.map { d -> d to { runBarAction(d.id) } },
-                    showField = replyField,
-                    replyButton = if (!replyField && barPlaces["reply"] == BarPlace.FOOTER) ({ openReplyPanel() }) else null,
-                ) { refresh() }
+                ThreadFooter(vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null, parts = toolbar.footer, run = { runBarAction(it) }) { refresh() }
             }
 
         }

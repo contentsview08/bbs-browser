@@ -478,8 +478,12 @@ class Prefs(context: Context) {
     var showRefreshFab by pref("showRefreshFab", true)
     /** スレ表示・スレ一覧の操作ボタンの置き場(JSON。ui/BarActions.kt。変えたものだけ) */
     var barLayout by pref("barLayout", "{}")
-    /** 書き込み欄をチャットの形(フッターに横いっぱいの入力欄)で出す。オフなら書き込み欄はボタンになり、押すと画面いっぱいの書き込み画面が開く */
+    /** (前の版の読み替え用。今は barLayout v2 の「チャット欄」がフッターにあるかで決まる) */
     var replyChat by pref("replyChat", true)
+    /** ツールバーのボタンの大きさ(s / m / l) */
+    var toolbarIconSize by pref("toolbarIconSize", "m")
+    /** ツールバーのボタンの下の文字(none / s / m)。既定は出さない */
+    var toolbarLabel by pref("toolbarLabel", "none")
 
     /** なぞる操作の割り当て(向きの並び → 操作)。screen は list / thread */
     fun gestures(screen: String): Map<String, String> {

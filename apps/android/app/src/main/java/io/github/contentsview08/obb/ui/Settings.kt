@@ -985,20 +985,20 @@ private fun WritePage(vm: AppViewModel) {
 @Composable
 private fun BarsPage(vm: AppViewModel) {
     val p = vm.prefs
-    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右(上)・フッターの右(下)・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます。書き込み欄は「欄」ならフッターに広げ(チャットの形)、ほかならボタンになって押すと書き込みのパネルが上に出ます")
+    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右(上)・フッターの右(下)・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます")
     for ((area, title) in listOf("thread" to "スレ表示", "list" to "スレ一覧")) {
         val places = barPlacements(p, area)
         val order = barOrder(p, area)
         Group(title, note = "≡ を掴んで並べ替え、右のボタンで置き場を選びます") {
-            ReorderableColumn(order, { it.id }, { from, to -> moveBarAction(p, area, from, to) }) { d, handle, _ ->
+            if (area == "thread") SwitchRow("書き込み欄をチャットの形で出す", p.replyChat, desc = "オンなら、フッターに横いっぱいの入力欄。オフなら、書き込み欄はボタンになり、押すと画面いっぱいの書き込み画面が開きます(ChMate と同じ形)") { p.replyChat = it }
+            // チャットの形のときは、書き込み欄はフッターの欄なので置き場の行は出さない
+            ReorderableColumn(order.filter { !(it.id == "reply" && p.replyChat) }, { it.id }, { from, to -> moveBarAction(p, area, from, to) }) { d, handle, _ ->
                 val place = places[d.id] ?: d.default
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(d.icon, null, tint = if (place == BarPlace.MENU) Palette.textMuted else Palette.accent, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(d.name, Modifier.weight(1f), color = if (place == BarPlace.MENU) Palette.textMuted else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    // 書き込み欄だけ「欄」(フッターに広げる)がある。ほかの置き場ならボタンになり、押すとパネルで書く
-                    val choices = if (d.id == "reply") listOf("field" to "欄", "header" to "上", "footer" to "下", "menu" to "︙") else listOf("header" to "上", "footer" to "下", "menu" to "︙")
-                    Segmented(choices, place.key, Modifier.width(if (choices.size == 4) 176.dp else 132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
+                    Segmented(listOf("header" to "上", "footer" to "下", "menu" to "︙"), place.key, Modifier.width(132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
                     DragHandleIcon(handle)
                 }
             }

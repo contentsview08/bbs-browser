@@ -2074,8 +2074,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 書き込み欄を開く。insert(「>>12」など)があれば本文の最後に足す */
     fun openReply(page: Page.Thread, insert: String? = null) {
         val r = page.reply
-        // 書き込み欄をフッターの欄にしていなければ、パネルで出す
-        if (io.github.contentsview08.obb.ui.barPlacements(prefs, "thread")["reply"] != io.github.contentsview08.obb.ui.BarPlace.FIELD) r.popup = true
+        // 書き込み欄をチャットの形で出していなければ、書き込みの画面で出す
+        if (!prefs.replyChat) r.popup = true
         viewModelScope.launch {
             if (!r.draftLoaded) {
                 r.draftLoaded = true

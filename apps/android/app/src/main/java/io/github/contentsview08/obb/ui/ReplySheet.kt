@@ -592,6 +592,121 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
     PostDialogs(r, onAccept = { r.confirm = null; vm.toast = "書き込み確認が出ました。もう一度「立てる」を押してください" })
 }
 
+/**
+ * 書き込みの画面(全画面。設定「書き込み欄をチャットの形で出す」がオフのとき)。ChMate の書き込み画面と同じ形:
+ * 上に ✕・スレタイ・「書き込む」、中に(オプションで名前とメール)・大きな本文、下にキーボードのすぐ上の道具(画像・名前とメール・AA・定型文・控え・バイト数)。
+ * 書きかけ・画像・名前の履歴はフッターの欄(ThreadFooter)と同じ状態(page.reply)を使う
+ */
+@Composable
+fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
+    val r = page.reply
+    val prefs = vm.prefs
+    // 送る前の見た目(送るボタンの長押し)。窓の外で出す
+    var preview by remember { mutableStateOf(false) }
+    FullWindow(onDismiss = { r.popup = false }) {
+        val rise = remember { androidx.compose.animation.core.Animatable(1f) }
+        LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }
+        LaunchedEffect(page) { vm.loadDraft(page) }
+        val picker = rememberImagePicker(vm, r)
+        PickConfirm(vm, r, page.title, io.github.contentsview08.obb.bbs.TwoCh.webUrl(page.summary))
+        r.webUpload?.let { job -> WebUploadScreen(job, onLink = { u, h -> vm.insertLink(r, u, h) }, onDismiss = { r.webUpload = null }) }
+        var options by remember { mutableStateOf(r.name.isNotEmpty() || r.mail.isNotEmpty()) }
+        var phraseMenu by remember { mutableStateOf(false) }
+        var snippetMenu by remember { mutableStateOf(false) }
+        val bodyFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { bodyFocus.requestFocus() } }
+        val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
+        val canSend = !r.sending && r.body.isNotBlank() && disabled == null
+        var bodyField by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length))) }
+        // 画像の URL・返信の >>12 など、外から本文が変わったら欄にも映す
+        LaunchedEffect(r.body) { if (bodyField.text != r.body) bodyField = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
+        fun insertAtCursor(ph: String) {
+            val sel = bodyField.selection
+            val t = bodyField.text.substring(0, sel.min) + ph + bodyField.text.substring(sel.max)
+            bodyField = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
+            r.body = t; vm.saveDraftLater(page)
+        }
+        Column(
+            Modifier.fillMaxSize().graphicsLayer { translationY = rise.value * size.height * 0.15f; alpha = 1f - rise.value }
+                .background(Palette.base).statusBarsPadding().imePadding().navigationBarsPadding(),
+        ) {
+            Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = prefs.headerHeight.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { r.popup = false }) { Icon(Icons.Filled.Close, "閉じる", tint = Palette.textMuted) }
+                Column(Modifier.weight(1f)) {
+                    Text("書き込む", color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(page.title.ifEmpty { page.summary.title }, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // 送る(長押しで送る前の見た目)
+                Box(
+                    Modifier.padding(end = 8.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, RoundedCornerShape(6.dp))
+                        .combinedClickable(enabled = canSend, onLongClick = { preview = true }) { vm.send(page) }.padding(horizontal = 16.dp, vertical = 9.dp),
+                ) {
+                    if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
+                    else Text("書き込む", color = Palette.accentText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            HorizontalDivider(color = Palette.border)
+            (r.notice ?: disabled)?.let { n ->
+                Text(n, Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 16.dp, vertical = 8.dp), color = Palette.heatVeryHot, fontSize = 13.sp)
+                HorizontalDivider(color = Palette.border)
+            }
+            if (r.uploading) {
+                val batch = r.uploads.filter { it.inBatch }
+                val done = batch.count { it.state is io.github.contentsview08.obb.UploadItem.State.Done || it.state is io.github.contentsview08.obb.UploadItem.State.Failed }
+                FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${batch.size} 枚目", Palette.textMuted)
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                if (options) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), prefs.fieldNames, onClear = { prefs.clearFieldHistory("names") })
+                        FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), prefs.fieldMails, onClear = { prefs.clearFieldHistory("mails") })
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
+                }
+                Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    BodyField(bodyField, { bodyField = it; r.body = it.text; vm.saveDraftLater(page) }, isAA(r), disabled ?: "本文", 16, Modifier.fillMaxWidth().focusRequester(bodyFocus), enabled = disabled == null)
+                }
+                UploadStrip(vm, r, 72.dp, PaddingValues(horizontal = 16.dp, vertical = 8.dp))
+            }
+            // キーボードのすぐ上の道具: 画像・名前とメール・AA・定型文・控え・バイト数
+            HorizontalDivider(color = Palette.border)
+            Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { startImagePick(vm, r, picker) }, enabled = !r.uploading) {
+                    if (r.uploading) CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.dp)
+                    else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
+                }
+                IconButton(onClick = { options = !options }) { Icon(Icons.Filled.Tune, "名前・メール", tint = if (options || r.name.isNotEmpty() || r.mail.isNotEmpty()) Palette.accent else Palette.textMuted) }
+                val aaNow = isAA(r)
+                IconButton(onClick = { r.aaOverride = !aaNow }) { Icon(Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示", tint = if (aaNow) Palette.accent else Palette.textMuted) }
+                val phrases = prefs.quickPhraseList
+                if (phrases.isNotEmpty()) Box {
+                    IconButton(onClick = { phraseMenu = true }) { Icon(Icons.Filled.Bolt, "定型文", tint = Palette.textMuted) }
+                    androidx.compose.material3.DropdownMenu(expanded = phraseMenu, onDismissRequest = { phraseMenu = false }) {
+                        for (ph in phrases) androidx.compose.material3.DropdownMenuItem(text = { Text(ph, color = Palette.textStrong, fontSize = 15.sp) }, onClick = { phraseMenu = false; insertAtCursor(ph) })
+                    }
+                }
+                // 本文の控え: 書いている本文を取っておく・取っておいた本文を入れる
+                Box {
+                    IconButton(onClick = { snippetMenu = true }) { Icon(Icons.Filled.Bookmark, "本文の控え", tint = Palette.textMuted) }
+                    androidx.compose.material3.DropdownMenu(expanded = snippetMenu, onDismissRequest = { snippetMenu = false }) {
+                        if (r.body.isNotBlank()) androidx.compose.material3.DropdownMenuItem(text = { Text("この本文を控えに保存", color = Palette.textStrong, fontSize = 14.sp) }, onClick = { snippetMenu = false; prefs.addSnippet(r.body); vm.toast = "控えに保存しました" })
+                        if (prefs.snippets.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("控えはありません", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { snippetMenu = false })
+                        for (sn in prefs.snippets) androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(sn.replace(Regex("\\s+"), " "), color = Palette.textStrong, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                            onClick = { snippetMenu = false; insertAtCursor(sn) },
+                            trailingIcon = { IconButton(onClick = { prefs.removeSnippet(sn) }, Modifier.size(32.dp)) { Icon(Icons.Filled.Close, "この控えを消す", tint = Palette.textMuted, modifier = Modifier.size(16.dp)) } },
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Text(if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) "${r.body.length} 文字" else "${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
+            }
+        }
+    }
+    if (preview) PostPreview(vm, page) { preview = false }
+    PostDialogs(r, onAccept = { vm.acceptConfirm(page) })
+}
+
 fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("bbs", text))

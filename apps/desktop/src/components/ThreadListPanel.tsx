@@ -82,6 +82,10 @@ interface Props {
   /** タブを使っているか(右クリックの「新しいタブで開く」を出す) */
   newTabEnabled?: boolean
   onRefresh?: () => Promise<unknown> | void
+  /** お気に入りのスレの並び(id の順)。お気に入りの絞り込みで並べ替えていないときはこの順に出す */
+  favOrder?: string[]
+  /** お気に入りのスレをつかんで動かしたとき(見えている並びの新しい順) */
+  onReorderFavorites?: (threads: ThreadSummary[]) => void
   width: number
   onResize: (width: number) => void
   /**
@@ -574,6 +578,11 @@ export default function ThreadListPanel(props: Props) {
         shownSort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : shownSort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
+    // お気に入りの絞り込みで並べ替えていないときは、お気に入りの並び(つかんで動かせる)
+    if (filter === 'fav' && !shownSort && props.favOrder) {
+      const rank = new Map(props.favOrder.map((id, i) => [id, i]))
+      list = [...list].sort((a, b) => (rank.get(threadId(a)) ?? Infinity) - (rank.get(threadId(b)) ?? Infinity))
+    }
     // 閲覧履歴の「見た順」を逆にしたら、最近見たものを下に
     if (reversed && !shownSort) list = [...list].reverse()
     if (shownUnreadTop) list = unreadFirstOrder(list, (t) => shownUnreadTop.has(threadId(t)))
@@ -583,7 +592,7 @@ export default function ThreadListPanel(props: Props) {
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, kwMatcher, props.historyMetaOf])
+  }, [props.favOrder, shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop, kwMatcher, props.historyMetaOf])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる
@@ -928,10 +937,53 @@ export default function ThreadListPanel(props: Props) {
   /** 並び順の何番目まで作るか数えながら、カードを作る(キーワードのまとまりをまたいでも、上からの順で数える) */
   let rendered = 0
   const renderLimited = (t: ThreadSummary) => (rendered++ < renderLimit ? renderThread(t) : null)
+  // お気に入りの絞り込み(並べ替えなし・検索なし)では、カードをつかんで動かして並べ替えられる
+  const reorderable = !isMobile && filter === 'fav' && !shownSort && !!props.onReorderFavorites && searchTerms.length === 0
+  const dragId = useRef<string>(undefined)
+  const [dragOver, setDragOver] = useState<string>()
+  const reorderWrap = (id: string, card: ReactNode) => (
+    <div
+      key={id}
+      draggable
+      onDragStart={(e) => {
+        dragId.current = id
+        e.dataTransfer.effectAllowed = 'move'
+      }}
+      onDragOver={(e) => {
+        if (!dragId.current || dragId.current === id) return
+        e.preventDefault()
+        if (dragOver !== id) setDragOver(id)
+      }}
+      onDragLeave={() => setDragOver((v) => (v === id ? undefined : v))}
+      onDrop={(e) => {
+        e.preventDefault()
+        const from = dragId.current
+        dragId.current = undefined
+        setDragOver(undefined)
+        if (!from || from === id) return
+        const ids = visible.map(threadId)
+        const fromI = ids.indexOf(from)
+        const toI = ids.indexOf(id)
+        if (fromI < 0 || toI < 0) return
+        const next = [...visible]
+        const [moved] = next.splice(fromI, 1)
+        next.splice(toI, 0, moved)
+        props.onReorderFavorites?.(next)
+      }}
+      onDragEnd={() => {
+        dragId.current = undefined
+        setDragOver(undefined)
+      }}
+      // 落とす先の上辺に差し色の線
+      style={dragOver === id ? { boxShadow: 'inset 0 2px 0 var(--c-accent)' } : undefined}
+    >
+      {card}
+    </div>
+  )
 
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
-    return (
+    const card = (
       <ThreadCard
         key={id}
         thread={t}
@@ -962,6 +1014,7 @@ export default function ThreadListPanel(props: Props) {
         historyMeta={props.historyMetaOf?.(t)}
       />
     )
+    return reorderable ? reorderWrap(id, card) : card
   }
 
   // 未読・勢い順などのタブ。PC はヘッダーの下、スマホはフッターの左に置く

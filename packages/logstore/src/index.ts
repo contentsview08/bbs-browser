@@ -203,6 +203,10 @@ export function removeFavoriteThreadStatement(thread: ThreadSummary): SqlStateme
   return { sql: 'DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', params: [thread.boardUrl, thread.key] }
 }
 
+/** お気に入りのスレの並べ替え(sort を 0 から振り直す)。並びは端末ごとなので同期には送らない */
+export const reorderFavoriteThreadStatements = (threads: { boardUrl: string; key: string }[]): SqlStatement[] =>
+  threads.map((t, i) => ({ sql: 'UPDATE favorite_threads SET sort = $1 WHERE board_url = $2 AND key = $3', params: [i, t.boardUrl, t.key] }))
+
 export function addFavoriteBoardStatement(board: Board): SqlStatement {
   return {
     sql: `INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort)
@@ -748,6 +752,11 @@ export class LogStore {
   async removeFavoriteThread(thread: ThreadSummary): Promise<void> {
     const { sql, params } = removeFavoriteThreadStatement(thread)
     await this.db.execute(sql, params)
+  }
+
+  /** お気に入りのスレを、渡した順に並べ替える(つかんで動かしたとき) */
+  async reorderFavoriteThreads(threads: { boardUrl: string; key: string }[]): Promise<void> {
+    for (const { sql, params } of reorderFavoriteThreadStatements(threads)) await this.db.execute(sql, params)
   }
 
   // ── 書き込みの下書き ──

@@ -51,7 +51,7 @@ import org.json.JSONObject
  */
 enum class ToolbarBar(val key: String, val label: String) { HEADER("header", "ヘッダー"), FOOTER("footer", "フッター") }
 
-class ToolbarPartDef(val id: String, val name: String, val icon: ImageVector, /** 残りの幅を埋める(チャット欄・空き) */ val fills: Boolean = false)
+class ToolbarPartDef(val id: String, val name: String, val icon: ImageVector, /** 残りの幅を埋める(チャット欄・空き) */ val fills: Boolean = false, /** スレ一覧のタブ(並べ方・絞り込み)。フッターにだけ置ける */ val tab: Boolean = false)
 
 /** スレ表示の部品 */
 val THREAD_PARTS = listOf(
@@ -74,8 +74,11 @@ val THREAD_PARTS = listOf(
     ToolbarPartDef("delete", "ログ削除", Icons.Filled.Delete),
 )
 
-/** スレ一覧の部品(フッターの左にはいつもタブが並ぶ) */
-val LIST_PARTS = listOf(
+/** スレ一覧のタブ(フッターに並ぶ並べ方・絞り込み)。id は "tab:" + ListTab の key。並びと出すかどうかは Prefs.listTabs が元 */
+val LIST_TAB_PARTS: List<ToolbarPartDef> get() = ListTab.entries.map { ToolbarPartDef("tab:${it.key}", it.label, it.icon, tab = true) }
+
+/** スレ一覧の部品(タブもフッターの部品の 1 つ) */
+val LIST_PARTS = LIST_TAB_PARTS + listOf(
     ToolbarPartDef("spacer", "空き", Icons.Filled.SpaceBar, fills = true),
     ToolbarPartDef("search", "スレッド検索", Icons.Filled.Search),
     ToolbarPartDef("quickAccess", "クイックアクセス", Icons.Filled.Dashboard),
@@ -101,8 +104,19 @@ class ToolbarLayout(val header: List<String>, val footer: List<String>) {
     fun unplaced(area: String): List<ToolbarPartDef> = toolbarPartsOf(area).filter { it.id == "spacer" || (it.id !in header && it.id !in footer) }
 }
 
-/** 保存してある並び。前の形(v1: 操作 → 置き場、と並び)からは読み替える */
+/** 保存してある並び。スレ一覧のタブは Prefs.listTabs(PC 版・スキン・同期と共通)を元に、フッターの中の位置だけをここで持つ */
 fun toolbarLayout(prefs: Prefs, area: String): ToolbarLayout {
+    val l = toolbarLayoutRaw(prefs, area)
+    if (area != "list") return l
+    // タブは listTabs の並びで、フッターの最初のタブの位置(なければ左端)にまとめて置く
+    val tabs = prefs.listTabs.split(',').filter { k -> ListTab.entries.any { it.key == k } }.map { "tab:$it" }
+    val at = l.footer.indexOfFirst { it.startsWith("tab:") }.let { if (it < 0) 0 else it }
+    val rest = l.footer.filter { !it.startsWith("tab:") }
+    val before = l.footer.take(at).filter { !it.startsWith("tab:") }
+    return ToolbarLayout(l.header.filter { !it.startsWith("tab:") }, before + tabs + rest.drop(before.size))
+}
+
+private fun toolbarLayoutRaw(prefs: Prefs, area: String): ToolbarLayout {
     val all = runCatching { JSONObject(prefs.barLayout) }.getOrNull() ?: return defaultLayout(area)
     val known = toolbarPartsOf(area).map { it.id }.toSet()
     fun ids(a: JSONArray?): List<String>? = a?.let { arr -> List(arr.length()) { arr.getString(it) }.filter { it in known } }
@@ -123,10 +137,12 @@ fun toolbarLayout(prefs: Prefs, area: String): ToolbarLayout {
 }
 
 fun saveToolbarLayout(prefs: Prefs, area: String, layout: ToolbarLayout) {
+    // スレ一覧のタブの並びは listTabs に(PC 版・スキン・同期と共通)
+    if (area == "list") prefs.listTabs = layout.footer.filter { it.startsWith("tab:") }.joinToString(",") { it.removePrefix("tab:") }
     val all = runCatching { JSONObject(prefs.barLayout).takeIf { it.optInt("v") == 2 } }.getOrNull() ?: JSONObject().put("v", 2)
     // 両方の画面を v2 の形で持つ(片方だけ新しい形にならないように)
     for (a in listOf("thread", "list")) if (!all.has(a) || a == area) {
-        val l = if (a == area) layout else toolbarLayout(prefs, a)
+        val l = if (a == area) layout else toolbarLayoutRaw(prefs, a)
         all.put(a, JSONObject().put("header", JSONArray(l.header)).put("footer", JSONArray(l.footer)))
     }
     prefs.barLayout = all.toString()

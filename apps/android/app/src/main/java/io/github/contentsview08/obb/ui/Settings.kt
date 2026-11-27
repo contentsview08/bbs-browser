@@ -106,7 +106,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ツールバー設定", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ボタンの配置", "bars_thread" to "スレ表示のボタン", "bars_list" to "スレ一覧のボタンとタブ", "bars_history" to "履歴のタブ", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "skin" to "スキンを編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
@@ -185,6 +185,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
             "kwlist" -> "list"
             "custom" -> "theme"
             "skin" -> "theme"
+            "bars_thread", "bars_list", "bars_history" -> "bars"
             else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
         viaSearch = viaSearch && sub != null
@@ -210,12 +211,15 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "theme" -> ThemePage(vm) { sub = it }
                 "text" -> TextPage(vm)
                 "list" -> ListPage(vm) { sub = it }
-                "history" -> HistoryPage(vm)
+                "history" -> HistoryPage(vm) { sub = it }
                 "thread" -> ThreadPage(vm)
                 "media" -> MediaPage(vm)
                 "write" -> WritePage(vm)
                 "gestures" -> GesturesPage(vm)
-                "bars" -> ToolbarPage(vm)
+                "bars" -> ToolbarPage(vm) { sub = it }
+                "bars_thread" -> ToolbarAreaPage(vm, "thread")
+                "bars_list" -> ToolbarAreaPage(vm, "list")
+                "bars_history" -> HistoryTabsPage(vm)
                 "behavior" -> BehaviorPage(vm)
                 "notify" -> NotifyPage(vm)
                 "ng" -> NgPage(vm) { sub = it }
@@ -290,9 +294,9 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字", value = io.github.contentsview08.obb.data.Fonts.CHOICES.firstOrNull { it.key == p.fontFamily }?.name ?: "端末の標準") { open("text") }
     }
     Group("画面") {
-        NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
+        NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード") { open("list") }
         NavRow(Icons.Filled.Forum, Color(0xFF3B82F6), "スレ表示", desc = "開いたときの位置・本文・リンク") { open("thread") }
-        NavRow(Icons.Filled.History, Color(0xFF0D9488), "履歴", desc = "タブの並び・置き場") { open("history") }
+        NavRow(Icons.Filled.History, Color(0xFF0D9488), "履歴", desc = "ログを残す日数・消すとき") { open("history") }
         NavRow(Icons.Filled.Image, Color(0xFF06B6D4), "画像と動画", desc = "サムネイル・読み込み・グロ注意") { open("media") }
     }
     Group("書き込み") {
@@ -300,7 +304,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("操作") {
         NavRow(Icons.Filled.Swipe, Color(0xFFEC4899), "ジェスチャー", desc = "なぞって操作する形") { open("gestures") }
-        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ツールバー設定", desc = "ヘッダー・フッターのボタンと並び・大きさ・文字") { open("bars") }
+        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ボタンの配置", desc = "ヘッダー・フッターのボタンとタブ") { open("bars") }
         NavRow(Icons.Filled.Sync, Color(0xFF10B981), "スクロールと更新", desc = "自動更新・閲覧履歴の新着の確認") { open("behavior") }
         NavRow(Icons.Filled.Notifications, Color(0xFFF43F5E), "通知", desc = "OS の通知・知らせる種類") { open("notify") }
     }
@@ -764,27 +768,8 @@ private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
         ChoiceRow("行の形", p.listShape, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listShape = it }
     }
     // 「板を開いたときの並び」の説明がここを指すので、ふだんの設定に出す
-    Group("タブ", note = "一覧の下に出すタブと、その並び(左から)") {
-        val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順", "keyword" to "キーワード")
-        val on = p.listTabs.split(',').filter { k -> all.any { it.first == k } }
-        fun item(k: String) = DockItem(k, all.first { it.first == k }.second, ListTab.entries.firstOrNull { it.key == k }?.icon)
-        ChipDock(
-            docks = listOf(DockSpec("tabs", "一覧の下のタブ(実際のフッターと同じ並び)", on.map(::item), emptyHint = "ここに入れる", alignEnd = false)),
-            palette = all.filter { it.first !in on }.map { item(it.first) },
-            onPlace = { _, id, index -> p.listTabs = on.toMutableList().apply { add(index.coerceIn(0, size), id) }.joinToString(",") },
-            onMove = { _, from, to -> p.listTabs = on.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") },
-            onRemove = { _, index -> p.listTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
-            paletteTitle = "使えるタブ",
-            plainPlaced = true,
-            // 実際のフッターのタブと同じ見た目(アイコン・名前・並べ方は下向きの矢印)。箱の外も同じ形で
-            look = { it, _ ->
-                Row(Modifier.heightIn(min = 40.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (it.icon != null) Icon(it.icon, null, tint = Palette.textMuted, modifier = Modifier.size(17.dp))
-                    Text(it.name, color = Palette.textMuted, fontSize = 14.sp)
-                    if (it.id !in setOf("unread", "visited", "keyword")) Icon(Icons.Filled.ArrowDownward, null, tint = Palette.textMuted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
-                }
-            },
-        )
+    Group("タブ", note = "一覧の下のタブ(並べ方・絞り込み)とボタンは、ボタンの配置でまとめて決めます") {
+        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ボタンの配置(スレ一覧)", desc = "フッターのタブとボタン・ヘッダーのボタン") { open("bars_list") }
     }
     var kwAdding by remember { mutableStateOf(false) }
     Group("キーワード", note = "スレタイの言葉(正規表現も)や立てた人で、スレを一覧のいちばん上に帯でまとめて出します。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を長押しすると直せます") {
@@ -793,29 +778,20 @@ private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
         SwitchRow("キーワードに当たるスレを帯で上にまとめる", p.keywordBands, desc = "切ると、ふだんの並びのまま出します。キーワードに当たるスレだけを見るには、タブに「キーワード」を出します") { p.keywordBands = it }
     }
     if (kwAdding) KeywordEditSheet(io.github.contentsview08.obb.data.KeywordRule(), openBoardOf(vm), vm.favorites.map { it.url to it.name }, isNew = true, onDismiss = { kwAdding = false }) { p.upsertKeywordRule(it); kwAdding = false }
-    if (LocalAdvanced.current) Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
-        NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
-        ActionRow("今すぐ消す") { vm.pruneLogsNow() }
-    }
 }
 
 @Composable
-private fun HistoryPage(vm: AppViewModel) {
+private fun HistoryPage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
-    Group("タブ", note = "履歴の画面に出すタブと、その並び(左から)。すべては外せません") {
-        val on = shownPastTabs(p.pastTabs)
-        fun item(k: String) = DockItem(k, PAST_TABS.first { it.first == k }.second, null)
-        ChipDock(
-            docks = listOf(DockSpec("tabs", "履歴のタブ", on.map(::item), minItems = 1, alignEnd = false)),
-            palette = PAST_TABS.filter { it.first !in on }.map { item(it.first) },
-            onPlace = { _, id, index -> p.pastTabs = on.toMutableList().apply { add(index.coerceIn(0, size), id) }.joinToString(",") },
-            onMove = { _, from, to -> p.pastTabs = on.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") },
-            onRemove = { _, index -> if (on.size > 1) p.pastTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
-            paletteTitle = "使えるタブ",
-        )
+    Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
+        NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
+        ActionRow("今すぐ消す") { vm.pruneLogsNow() }
     }
-    Group(note = "履歴の画面のタブを置く場所です。既定はフッター(下)です") {
-        ChoiceRow("タブの置き場", p.pastTabsPosition, listOf("footer" to "フッター(下)", "header" to "ヘッダー(上)")) { p.pastTabsPosition = it }
+    Group("ログの削除") {
+        SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog, desc = "確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます") { p.confirmDeleteLog = it }
+    }
+    Group("タブ", note = "履歴の画面のタブの並び・置き場は、ボタンの配置で決めます") {
+        NavRow(Icons.Filled.Tune, Color(0xFF64748B), "ボタンの配置(履歴)", desc = "タブの並び・置き場") { open("bars_history") }
     }
 }
 
@@ -1018,7 +994,6 @@ private fun BehaviorPage(vm: AppViewModel) {
     Group("スクロール") {
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
-        if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
         ChoiceRow(
@@ -1905,3 +1880,7 @@ private fun InfoRow(label: String, value: String) {
         Text(value, color = Palette.textMuted, fontSize = 13.sp)
     }
 }
+
+/** 設定の行(ほかのファイルのページから使う) */
+@Composable
+internal fun NavRowPublic(icon: ImageVector, color: Color, label: String, desc: String?, onClick: () -> Unit) = NavRow(icon, color, label, desc = desc, onClick = onClick)

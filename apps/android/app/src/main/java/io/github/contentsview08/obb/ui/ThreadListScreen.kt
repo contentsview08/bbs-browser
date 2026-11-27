@@ -269,6 +269,18 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             "openBrowser" -> openExternal(barContext, page.board.url, false)
         }
     }
+    /** スレ一覧のフッターのボタン 1 つ(設定「ボタンの配置」)。空きは何もしない */
+    @Composable
+    fun ListFooterButton(id: String) {
+        val d = toolbarPart("list", id) ?: return
+        if (d.fills || d.tab) return
+        val footerH = vm.prefs.footerHeight
+        if (id == "refresh") Box(
+            Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page, manual = true) },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
+        else ToolbarButton(d, vm.prefs) { runListBarAction(id) }
+    }
     menuFor?.let { p -> ThreadPeek(vm, p, page.states[p.thread.key] != null) { menuFor = null } }
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.reversed || page.only != null) {
         if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
@@ -478,6 +490,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(スレ順(標準)は選んでいないのと同じなので足さない)
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
                     .let { ts -> defaultTab(sort).let { d -> if (d == ListTab.ORDER || d in ts) ts else ts + d } }
+                // 設定「ボタンの配置」のフッターの並び: タブより左に置いたボタン → タブ(残りの幅。横に送れる) → タブより右のボタン
+                val footerIds = listToolbar.footer
+                val firstTab = footerIds.indexOfFirst { it.startsWith("tab:") }
+                val footerBefore = if (firstTab < 0) emptyList() else footerIds.take(firstTab)
+                val footerAfter = footerIds.filter { !it.startsWith("tab:") && it !in footerBefore }
+                for (id in footerBefore) ListFooterButton(id)
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
@@ -520,16 +538,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 }
                 }
                 val footerH = vm.prefs.footerHeight
-                // 設定「ツールバー設定」でフッターに置いた部品(タブの右に、並びの順で。空きはタブが幅を取るので何もしない)
-                for (id in listToolbar.footer) {
-                    val d = toolbarPart("list", id) ?: continue
-                    if (d.fills) continue
-                    if (id == "refresh") Box(
-                        Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page, manual = true) },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
-                    else ToolbarButton(d, vm.prefs) { runListBarAction(id) }
-                }
+                // 設定「ボタンの配置」でタブより右に置いたボタン
+                for (id in footerAfter) ListFooterButton(id)
             }
         }
 

@@ -9,7 +9,7 @@ class SettingsIndexTest {
 
     @Test fun まとまりの見出しと数の項目も索引に入る() {
         assertTrue(has("write", "定型文"))
-        assertTrue(has("list", "残す日数"))
+        assertTrue(has("history", "残す日数"))
         assertTrue(has("backup", "まるごとバックアップ"))
     }
 
@@ -23,7 +23,7 @@ class SettingsIndexTest {
 
     @Test fun 未読を上にと履歴のタブの置き場も索引に入る() {
         assertTrue(has("list", "未読を上に"))
-        assertTrue(has("history", "タブの置き場"))
+        assertTrue(has("bars_history", "履歴のタブ"))
     }
 
     @Test fun スキンと配色のページも索引に入る() {

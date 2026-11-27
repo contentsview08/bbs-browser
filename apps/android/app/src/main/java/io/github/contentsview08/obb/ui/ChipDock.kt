@@ -167,21 +167,32 @@ fun ChipDock(
     fun DockBox(dock: DockSpec) {
         val over = dragging?.let { d -> dockBounds[dock.key]?.inflate(16f)?.contains(d.pos) == true && itemOf(d.id)?.let { allowIn(it, dock.key) } == true } == true
         Text(dock.label, Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 60.dp)
-                .onGloballyPositioned { dockBounds[dock.key] = it.boundsInRoot() }
-                .clip(RoundedCornerShape(8.dp)).background(Palette.bar)
-                .border(BorderStroke(if (over) 2.dp else 1.dp, if (over) Palette.accent else Palette.border), RoundedCornerShape(8.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (dock.fixedLeading != null) Text(dock.fixedLeading, Modifier.weight(1f).padding(start = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
-            else if (dock.alignEnd && dock.items.none { it.fills }) Spacer(Modifier.weight(1f))
-            if (dock.items.isEmpty() && dock.emptyHint != null) Text(dock.emptyHint, Modifier.padding(end = 8.dp), color = Palette.textMuted, fontSize = 12.sp)
+        val boxMod = Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 60.dp)
+            .onGloballyPositioned { dockBounds[dock.key] = it.boundsInRoot() }
+            .clip(RoundedCornerShape(8.dp)).background(Palette.bar)
+            .border(BorderStroke(if (over) 2.dp else 1.dp, if (over) Palette.accent else Palette.border), RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+        if (dock.items.any { it.fills }) Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
+            // 幅を埋める部品(チャット欄・空き)があるときは 1 行(実際の帯と同じ)
+            if (dock.fixedLeading != null) Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
             for ((i, item) in dock.items.withIndex()) {
                 if (item.fills) Box(Modifier.weight(1f).padding(horizontal = 2.dp), contentAlignment = Alignment.Center) { Chip(item, dock, i) }
                 else Chip(item, dock, i)
             }
+        } else if (dock.fixedLeading != null) Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
+            // 題名などは左に固定し、部品は右に寄せて折り返す(実際のヘッダーと同じ並び)
+            Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+            FlowRow(with(this) { Modifier.weight(1f) }, horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.End), verticalArrangement = Arrangement.Center) {
+                for ((i, item) in dock.items.withIndex()) Box(Modifier.align(Alignment.CenterVertically)) { Chip(item, dock, i) }
+            }
+        } else FlowRow(
+            // 幅を埋める部品がなければ折り返す(多く入れても画面からはみ出さない)
+            boxMod,
+            horizontalArrangement = Arrangement.spacedBy(2.dp, if (dock.alignEnd) Alignment.End else Alignment.Start),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            if (dock.items.isEmpty() && dock.emptyHint != null) Text(dock.emptyHint, Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp), color = Palette.textMuted, fontSize = 12.sp)
+            for ((i, item) in dock.items.withIndex()) Box(Modifier.align(Alignment.CenterVertically)) { Chip(item, dock, i) }
         }
     }
 

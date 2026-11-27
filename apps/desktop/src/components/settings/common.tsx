@@ -7,7 +7,7 @@ import type { Board, LoginResult, SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import { LIST_TABS, type ListTabKey, type AppSettings, type BoardMeta, type UpdateSetting } from '../../ui/settings'
 import { isMobile } from '../../utils/platform'
-import { DragHandle, DragList } from '../DragSort'
+import { ChipDock } from './ChipDock'
 import { ListEditor, SamplePosts, TextSetting } from '../SettingParts'
 import { INPUT } from '../DialogParts'
 
@@ -204,8 +204,8 @@ export function Choice<T extends string | number>(props: {
 }
 
 /**
- * 出すものを選んで並べる(スレ一覧のタブ・レスの操作バー)。出しているものは右のつまみをつかんで上下に動かして並べる(上が左)。
- * − で外し、下の「出していないもの」の + で足す
+ * 出すものを選んで並べる(スレ一覧のタブ・レスとスレの操作バー)。箱に入っているものが出て、左から順に並ぶ。
+ * 部品をつかんで箱に入れる・箱の中で動かす・外へ出して外す(押すとメニューでも動かせる。ChipDock)
  */
 export function OrderEditor<K extends string>(props: {
   all: { key: K; name: string; icon: string; note?: string }[]
@@ -215,50 +215,32 @@ export function OrderEditor<K extends string>(props: {
   restTitle?: string
   /** これより少なくは外せない */
   minShown?: number
+  /** 箱の名前 */
+  dockLabel?: string
 }) {
   const shown = props.value.filter((k) => props.all.some((t) => t.key === k))
-  const rest = props.all.map((t) => t.key).filter((k) => !shown.includes(k))
-  const def = (k: K) => props.all.find((t) => t.key === k)!
-  const pad = isMobile ? 'px-3 py-2.5 rounded-xl' : 'px-3 py-1.5 rounded-lg'
-  const text = isMobile ? 'text-[15px]' : 'text-sm'
+  const item = (k: K) => {
+    const d = props.all.find((t) => t.key === k)!
+    return { id: k, name: d.name, icon: d.icon }
+  }
   return (
-    <div className="flex flex-col gap-3">
-      <DragList
-        items={shown}
-        onChange={props.onChange}
-        render={(k, handle, dragging) => (
-          <div className={`flex items-center gap-3 ${pad} border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
-            <button type="button" disabled={shown.length <= (props.minShown ?? 0)} onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot disabled:opacity-30" title="外す">
-              <span className="material-symbols-outlined fill text-xl">do_not_disturb_on</span>
-            </button>
-            <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
-            <span className="flex-1 min-w-0">
-              <span className={`block ${text} text-c-text-strong`}>{def(k).name}</span>
-              {def(k).note && <span className="block text-xs text-c-text-muted">{def(k).note}</span>}
-            </span>
-            <DragHandle handle={handle} />
-          </div>
-        )}
-      />
-      {shown.length === 0 && <p className="text-xs text-c-text-muted">何も出していません</p>}
-      {rest.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-bold text-c-text-muted">{props.restTitle ?? '出していないもの'}</p>
-          {rest.map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => props.onChange([...shown, k])}
-              className={`flex items-center gap-3 ${pad} border border-dashed border-c-border text-left hover:bg-c-surface2 active:bg-c-surface2`}
-            >
-              <span className="material-symbols-outlined fill text-xl text-c-accent">add_circle</span>
-              <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
-              <span className={`${text} text-c-text-body`}>{def(k).name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <ChipDock
+      docks={[{ key: 'shown', label: props.dockLabel ?? '出すもの(左から順)', items: shown.map(item), minItems: props.minShown }]}
+      palette={props.all.filter((t) => !shown.includes(t.key)).map((t) => item(t.key))}
+      paletteTitle={props.restTitle ?? '出していないもの'}
+      onPlace={(_, id, index) => {
+        const next = [...shown]
+        next.splice(Math.min(index, next.length), 0, id as K)
+        props.onChange(next)
+      }}
+      onMove={(_, from, to) => {
+        const next = [...shown]
+        const [m] = next.splice(from, 1)
+        next.splice(to, 0, m)
+        props.onChange(next)
+      }}
+      onRemove={(_, index) => props.onChange(shown.filter((_, i) => i !== index))}
+    />
   )
 }
 

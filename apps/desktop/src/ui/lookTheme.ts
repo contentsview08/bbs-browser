@@ -35,12 +35,12 @@ export const COMMON_KEYS = [
   'postStyle',
   'idStyle', 'idShort', 'idPosition', 'dateStyle', 'heatStyle', 'highlightOp', 'nameSubtle', 'omitNoname', 'watchoiShort', 'iconFromWatchoi',
   'urlShorten', 'tidyBlankLines', 'showMinimap', 'showLinkPreview', 'openLinksInApp',
-  'threadSort', 'unreadFirst', 'listShape', 'keywordBands', 'openPosition', 'showNextCandidatesAtEnd', 'showNextUnreadAtEnd',
+  'threadSort', 'unreadFirst', 'listShape', 'keywordBands', 'listTabs', 'openPosition', 'showNextCandidatesAtEnd', 'showNextUnreadAtEnd',
   'blurGross', 'postThumbSize', 'thumbLoad', 'reduceMotion', 'ngMode', 'groupNg', 'pastTabsPosition', 'hideBarsOnScroll',
   'mobileFontPx', 'listFontPx', 'postBodyPx', 'postHeadPx', 'listPadPx', 'postPadPx', 'postLineHeight', 'headerPx', 'footerPx',
 ] as const satisfies readonly (keyof AppSettings)[]
 /** PC 版だけの項目(JSON の pc) */
-export const PC_KEYS = ['fontFamily', 'styleOptions', 'fontPx', 'contentBasePx', 'replyFontPx', 'barFontPx', 'panelOpacity', 'backgroundOpacity', 'listThumbScale', 'anchorPopup'] as const satisfies readonly (keyof AppSettings)[]
+export const PC_KEYS = ['fontFamily', 'styleOptions', 'fontPx', 'contentBasePx', 'replyFontPx', 'barFontPx', 'panelOpacity', 'backgroundOpacity', 'listThumbScale', 'anchorPopup', 'barLayout', 'barOrder', 'mobileBarLayout', 'mobileBarOrder', 'postToolbar2', 'threadToolbar'] as const satisfies readonly (keyof AppSettings)[]
 const KEYS = new Set<string>([...COMMON_KEYS, ...PC_KEYS])
 
 export interface LookTheme {

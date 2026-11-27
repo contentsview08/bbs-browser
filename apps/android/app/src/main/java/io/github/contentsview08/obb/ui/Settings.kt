@@ -763,20 +763,18 @@ private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
         ChoiceRow("行の形", p.listShape, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listShape = it }
     }
     // 「板を開いたときの並び」の説明がここを指すので、ふだんの設定に出す
-    Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
+    Group("タブ", note = "一覧の下に出すタブと、その並び(左から)") {
         val all = listOf("order" to "スレ順", "unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順", "keyword" to "キーワード")
-        val on = p.listTabs.split(',').filter { it.isNotEmpty() }
-        @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
-                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), colors = accentSwitchColors())
-                if (handle != null) DragHandleIcon(handle) else Spacer(Modifier.size(46.dp))
-            }
-        // 出しているものは掴んで並べ替える。出していないものは後ろに(並びはない)
-        ReorderableColumn(on, { it }, { from, to -> p.listTabs = p.listTabs.split(',').filter { it.isNotEmpty() }.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") }) { k, handle, _ ->
-            TabRow(k, all.firstOrNull { it.first == k }?.second ?: k, true, handle)
-        }
-        for ((k, name) in all.filter { it.first !in on }) TabRow(k, name, false, null)
+        val on = p.listTabs.split(',').filter { k -> all.any { it.first == k } }
+        fun item(k: String) = DockItem(k, all.first { it.first == k }.second, null)
+        ChipDock(
+            docks = listOf(DockSpec("tabs", "一覧の下のタブ", on.map(::item), emptyHint = "ここに入れる", alignEnd = false)),
+            palette = all.filter { it.first !in on }.map { item(it.first) },
+            onPlace = { _, id, index -> p.listTabs = on.toMutableList().apply { add(index.coerceIn(0, size), id) }.joinToString(",") },
+            onMove = { _, from, to -> p.listTabs = on.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") },
+            onRemove = { _, index -> p.listTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
+            paletteTitle = "使えるタブ",
+        )
     }
     var kwAdding by remember { mutableStateOf(false) }
     Group("キーワード", note = "スレタイの言葉(正規表現も)や立てた人で、スレを一覧のいちばん上に帯でまとめて出します。正規表現には別名を付けて帯に出せます。板ごとにもできます。帯を長押しすると直せます") {
@@ -794,18 +792,17 @@ private fun ListPage(vm: AppViewModel, open: (String) -> Unit) {
 @Composable
 private fun HistoryPage(vm: AppViewModel) {
     val p = vm.prefs
-    Group("タブ", note = "履歴の画面に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)。すべては隠せません") {
+    Group("タブ", note = "履歴の画面に出すタブと、その並び(左から)。すべては外せません") {
         val on = shownPastTabs(p.pastTabs)
-        @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
-                Switch(shown, { v -> p.pastTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), enabled = !shown || on.size > 1, colors = accentSwitchColors())
-                if (handle != null) DragHandleIcon(handle) else Spacer(Modifier.size(46.dp))
-            }
-        ReorderableColumn(on, { it }, { from, to -> p.pastTabs = shownPastTabs(p.pastTabs).toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") }) { k, handle, _ ->
-            TabRow(k, PAST_TABS.first { it.first == k }.second, true, handle)
-        }
-        for ((k, name) in PAST_TABS.filter { it.first !in on }) TabRow(k, name, false, null)
+        fun item(k: String) = DockItem(k, PAST_TABS.first { it.first == k }.second, null)
+        ChipDock(
+            docks = listOf(DockSpec("tabs", "履歴のタブ", on.map(::item), minItems = 1, alignEnd = false)),
+            palette = PAST_TABS.filter { it.first !in on }.map { item(it.first) },
+            onPlace = { _, id, index -> p.pastTabs = on.toMutableList().apply { add(index.coerceIn(0, size), id) }.joinToString(",") },
+            onMove = { _, from, to -> p.pastTabs = on.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") },
+            onRemove = { _, index -> if (on.size > 1) p.pastTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
+            paletteTitle = "使えるタブ",
+        )
     }
     Group(note = "履歴の画面のタブを置く場所です。既定はフッター(下)です") {
         ChoiceRow("タブの置き場", p.pastTabsPosition, listOf("footer" to "フッター(下)", "header" to "ヘッダー(上)")) { p.pastTabsPosition = it }

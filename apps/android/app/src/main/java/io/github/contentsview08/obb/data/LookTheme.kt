@@ -27,12 +27,12 @@ object LookTheme {
         "postStyle",
         "idStyle", "idShort", "idPosition", "dateStyle", "heatStyle", "highlightOp", "nameSubtle", "omitNoname", "watchoiShort", "iconFromWatchoi",
         "urlShorten", "tidyBlankLines", "showMinimap", "showLinkPreview", "openLinksInApp",
-        "threadSort", "unreadFirst", "listShape", "keywordBands", "openPosition", "showNextCandidatesAtEnd", "showNextUnreadAtEnd",
+        "threadSort", "unreadFirst", "listShape", "keywordBands", "listTabs", "openPosition", "showNextCandidatesAtEnd", "showNextUnreadAtEnd",
         "blurGross", "postThumbSize", "thumbLoad", "reduceMotion", "ngMode", "groupNg", "pastTabsPosition", "hideBarsOnScroll",
         "mobileFontPx", "listFontPx", "postBodyPx", "postHeadPx", "listPadPx", "postPadPx", "postLineHeight", "headerPx", "footerPx",
     )
     /** スマホだけの項目(JSON の android) */
-    val ANDROID_KEYS = setOf("fontFamily", "styleOptions")
+    val ANDROID_KEYS = setOf("fontFamily", "styleOptions", "barLayout", "toolbarIconSize", "toolbarLabel", "pastTabs")
     val KEYS = COMMON_KEYS + ANDROID_KEYS
 
     /** スキンの JSON か(自分の配色だけの JSON と見分ける) */

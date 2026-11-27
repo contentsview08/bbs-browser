@@ -735,7 +735,7 @@ class Prefs(context: Context) {
             "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "keywordRules", "grossWords", "quickPhrases",
             "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
             // 見た目ごとの設定(ツリー表示など)。見た目のテーマで読み書きするので JSON のまま
-            "styleOptions", "lookThemes",
+            "styleOptions", "lookThemes", "barLayout",
         )
 
         /** なぞる操作の既定 */

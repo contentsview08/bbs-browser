@@ -516,15 +516,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 掲示板で分かった数を入れ替えて覚える。覚えるのは履歴・お気に入りのスレの分だけ(増え続けないように) */
     fun updateRemoteCounts(next: Map<String, Int>) {
         remoteCounts = next
-        val keep = HashSet<String>().apply { history.forEach { add(it.thread.id) }; favThreads.forEach { add(it.thread.id) }; allUnread.forEach { add(it.thread.id) } }
+        val keep = HashSet<String>().apply { history.forEach { add(it.thread.id) }; favThreads.forEach { add(it.thread.id) } }
         val save = if (keep.isEmpty()) next else next.filterKeys { it in keep }
         countStore.edit().putString("v", org.json.JSONObject(save).toString()).apply()
     }
     var checking by mutableStateOf(false)
         private set
 
-    /** 未読のスレ(閲覧履歴のうち、新着のあるもの) */
-    var allUnread by mutableStateOf<List<HistoryEntry>>(emptyList())
+    /**
+     * 未読のスレ(閲覧履歴のうち、新着のあるもの)。閲覧履歴(history)と掲示板で分かったレス数(remoteCounts)から毎回導く。
+     * 前は別に持つ一覧で、ログの削除・裏の確認(Crawler・checkNew)が履歴やレス数だけを直して一覧を直さず、
+     * 札の数と一覧の中身が食い違っていた(消したスレが札に数え続けられる・新しく未読になったスレが札に入らない)。
+     * 1 つの元から導けば、履歴の行・未読の一覧・札はいつも同じ数になる
+     */
+    val allUnread: List<HistoryEntry> get() = unreadEntries(history, remoteCounts)
     /** 未読のレスの数の合計(札に出す数。スレの数ではなく、スレごとの新着を足したもの) */
     val unreadTotal: Int get() = allUnread.sumOf { maxOf(0, unreadTotalOf(it, remoteCounts) - it.readNo) }
     /**
@@ -555,7 +560,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 updateRemoteCounts(counts)
-                allUnread = unreadEntries(hist, counts)
             } finally {
                 checking = false
             }
@@ -597,20 +601,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
     fun postedIn(url: String): PostHistoryEntry? = postHistory.firstOrNull { it.body.contains(url) }
 
-    /** 未読のスレを、手元の既読で数え直す(読んだスレは外す。通信はしない) */
+    /** 未読のスレを、手元の既読で数え直す(読んだスレは外す。通信はしない)。履歴を読み直せば、未読の一覧と札はそこから導かれる */
     private fun recountAllUnread() {
-        viewModelScope.launch {
-            val byBoard = allUnread.groupBy { it.thread.boardUrl }
-            val out = ArrayList<HistoryEntry>()
-            for ((url, list) in byBoard) {
-                val states = db.threadStates(url)
-                for (e in list) {
-                    val r = states[e.thread.key]?.readNo ?: e.readNo
-                    out += HistoryEntry(e.thread, r, e.readAt)
-                }
-            }
-            allUnread = unreadEntries(out, remoteCounts)
-        }
+        viewModelScope.launch { history = db.history() }
     }
 
     /** 閲覧履歴・お気に入りのスレの新着を確かめる(板ごとにスレ一覧を 1 回だけ読む) */
@@ -817,7 +810,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val hist = db.history()
         history = hist
         favThreads = db.favoriteThreads()
-        allUnread = unreadEntries(hist, remoteCounts)
         for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
         // 板の URL の書き方の揺れ(http・https、5ch.net・5ch.io)をそろえて比べる
         fun idOf(boardUrl: String, key: String) = "${io.github.contentsview08.obb.sync.normalizeBoardUrl(boardUrl) ?: boardUrl}\t$key"
@@ -1847,10 +1839,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun noteThreadCount(t: ThreadSummary, count: Int, readNo: Int) {
         if (count <= 0) return
         if ((remoteCounts[t.id] ?: 0) < count) updateRemoteCounts(remoteCounts + (t.id to count))
-        val entry = allUnread.firstOrNull { it.thread.id == t.id } ?: history.firstOrNull { it.thread.id == t.id }
+        // 履歴の行をその場で直す(DB から読み直すまで待たない)。履歴にないスレは先頭に足す(開いたので履歴に入る)
+        val entry = history.firstOrNull { it.thread.id == t.id }
         val fresh = HistoryEntry((entry?.thread ?: t).copy(postCount = count), maxOf(entry?.readNo ?: 0, readNo), entry?.readAt ?: System.currentTimeMillis())
-        val next = unreadEntries(allUnread.filter { it.thread.id != t.id } + fresh, remoteCounts)
-        if (next != allUnread) allUnread = next
+        if (entry == fresh) return
+        history = if (entry == null) listOf(fresh) + history else history.map { if (it.thread.id == t.id) fresh else it }
     }
 
     /**
@@ -1860,7 +1853,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun noteBoardCounts(boardUrl: String, list: List<ThreadSummary>) {
         fun norm(u: String) = io.github.contentsview08.obb.sync.normalizeBoardUrl(u) ?: u
         val board = norm(boardUrl)
-        val mine = (allUnread + history + favThreads).filter { norm(it.thread.boardUrl) == board }.distinctBy { it.thread.id }
+        val mine = (history + favThreads).filter { norm(it.thread.boardUrl) == board }.distinctBy { it.thread.id }
         if (mine.isEmpty()) return
         val byKey = list.associateBy { it.key }
         val next = remoteCounts.toMutableMap()
@@ -1871,7 +1864,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (!changed) return
         updateRemoteCounts(next)
-        allUnread = unreadEntries((allUnread + mine).distinctBy { it.thread.id }, next)
     }
 
     /**
@@ -1913,9 +1905,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** スレ一覧の長押しから: ログを削除(開いていないスレ) */
+    /** ログを消したスレを、履歴の一覧と覚えたレス数からその場で外す(DB を読み直す前に札の数を合わせる) */
+    private fun dropFromCounts(ids: Collection<String>) {
+        val set = ids.toSet()
+        history = history.filter { it.thread.id !in set }
+        if (remoteCounts.keys.any { it in set }) updateRemoteCounts(remoteCounts.filterKeys { it !in set })
+    }
+
     fun deleteLogOf(t: ThreadSummary) {
         viewModelScope.launch {
             db.userOps.deleteLogs(listOf(t))
+            dropFromCounts(listOf(t.id))
             forgetPositions(listOf(t.id))
             if (forwardPage?.summary?.id == t.id) forwardPage = null
             (stack.lastOrNull() as? Page.Threads)?.let { it.states = db.threadStates(it.board.url) }
@@ -1928,7 +1928,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromHistory(t: ThreadSummary) {
         viewModelScope.launch {
             db.userOps.historyRemove(t)
-            allUnread = allUnread.filter { it.thread.id != t.id }
+            history = history.filter { it.thread.id != t.id }
             reloadSide()
             toast = "履歴から外しました"
         }
@@ -1938,6 +1938,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLogsOf(list: List<ThreadSummary>) {
         viewModelScope.launch {
             db.userOps.deleteLogs(list)
+            dropFromCounts(list.map { it.id })
             forgetPositions(list.map { it.id })
             if (list.any { it.id == forwardPage?.summary?.id }) forwardPage = null
             // スタックの下のスレ一覧も、既読の印を読み直す
@@ -2030,6 +2031,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLog(page: Page.Thread) {
         viewModelScope.launch {
             db.userOps.deleteLogs(listOf(page.summary))
+            dropFromCounts(listOf(page.summary.id))
             forgetPositions(listOf(page.summary.id))
             back()
             // 消したスレを「進む」で開き直さない

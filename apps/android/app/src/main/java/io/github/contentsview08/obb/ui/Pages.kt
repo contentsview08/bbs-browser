@@ -417,7 +417,9 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
         belowHeader = { if (searching) SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" } },
     ) {
         if (searching && shown.isEmpty() && pool != null) Hint("見つかりませんでした")
-        else if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
+        // 未読を確かめている間に空なら、何もない画面でくるくるだけが回らないよう、確かめていることを出す
+        else if (entries.isEmpty() && tab == "unread" && vm.checking) Hint("新着を確かめています…")
+        else if (entries.isEmpty()) Hint(empty)
         else androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize(), state = pullState,
             // パネルでは一覧の上にくるくるを重ねない(ヘッダーの更新のボタンが回る)

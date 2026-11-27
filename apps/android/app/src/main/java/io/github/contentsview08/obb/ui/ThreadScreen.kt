@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -190,6 +191,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
     /** 設定「ボタンの配置」で帯に置いた操作の実行(︙ の同じ項目と同じ動き)。定義は BarActions.kt */
     val barPlaces = barPlacements(vm.prefs, "thread")
+    /** 書き込み欄をフッターの欄として出す(チャットの形)。そうでなければボタンで、押すと書き込みのパネルが上に出る */
+    val replyField = barPlaces["reply"] == BarPlace.FIELD
+    fun openReplyPanel() { page.reply.popup = true; page.reply.focusSeq++ }
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
     var styleSheet by remember { mutableStateOf(false) }
     val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
@@ -448,6 +452,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     fun runBarAction(id: String) {
         when (id) {
+            "reply" -> openReplyPanel()
             "search" -> { searching = true; bars.show() }
             "refresh" -> refresh()
             "favorite" -> vm.toggleFavoriteThread(page)
@@ -913,8 +918,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ThreadFooter(
                     vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null,
                     showRefresh = barPlaces["refresh"] == BarPlace.FOOTER,
-                    // 設定「ボタンの配置」でフッターに置いた操作(更新は別に描く)
-                    extra = barOrder(vm.prefs, "thread").filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" }.map { d -> d to { runBarAction(d.id) } },
+                    // 設定「ボタンの配置」でフッターに置いた操作(更新・書き込み欄は別に描く)
+                    extra = barOrder(vm.prefs, "thread").filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" && it.id != "reply" }.map { d -> d to { runBarAction(d.id) } },
+                    showField = replyField,
+                    replyButton = if (barPlaces["reply"] == BarPlace.FOOTER) ({ openReplyPanel() }) else null,
                 ) { refresh() }
             }
 
@@ -937,7 +944,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     if (menu) {
         MenuSheet(
             listOf(
-                listOf(
+                listOfNotNull(
+                    if (!replyField) MenuItem("書き込む", Icons.Filled.Edit) { openReplyPanel() } else null,
                     favoriteItem(),
                     MenuItem("更新", Icons.Filled.Refresh) { refresh() },
                     MenuItem("レス検索", Icons.Filled.Search) { searching = true; bars.show() },
@@ -1052,6 +1060,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { postMenu = null }
     }
 
+    // 書き込みのパネル(書き込み欄をフッターの欄にしていないとき)。書き込めたら閉じる
+    LaunchedEffect(page.reply.done) { if (page.reply.done != null && page.reply.popup) page.reply.popup = false }
+    if (page.reply.popup) CenterPanel("書き込む", onDismiss = { page.reply.popup = false }) {
+        Box(Modifier.fillMaxWidth().imePadding()) {
+            ThreadFooter(vm, page, showRefresh = false, extra = emptyList(), showField = true) {}
+        }
+    }
     // 本文のリンクの長押し: そのリンクを共有・コピー・ブラウザで開く(動画やソースのリンクを別のアプリに送れるように)
     linkMenu?.let { url ->
         MenuSheet(

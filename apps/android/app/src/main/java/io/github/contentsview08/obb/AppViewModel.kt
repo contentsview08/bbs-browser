@@ -93,6 +93,8 @@ internal fun mergeRefreshed(shown: List<Post>, stored: List<Post>, fetched: List
 class ReplyState(val boardUrl: String = "") {
     /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */
     var open by mutableStateOf(false)
+    /** 書き込み欄を上に重ねるパネルで出している(設定「ボタンの配置」で書き込み欄をフッターの欄にしていないとき) */
+    var popup by mutableStateOf(false)
     var name by mutableStateOf("")
     /** メール(sage など)。オプションの欄で書く */
     var mail by mutableStateOf("")
@@ -2072,6 +2074,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 書き込み欄を開く。insert(「>>12」など)があれば本文の最後に足す */
     fun openReply(page: Page.Thread, insert: String? = null) {
         val r = page.reply
+        // 書き込み欄をフッターの欄にしていなければ、パネルで出す
+        if (io.github.contentsview08.obb.ui.barPlacements(prefs, "thread")["reply"] != io.github.contentsview08.obb.ui.BarPlace.FIELD) r.popup = true
         viewModelScope.launch {
             if (!r.draftLoaded) {
                 r.draftLoaded = true

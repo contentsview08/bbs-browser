@@ -985,7 +985,7 @@ private fun WritePage(vm: AppViewModel) {
 @Composable
 private fun BarsPage(vm: AppViewModel) {
     val p = vm.prefs
-    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます")
+    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右(上)・フッターの右(下)・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます。書き込み欄は「欄」ならフッターに広げ(チャットの形)、ほかならボタンになって押すと書き込みのパネルが上に出ます")
     for ((area, title) in listOf("thread" to "スレ表示", "list" to "スレ一覧")) {
         val places = barPlacements(p, area)
         val order = barOrder(p, area)
@@ -996,7 +996,9 @@ private fun BarsPage(vm: AppViewModel) {
                     Icon(d.icon, null, tint = if (place == BarPlace.MENU) Palette.textMuted else Palette.accent, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(d.name, Modifier.weight(1f), color = if (place == BarPlace.MENU) Palette.textMuted else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Segmented(listOf("header" to "上", "footer" to "下", "menu" to "︙"), place.key, Modifier.width(132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
+                    // 書き込み欄だけ「欄」(フッターに広げる)がある。ほかの置き場ならボタンになり、押すとパネルで書く
+                    val choices = if (d.id == "reply") listOf("field" to "欄", "header" to "上", "footer" to "下", "menu" to "︙") else listOf("header" to "上", "footer" to "下", "menu" to "︙")
+                    Segmented(choices, place.key, Modifier.width(if (choices.size == 4) 176.dp else 132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
                     DragHandleIcon(handle)
                 }
             }

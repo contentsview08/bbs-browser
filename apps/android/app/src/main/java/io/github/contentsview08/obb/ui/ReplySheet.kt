@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bookmark
@@ -98,6 +99,10 @@ fun ThreadFooter(
     showRefresh: Boolean = vm.prefs.showRefreshFab,
     /** 設定「ボタンの配置」でフッターに置いたほかの操作(送るボタンの右に並ぶ) */
     extra: List<Pair<BarActionDef, () -> Unit>> = emptyList(),
+    /** 本文の欄を出す(設定「ボタンの配置」で書き込み欄がフッターの欄のとき)。出さないときはボタンだけの細い帯 */
+    showField: Boolean = true,
+    /** 書き込み欄をボタンにしてフッターに置いたとき、押したときの動き(パネルを開く) */
+    replyButton: (() -> Unit)? = null,
     onRefresh: () -> Unit,
 ) {
     val r = page.reply
@@ -139,7 +144,7 @@ fun ThreadFooter(
     // キーボードの分はスレ表示ごと持ち上げる(ThreadScreen の imePadding)。ここはナビゲーションバーの分だけ
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
-        if (r.uploading) {
+        if (showField && r.uploading) {
             val batch = r.uploads.filter { it.inBatch }
             val done = batch.count { it.state is io.github.contentsview08.obb.UploadItem.State.Done || it.state is io.github.contentsview08.obb.UploadItem.State.Failed }
             FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${batch.size} 枚目", Palette.textMuted)
@@ -156,8 +161,8 @@ fun ThreadFooter(
             }
         }
         // 本文に入れた画像のリンクのサムネイル(欄の上)
-        UploadStrip(vm, r, 56.dp, PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp))
-        if (options) {
+        if (showField) UploadStrip(vm, r, 56.dp, PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp))
+        if (showField && options) {
             // 欄ごとの履歴(Twinkle の欄ごとのクリップボード): 書き込むたびに覚えた名前・メールを、欄の横の履歴ボタンから選べる
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), vm.prefs.fieldNames, onClear = { vm.prefs.clearFieldHistory("names") })
@@ -166,7 +171,7 @@ fun ThreadFooter(
         }
         // 定型文のバー(書いている間)。押すとカーソルの所に入る
         val phrases = vm.prefs.quickPhraseList
-        if (r.open && phrases.isNotEmpty()) {
+        if (showField && r.open && phrases.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (ph in phrases) Text(
                     ph,
@@ -180,8 +185,8 @@ fun ThreadFooter(
         val footerH = vm.prefs.footerHeight
         val control = (footerH - 8).coerceIn(28, 40)
         Row(Modifier.fillMaxWidth().heightIn(min = footerH.dp).padding(horizontal = 8.dp, vertical = ((footerH - control) / 2).coerceIn(2, 6).dp), verticalAlignment = Alignment.Bottom) {
-            // 丸い本文の欄。左の端に ＋(画像・オプション)
-            Box(Modifier.weight(1f)) {
+            // 丸い本文の欄。左の端に ＋(画像・オプション)。欄を出さないときは空けて、ボタンを右に寄せる
+            if (!showField) Spacer(Modifier.weight(1f)) else Box(Modifier.weight(1f)) {
                 Row(
                     Modifier.fillMaxWidth().background(Palette.surface, shape).border(1.dp, if (r.open) Palette.accent else Palette.border, shape),
                     verticalAlignment = Alignment.Bottom,
@@ -260,7 +265,7 @@ fun ThreadFooter(
                 }
             }
             Spacer(Modifier.width(6.dp))
-            Box(
+            if (showField) Box(
                 Modifier.padding(bottom = 1.dp).size(control.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
                     .combinedClickable(
                         enabled = canSend,
@@ -276,6 +281,12 @@ fun ThreadFooter(
                 Modifier.padding(start = 6.dp).size((control + 4).dp).clip(CircleShape).clickable(onClick = run),
                 contentAlignment = Alignment.Center,
             ) { Icon(d.icon, d.name, tint = Palette.textMuted, modifier = Modifier.size(26.dp)) }
+            // 書き込み欄をボタンにしているとき(押すとパネルで書く)
+            replyButton?.let { open ->
+                Box(Modifier.padding(start = 6.dp).size((control + 4).dp).clip(CircleShape).clickable(onClick = open), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Edit, "書き込む", tint = Palette.accent, modifier = Modifier.size(26.dp))
+                }
+            }
             // 更新(設定で消せる)。取っている間は回る
             if (showRefresh) {
                 // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
@@ -313,7 +324,7 @@ fun ThreadFooter(
                 }
             }
         }
-        if (r.open && r.body.isNotEmpty()) ByteMeter(r.body, page.summary.boardUrl)
+        if (showField && r.open && r.body.isNotEmpty()) ByteMeter(r.body, page.summary.boardUrl)
     }
     // 送る前の見た目(送るボタンの長押し)
     if (preview) PostPreview(vm, page) { preview = false }

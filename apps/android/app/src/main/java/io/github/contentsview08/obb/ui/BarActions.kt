@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Palette
@@ -29,12 +30,15 @@ enum class BarPlace(val key: String, val label: String) {
     HEADER("header", "ヘッダーの右"),
     FOOTER("footer", "フッターの右"),
     MENU("menu", "︙ の中だけ"),
+    /** 書き込み欄だけ: フッターに欄として広げる(チャットの形)。ほかの置き場ならボタンになり、押すと書き込みのパネルが上に出る */
+    FIELD("field", "フッターの欄"),
 }
 
 class BarActionDef(val id: String, val name: String, val icon: ImageVector, val default: BarPlace)
 
 /** スレ表示の操作(並べる順。更新の既定は showRefreshFab に従う) */
 val THREAD_BAR_ACTIONS = listOf(
+    BarActionDef("reply", "書き込み欄", Icons.Filled.Edit, BarPlace.FIELD),
     BarActionDef("search", "レス検索", Icons.Filled.Search, BarPlace.HEADER),
     BarActionDef("refresh", "更新", Icons.Filled.Refresh, BarPlace.FOOTER),
     BarActionDef("favorite", "お気に入りのスレ", Icons.Filled.Bookmark, BarPlace.MENU),

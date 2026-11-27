@@ -46,6 +46,12 @@ function MouseGestureSettings({ settings: s, update, favorites }: Pick<SettingsP
         <span className="text-c-text-body">始め方</span>
         <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
       </div>
+      <Toggle
+        checked={s.mouseGesturePie}
+        onChange={(v) => update('mouseGesturePie', v)}
+        label="円盤を画面に出す"
+        note="オフにしても、向きを決めて離せば操作は実行されます(円盤の形を覚えている人向け)"
+      />
       <div className="flex flex-wrap gap-6 items-start">
         <MouseGesturePie labels={labels} active={picked} onPick={setPicked} className="flex-shrink-0" />
         <div className="flex-1 min-w-[18rem] flex flex-col divide-y divide-c-border/60">

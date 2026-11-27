@@ -1028,6 +1028,20 @@ export default function App() {
     void run(null, () => new UserOps(store).historyRemove(t))
   }
 
+  /** お気に入りのスレの並び(id の順)。履歴のお気に入りの絞り込みで、この順に出す */
+  const favOrderIds = useMemo(() => favThreads.map((f) => threadId(f.thread)), [favThreads])
+  /** お気に入りのスレをつかんで動かした。見えている並びを先に映し、DB の sort を振り直す(並びは端末ごと。同期しない) */
+  const reorderFavThreads = (list: ThreadSummary[]) => {
+    if (!store) return
+    const rank = new Map(list.map((t, i) => [threadId(t), i]))
+    const next = [...favThreads].sort((a, b) => (rank.get(threadId(a.thread)) ?? Infinity) - (rank.get(threadId(b.thread)) ?? Infinity))
+    setFavThreads(next)
+    void run(null, async () => {
+      await store.reorderFavoriteThreads(next.map((f) => f.thread))
+      setFavVersion((v) => v + 1)
+    })
+  }
+
   const toggleFavoriteThread = (t: ThreadSummary) => {
     if (!store) return
     const on = favIds.has(threadId(t))
@@ -2814,6 +2828,7 @@ export default function App() {
       onClose={closeTabs}
       onRefreshAll={() => void refreshAll()}
       wheelSwitch={settings.tabWheelSwitch}
+      fixedWidth={settings.tabFixedWidth}
       vertical={settings.tabLayout === 'side'}
       sideWidth={settings.tabSideWidth}
       onResize={(w) => updateSetting('tabSideWidth', w)}
@@ -3189,7 +3204,7 @@ export default function App() {
         </div>
       )}
       {/* PC: マウスジェスチャーの円盤(動かし始めた所を中心に) */}
-      {mouse.pie && <MouseGesturePieOverlay x={mouse.pie.x} y={mouse.pie.y} dir={mouse.pie.dir} labels={mouseLabels} />}
+      {mouse.pie && settings.mouseGesturePie && <MouseGesturePieOverlay x={mouse.pie.x} y={mouse.pie.y} dir={mouse.pie.dir} labels={mouseLabels} />}
       {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない)。
           画面の部品の重なりに巻き込まれないよう、body の直下に出す */}
       {(!isMobile || drawerOpen) &&
@@ -3335,6 +3350,8 @@ export default function App() {
           hideBarsOnScroll={settings.hideBarsOnScroll}
           newSince={!history ? newSince : undefined}
           favoriteIds={favIds}
+          favOrder={history ? favOrderIds : undefined}
+          onReorderFavorites={history ? reorderFavThreads : undefined}
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => confirmDeleteLogs([], list) : undefined}
           onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}

@@ -53,6 +53,8 @@ interface Props {
   onReorder: (id: string, index: number) => void
   /** タブの帯の上でホイールを回すと、タブを切り替える(下へ回すと右のタブ) */
   wheelSwitch?: boolean
+  /** タブの幅を固定して潰さない(はみ出した分は横にスクロール) */
+  fixedWidth?: boolean
   /** スレ表示の左に縦に並べる */
   vertical?: boolean
   /** 縦に並べるときの帯の幅(px)。右の端をつかんで変えられる */
@@ -151,8 +153,11 @@ export default function TabBar(props: Props) {
     setFixedWidth(w)
   }, [props.tabs, props.groups, vertical])
 
-  const fitWidth =
-    stripWidth > 0 && normalCount > 0 ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor((stripWidth - fixedWidth) / normalCount))) : MAX_WIDTH
+  const fitWidth = props.fixedWidth
+    ? MAX_WIDTH // 固定: 幅いっぱいまで広げ、はみ出した分は帯を横にスクロール
+    : stripWidth > 0 && normalCount > 0
+      ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor((stripWidth - fixedWidth) / normalCount)))
+      : MAX_WIDTH
   const tabWidth = frozenWidth ?? fitWidth
 
   // ── つかんで動かす ──

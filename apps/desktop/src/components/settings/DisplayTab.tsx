@@ -316,6 +316,14 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
             未読のないタブや終わったスレのタブをまとめて閉じる、ができます。つかんで動かすと並べ替え、グループの中に落とすとそのグループに入ります
           </p>
         )}
+        {s.tabsEnabled && s.tabLayout === 'top' && (
+          <Toggle
+            checked={s.tabFixedWidth}
+            onChange={(v) => update('tabFixedWidth', v)}
+            label="タブの幅を固定する"
+            note="たくさん開いてもタブを縮めず、はみ出した分は帯の上でホイールを回して横に送ります(オフは幅に合わせて縮めます)"
+          />
+        )}
         {s.tabsEnabled && (
         <Toggle
           checked={s.tabWheelSwitch}

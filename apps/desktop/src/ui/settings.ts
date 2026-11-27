@@ -380,6 +380,8 @@ export interface AppSettings {
   openInNewTab: boolean
   /** PC: タブの帯の上でホイールを回すと、タブを切り替える */
   tabWheelSwitch: boolean
+  /** タブの幅を固定して潰さない。はみ出した分は帯を横にスクロールして見る(オフは幅に合わせて縮める) */
+  tabFixedWidth: boolean
   /** PC: 画像ビューワーを閉じるマウスのボタン */
   lightboxCloseClick: LightboxCloseClick
   openTabs: SavedTab[]
@@ -488,6 +490,8 @@ export interface AppSettings {
   mouseGestures: Record<string, string>
   /** PC: マウスジェスチャーを、何を押しながら動かすか */
   mouseGestureTrigger: MouseGestureTrigger
+  /** マウスジェスチャーの円盤(8 方向の区画)を画面に出す。オフでもジェスチャーは効く(向きを覚えている人向け) */
+  mouseGesturePie: boolean
   /** この日数より長く開いていないスレのログを、起動したときに消す(0 なら消さない)。お気に入り・自分が書いたスレ・開いているタブは残す */
   logRetentionDays: number
   /** 最後にログを整理した時刻(1 日に 1 回だけ整理する) */
@@ -513,6 +517,8 @@ export interface AppSettings {
   replyCollapsed: boolean
   /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
   quickPhrases: string[]
+  /** 書き込み欄の欄ごとの履歴(Twinkle の欄ごとのクリップボードにあたる)。名前・メールは書き込むたびに覚え、本文の控えは手で保存する */
+  fieldHistory: FieldHistory
   /**
    * レスの操作バーに並べるもの(左から順)。'reply' | 'copy' | 'ng' | 'tree' | 'more'(⋯) | 'phrase:定型文'。
    * 全部外すとバーは出ない。前の postToolbar(⋯ はいつも出していた)は migrateOld で 'more' を足して読み替える
@@ -593,6 +599,21 @@ export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[
   { key: 'right', name: '右ボタンを押しながら' },
 ]
 
+/** 書き込み欄の欄ごとの履歴。names・mails は直近 10 件、snippets(本文の控え)は 20 件まで */
+export interface FieldHistory {
+  names: string[]
+  mails: string[]
+  snippets: string[]
+}
+export const EMPTY_FIELD_HISTORY: FieldHistory = { names: [], mails: [], snippets: [] }
+export const FIELD_HISTORY_MAX = 10
+export const SNIPPETS_MAX = 20
+/** 履歴の先頭に入れる(同じものは 1 つに。空は入れない) */
+export function pushRecent(list: string[], v: string, max = FIELD_HISTORY_MAX): string[] {
+  if (v.trim() === '') return list
+  return [v, ...list.filter((x) => x !== v)].slice(0, max)
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
   followOsTheme: true,
@@ -656,6 +677,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabsEnabled: true,
   openInNewTab: true,
   tabWheelSwitch: false,
+  tabFixedWidth: false,
   lightboxCloseClick: 'right',
   openTabs: [],
   activeTab: '',
@@ -716,6 +738,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mouseGestures: { n: 'top', s: 'bottom', ne: 'refresh', nw: 'closeAllTabs', sw: 'settings' },
   mouseGestureEnabled: false,
   mouseGestureTrigger: 'ctrl',
+  mouseGesturePie: true,
   logRetentionDays: 90,
   lastLogPruneAt: 0,
   groupNg: true,
@@ -728,6 +751,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   replyCollapsed: false,
   postAccounts: {},
   quickPhrases: [],
+  fieldHistory: EMPTY_FIELD_HISTORY,
   postToolbar2: ['reply', 'copy', 'ng', 'more'],
   keymap: {},
   barLayout: {},

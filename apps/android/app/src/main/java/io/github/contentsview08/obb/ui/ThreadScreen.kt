@@ -962,8 +962,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     postMenu?.let { p ->
         val isAA = aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false
+        // 本文のリンク: 1 つずつ、共有・コピー・ブラウザで開く(長押しから別のアプリに送れるように。動画やソースのリンクなど)
+        val linkItems = io.github.contentsview08.obb.bbs.bodyTokens(p.body).filterIsInstance<io.github.contentsview08.obb.bbs.BodyToken.Url>().map { it.url }.distinct().take(8).map { url ->
+            val shown = url.removePrefix("https://").removePrefix("http://").let { if (it.length > 44) it.take(44) + "…" else it }
+            MenuItem(shown, Icons.Filled.Link, children = listOf(
+                MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, url) },
+                MenuItem("リンクをコピー", Icons.Filled.Link) { copyText(context, url); vm.toast = "リンクをコピーしました" },
+                MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, url, false) },
+            )) {}
+        }
         MenuSheet(
-            listOf(
+            listOfNotNull(
                 listOf(
                     MenuItem("返信", Icons.AutoMirrored.Filled.Reply) { replyWith(">>${p.no}\n") },
                     MenuItem("引用して返信", Icons.Filled.FormatQuote) {
@@ -1005,6 +1014,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // 縮めて収めた AA は字が小さすぎて読めないことがある
                     if (isAA) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn) { aaZoom = p.no } else null,
                 ),
+                // 本文にリンクがあるときだけ
+                linkItems.takeIf { it.isNotEmpty() },
                 // ほかの専ブラ・ブラウザから書いたレスにも自分の印を付けられるように、手で付け外しする
                 (p.no in own).let { isOwn ->
                     listOfNotNull(

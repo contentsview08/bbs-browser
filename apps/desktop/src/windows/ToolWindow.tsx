@@ -38,7 +38,7 @@ export default function ToolWindow() {
   ) : kind === 'keywords' ? (
     <KeywordsWindow store={store} settings={settings} update={update} />
   ) : kind === 'reply' ? (
-    <ReplyWindow settings={settings} />
+    <ReplyWindow settings={settings} update={update} />
   ) : (
     <SettingsWindow store={store} settings={settings} update={update} />
   )
@@ -49,7 +49,7 @@ export default function ToolWindow() {
  * 書き込みそのもの(コネクタ・アカウント・書き込み後の取り直し)はメインに頼む(replySubmit など。関数は窓をまたげないので値だけ渡す)。
  * 開いている間、メインはスレ表示の中の欄を出さない。この窓を閉じると欄は元の場所に戻る(REPLY_POPUP_EVENT)
  */
-function ReplyWindow({ settings }: { settings: ReturnType<typeof useSettings>[0] }) {
+function ReplyWindow({ settings, update }: { settings: ReturnType<typeof useSettings>[0]; update: ReturnType<typeof useSettings>[1] }) {
   const [ctx, setCtx] = useState<ReplyContext | null>()
   const ref = useRef<ReplyFormHandle>(null)
   useEffect(() => {
@@ -123,6 +123,8 @@ function ReplyWindow({ settings }: { settings: ReturnType<typeof useSettings>[0]
           onOpenAccountSettings={() => void callMain('replyOpenAccountSettings')}
           attach={connector?.attachments}
           phraseBar={settings.quickPhrases}
+          fieldHistory={settings.fieldHistory}
+          onFieldHistoryChange={(h) => update('fieldHistory', h)}
           stamp={{ title: ctx.title, url: ctx.threadUrl }}
         />
       </div>

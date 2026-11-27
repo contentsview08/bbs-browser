@@ -2282,6 +2282,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             // 板ごとの既定値がある欄は、ふだんの値を書き換えない
                             val meta = prefs.boardMeta[page.summary.boardUrl]
                             if (meta?.defaultName == null) prefs.postName = name
+                            // 欄ごとの履歴(名前・メール)に覚える
+                            prefs.recordFieldHistory(name, mail)
                             if (meta?.defaultMail == null) prefs.postMail = mail
                         }
                         toast = "書き込みました"

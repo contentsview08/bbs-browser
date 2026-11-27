@@ -76,7 +76,7 @@ import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useOsDark } from '../hooks/useOsDark'
-import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting, type FieldHistory } from '../ui/settings'
 import { ClearButton, CLEAR_PAD } from './ClearButton'
 
 export type { ScrollPosition } from '../utils/threadScroll'
@@ -2544,6 +2544,8 @@ export default function ThreadView(props: Props) {
       imgurClientId: settings.imgurClientId.trim() || undefined,
     },
     onOpenUrl: props.onUrl,
+    fieldHistory: settings.fieldHistory,
+    onFieldHistoryChange: (h: FieldHistory) => props.onUpdateSetting?.('fieldHistory', h),
   }
 
   return (

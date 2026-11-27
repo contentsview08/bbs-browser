@@ -26,6 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -114,6 +118,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
         keyboard?.show()
     }
     var phraseMenu by remember { mutableStateOf(false) }
+    var snippetMenu by remember { mutableStateOf(false) }
     LaunchedEffect(r.blurSeq) { if (r.blurSeq > 0) focusManager.clearFocus() }
     // 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
@@ -146,9 +151,10 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
         // 本文に入れた画像のリンクのサムネイル(欄の上)
         UploadStrip(vm, r, 56.dp, PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp))
         if (options) {
+            // 欄ごとの履歴(Twinkle の欄ごとのクリップボード): 書き込むたびに覚えた名前・メールを、欄の横の履歴ボタンから選べる
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SmallField(r.name, { r.name = it }, "名前", Modifier.weight(1f))
-                SmallField(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f))
+                FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), vm.prefs.fieldNames, onClear = { vm.prefs.clearFieldHistory("names") })
+                FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), vm.prefs.fieldMails, onClear = { vm.prefs.clearFieldHistory("mails") })
             }
         }
         // 定型文のバー(書いている間)。押すとカーソルの所に入る
@@ -206,6 +212,21 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
                         }
                     }
                 }
+                // 本文の控えを選ぶ(＋ の「控えから入れる」から)。押すとカーソルの所に入る。✕ で消す
+                if (snippetMenu) {
+                    androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { snippetMenu = false }) {
+                        Column(
+                            Modifier.widthIn(min = 220.dp, max = 340.dp).heightIn(max = 360.dp).shadow(10.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
+                                .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                        ) {
+                            Text("本文の控え", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+                            for (sn in vm.prefs.snippets) Row(Modifier.fillMaxWidth().clickable { snippetMenu = false; insertPhrase(sn); r.focusSeq++ }, verticalAlignment = Alignment.CenterVertically) {
+                                Text(sn.replace(Regex("\\s+"), " "), Modifier.weight(1f).padding(start = 16.dp, top = 11.dp, bottom = 11.dp), color = Palette.textStrong, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                IconButton(onClick = { vm.prefs.removeSnippet(sn); if (vm.prefs.snippets.isEmpty()) snippetMenu = false }, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "この控えを消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }
+                            }
+                        }
+                    }
+                }
                 // ＋ のメニュー(欄の上にふわっと出る)
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
@@ -222,6 +243,9 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null,
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             // 定型文は、設定にあるときだけ(既定は空)
                             if (phrases.isNotEmpty()) PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
+                            // 本文の控え(欄ごとの履歴): 書いている本文を取っておく・取っておいた本文をカーソルの所に入れる
+                            if (r.body.isNotBlank()) PlusItem(Icons.Filled.BookmarkAdd, "本文を控えに保存") { plusMenu = false; vm.prefs.addSnippet(r.body); vm.toast = "控えに保存しました" }
+                            if (vm.prefs.snippets.isNotEmpty()) PlusItem(Icons.Filled.Bookmark, "控えから入れる") { plusMenu = false; snippetMenu = true }
                             val aaNow = isAA(r)
                             PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }
@@ -366,6 +390,22 @@ private fun PlusItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
         Icon(icon, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
         Text(label, color = Palette.textBody, fontSize = 15.sp)
+    }
+}
+
+/** 小さな欄に、履歴(書き込むたびに覚えた値)を選ぶボタンを添えたもの。履歴がなければ欄だけ */
+@Composable
+private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, history: List<String>, onClear: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        SmallField(value, onChange, placeholder, Modifier.weight(1f))
+        if (history.isNotEmpty()) Box {
+            IconButton(onClick = { open = true }, Modifier.size(36.dp)) { Icon(Icons.Filled.History, "履歴", tint = Palette.textMuted, modifier = Modifier.size(20.dp)) }
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (h in history) androidx.compose.material3.DropdownMenuItem(text = { Text(h, color = Palette.textStrong, fontSize = 14.sp) }, onClick = { onChange(h); open = false })
+                androidx.compose.material3.DropdownMenuItem(text = { Text("履歴を消す", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { onClear(); open = false })
+            }
+        }
     }
 }
 

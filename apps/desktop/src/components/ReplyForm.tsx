@@ -12,7 +12,7 @@ import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
-import type { ReplyLayout } from '../ui/settings'
+import { pushRecent, EMPTY_FIELD_HISTORY, SNIPPETS_MAX, type FieldHistory, type ReplyLayout } from '../ui/settings'
 import { FloatingMenu, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 
 export interface ReplyFormHandle {
@@ -75,6 +75,9 @@ interface Props {
   stamp?: { title?: string; url?: string }
   /** 欄の空いた所を右クリックしたときのメニュー(しまう・右に置く・別のウィンドウに出す など)。なければ出さない */
   menuItems?: MenuItem[]
+  /** 欄ごとの履歴(名前・メール・本文の控え)。渡すと、欄の横の履歴ボタンと右クリックの控えの項目が出る */
+  fieldHistory?: FieldHistory
+  onFieldHistoryChange?: (h: FieldHistory) => void
 }
 
 const INPUT =
@@ -238,6 +241,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       const r = await props.onSubmit({ name, mail, body, ...(files.length > 0 && { files }) })
       setResult(r)
       if (r.status === 'ok') {
+        // 使った名前・メールを欄ごとの履歴に覚える
+        if (props.onFieldHistoryChange) {
+          const h = props.fieldHistory ?? EMPTY_FIELD_HISTORY
+          props.onFieldHistoryChange({ ...h, names: pushRecent(h.names, name), mails: pushRecent(h.mails, mail) })
+        }
         clearBody()
         media.clearAttached()
         media.clearUploaded()
@@ -248,6 +256,47 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       setSending(false)
     }
   }
+
+  // ── 欄ごとの履歴(Twinkle の欄ごとのクリップボード)。名前・メールは欄の横の履歴ボタンから選ぶ。本文の控えは右クリックのメニューから保存・入れる ──
+  const hist = props.fieldHistory
+  const [histMenu, setHistMenu] = useState<{ pos: MenuPos; kind: 'names' | 'mails' }>()
+  const histBtn = (kind: 'names' | 'mails') => {
+    if (!(hist?.[kind].length)) return null
+    return (
+      <button
+        type="button"
+        title={kind === 'names' ? '名前の履歴' : 'メールの履歴'}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => setHistMenu({ pos: menuPosAt(e.clientX, e.clientY), kind })}
+        className="flex-shrink-0 w-7 h-7 rounded flex items-center justify-center text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3"
+      >
+        <span className="material-symbols-outlined text-lg leading-none">history</span>
+      </button>
+    )
+  }
+  const histItems = (kind: 'names' | 'mails'): MenuItem[] => [
+    ...(hist?.[kind] ?? []).map((v) => ({ label: v, icon: 'history', onClick: () => (kind === 'names' ? setName(v) : setMail(v)) })),
+    { label: '履歴を消す', icon: 'delete', onClick: () => props.onFieldHistoryChange?.({ ...(hist ?? EMPTY_FIELD_HISTORY), [kind]: [] }) },
+  ]
+  const snippetItems: MenuItem[] =
+    hist && props.onFieldHistoryChange
+      ? [
+          ...(body.trim()
+            ? [{ label: '本文を控えに保存', icon: 'bookmark_add', onClick: () => props.onFieldHistoryChange!({ ...hist, snippets: pushRecent(hist.snippets, body, SNIPPETS_MAX) }) }]
+            : []),
+          ...(hist.snippets.length > 0
+            ? [
+                {
+                  label: '控えから入れる',
+                  icon: 'bookmark',
+                  children: hist.snippets.map((sn) => ({ label: sn.replace(/\s+/g, ' ').slice(0, 40), icon: 'notes', onClick: () => insert(sn) })),
+                },
+                { label: '控えを全部消す', icon: 'delete', onClick: () => props.onFieldHistoryChange!({ ...hist, snippets: [] }) },
+              ]
+            : []),
+        ]
+      : []
+  const contextItems = [...snippetItems, ...(props.menuItems ?? [])]
 
   /** 定型文のバー。押すとカーソルの所に入れる(選んでいた字は置き換える) */
   const phraseBar = !!props.phraseBar?.length && (
@@ -339,7 +388,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} flex-1 min-w-[6rem]`} />
+            {histBtn('names')}
             <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール(sage など)" className={`${INPUT} flex-1 min-w-[6rem]`} />
+            {histBtn('mails')}
             {props.accounts && props.onToggleAccount && (
               <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
             )}
@@ -448,7 +499,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       {...dropProps(media)}
       // 空いた所(入力欄・ボタン・リンクの上ではない)を右クリックしたら、欄の置き方のメニュー。入力欄の上は OS のメニューのまま
       onContextMenu={
-        props.menuItems?.length
+        contextItems.length > 0
           ? (e) => {
               if (wantsNativeMenu(e) || (e.target as Element | null)?.closest?.('button')) return
               e.preventDefault()
@@ -457,7 +508,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           : undefined
       }
     >
-      {menu && props.menuItems && <FloatingMenu pos={menu} items={props.menuItems} onClose={() => setMenu(undefined)} />}
+      {menu && contextItems.length > 0 && <FloatingMenu pos={menu} items={contextItems} onClose={() => setMenu(undefined)} />}
+      {histMenu && <FloatingMenu pos={histMenu.pos} items={histItems(histMenu.kind)} onClose={() => setHistMenu(undefined)} />}
       {media.confirmView}
       {media.error && (
         <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
@@ -489,6 +541,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           placeholder="名前"
           className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
         />
+        {histBtn('names')}
         <input
           type="text"
           value={mail}
@@ -497,6 +550,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           placeholder="メール"
           className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
         />
+        {histBtn('mails')}
         <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage

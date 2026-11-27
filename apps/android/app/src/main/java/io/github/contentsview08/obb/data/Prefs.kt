@@ -410,6 +410,31 @@ class Prefs(context: Context) {
     /** 書き込みの名前・メール(前回のもの) */
     var postName by pref("postName", "")
     var postMail by pref("postMail", "")
+    /**
+     * 書き込み欄の欄ごとの履歴(JSON)。names・mails は書き込むたびに覚える直近 10 件、snippets は手で保存した本文の控え(20 件まで)。
+     * Twinkle の「欄ごとのクリップボード」にあたる。OS のクリップボードは掲示板に使いたくないものも混ざるので、別に持つ
+     */
+    var fieldHistory by pref("fieldHistory", "{}")
+    val fieldNames: List<String> get() = fieldHistoryList("names")
+    val fieldMails: List<String> get() = fieldHistoryList("mails")
+    val snippets: List<String> get() = fieldHistoryList("snippets")
+    private fun fieldHistoryList(k: String): List<String> = runCatching {
+        val a = JSONObject(fieldHistory).optJSONArray(k) ?: return emptyList()
+        List(a.length()) { a.getString(it) }
+    }.getOrDefault(emptyList())
+    private fun setFieldHistoryList(k: String, v: List<String>) {
+        val o = runCatching { JSONObject(fieldHistory) }.getOrDefault(JSONObject())
+        o.put(k, JSONArray(v))
+        fieldHistory = o.toString()
+    }
+    /** 書き込めたときに、使った名前とメールを履歴の先頭へ(空は覚えない) */
+    fun recordFieldHistory(name: String, mail: String) {
+        if (name.isNotBlank()) setFieldHistoryList("names", (listOf(name) + fieldNames.filter { it != name }).take(10))
+        if (mail.isNotBlank()) setFieldHistoryList("mails", (listOf(mail) + fieldMails.filter { it != mail }).take(10))
+    }
+    fun addSnippet(text: String) { if (text.isNotBlank()) setFieldHistoryList("snippets", (listOf(text) + snippets.filter { it != text }).take(20)) }
+    fun removeSnippet(text: String) = setFieldHistoryList("snippets", snippets.filter { it != text })
+    fun clearFieldHistory(k: String) = setFieldHistoryList(k, emptyList())
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
     var quickPhrases by wordsPref("quickPhrases", emptyList(), "\n")
     /** 定型文を 1 行ずつ(空の行は除く) */

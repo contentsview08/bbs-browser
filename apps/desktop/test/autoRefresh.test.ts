@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { UPDATE_CHECK_INTERVAL_MS, reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from '../src/utils/autoRefresh'
+import { BACKOFF_MAX_MS, UPDATE_CHECK_INTERVAL_MS, backoffMs, reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from '../src/utils/autoRefresh'
 import { compareVersions } from '../src/host/update'
 
 describe('shouldAutoRefresh: 開いているスレを自動で取りに行くか', () => {
@@ -27,6 +27,21 @@ describe('shouldAutoRefresh: 開いているスレを自動で取りに行くか
   it('上限のない掲示板は、いくら増えても取りに行く', () => {
     expect(reachedMaxPosts(100000, undefined)).toBe(false)
     expect(shouldAutoRefresh({ ...base, postCount: 100000, maxPosts: undefined })).toBe(true)
+  })
+})
+
+describe('backoffMs: 失敗が続いたときの次までの待ち', () => {
+  it('失敗していなければ元の間隔', () => {
+    expect(backoffMs(5000, 0)).toBe(5000)
+  })
+  it('失敗が続くと倍々に延びる', () => {
+    expect(backoffMs(5000, 1)).toBe(10000)
+    expect(backoffMs(5000, 2)).toBe(20000)
+    expect(backoffMs(5000, 3)).toBe(40000)
+  })
+  it('上限は 5 分', () => {
+    expect(backoffMs(5000, 10)).toBe(BACKOFF_MAX_MS)
+    expect(backoffMs(60000, 100)).toBe(BACKOFF_MAX_MS)
   })
 })
 

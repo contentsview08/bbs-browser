@@ -107,7 +107,7 @@ import { findNextThreads, nextUnreadThread } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
-import { reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
+import { backoffMs, reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
 import { favUnread, threadUnread, treeFreshFrom, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
@@ -1536,12 +1536,26 @@ export default function App() {
    * - dat 落ち・1000 到達で、もう増えないスレ
    * 前の取得が終わっていなければ、fetchThread がその回を飛ばす
    */
-  const autoRefresh = async () => {
+  /** 自動更新・実況モードで続けて失敗した回数。失敗が続いたら次までの待ちを倍々に延ばす(backoffMs。掲示板が落ちているときに同じ間隔で叩き続けない) */
+  const autoFailStreak = useRef(0)
+  /** 失敗のあと、この時刻までは自動更新を見送る */
+  const autoSkipUntil = useRef(0)
+  /** 取りに行ったかどうかと、失敗したかを返す */
+  const autoRefresh = async (): Promise<{ failed: boolean }> => {
     const t = activeTab
-    if (!store || !t?.log) return
-    if (!shouldAutoRefresh({ visible: isAppVisible(), status: t.log.status, postCount: t.log.posts.length, maxPosts: findConnector(t.thread.connectorId)?.maxPosts })) return
+    if (!store || !t?.log) return { failed: false }
+    if (Date.now() < autoSkipUntil.current) return { failed: false }
+    if (!shouldAutoRefresh({ visible: isAppVisible(), status: t.log.status, postCount: t.log.posts.length, maxPosts: findConnector(t.thread.connectorId)?.maxPosts })) return { failed: false }
     readFlush.current?.()
-    await fetchThread(store, t.thread, { auto: true }).catch(() => undefined)
+    try {
+      await fetchThread(store, t.thread, { auto: true })
+      autoFailStreak.current = 0
+      return { failed: false }
+    } catch {
+      autoFailStreak.current++
+      autoSkipUntil.current = Date.now() + backoffMs(Math.max(1, settings.autoRefreshSec) * 1000, autoFailStreak.current)
+      return { failed: true }
+    }
   }
   const autoRefreshRef = useRef(autoRefresh)
   autoRefreshRef.current = autoRefresh
@@ -1567,10 +1581,14 @@ export default function App() {
     let timer: ReturnType<typeof setTimeout> | undefined
     const cycle = async () => {
       patchTabRef.current(liveId, { liveRefreshAt: undefined })
-      await autoRefreshRef.current()
+      autoSkipUntil.current = 0 // 実況モードは自分で待ちを延ばす(下)
+      const { failed } = await autoRefreshRef.current()
       if (stopped) return
-      patchTabRef.current(liveId, { liveRefreshAt: Date.now() + liveSec * 1000 })
-      timer = setTimeout(() => void cycle(), liveSec * 1000)
+      // 失敗が続いたら、次までの待ちを倍々に延ばす(掲示板が落ちているときに 3 秒ごとに叩き続けない)
+      const wait = failed ? backoffMs(liveSec * 1000, autoFailStreak.current) : liveSec * 1000
+      autoSkipUntil.current = 0
+      patchTabRef.current(liveId, { liveRefreshAt: Date.now() + wait })
+      timer = setTimeout(() => void cycle(), wait)
     }
     void cycle()
     return () => {

@@ -451,7 +451,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     onTitle = { menu = true },
                 ) {
                     // 設定「ボタンの配置」でヘッダーに置いた操作(既定はスレッド検索だけ)
-                    for (d in LIST_BAR_ACTIONS) if (listBarPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runListBarAction(d.id) }
+                    for (d in barOrder(vm.prefs, "list")) if (listBarPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runListBarAction(d.id) }
                     MoreButton { menu = true }
                 }
             }
@@ -520,7 +520,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 }
                 val footerH = vm.prefs.footerHeight
                 // 設定「ボタンの配置」でフッターに置いた操作(更新は既定でここ)
-                for (d in LIST_BAR_ACTIONS) if (listBarPlaces[d.id] == BarPlace.FOOTER && d.id != "refresh") Box(
+                for (d in barOrder(vm.prefs, "list")) if (listBarPlaces[d.id] == BarPlace.FOOTER && d.id != "refresh") Box(
                     Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable { runListBarAction(d.id) },
                     contentAlignment = Alignment.Center,
                 ) { Icon(d.icon, d.name, tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }

@@ -985,12 +985,20 @@ private fun WritePage(vm: AppViewModel) {
 @Composable
 private fun BarsPage(vm: AppViewModel) {
     val p = vm.prefs
-    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すかを決めます。︙ のメニューにはいつも全部出ます(ChMate のツールバーのように、よく使うものを帯に並べられます)")
+    PageLead("スレ表示とスレ一覧の操作を、ヘッダーの右・フッターの右・︙ の中だけ、のどこに出すかを決めます。≡ を掴んで並べ替えると、帯に並ぶ順も変わります(上が左)。︙ のメニューにはいつも全部出ます")
     for ((area, title) in listOf("thread" to "スレ表示", "list" to "スレ一覧")) {
         val places = barPlacements(p, area)
-        Group(title) {
-            for (d in barActionsOf(area)) ChoiceRow(d.name, (places[d.id] ?: d.default).key, BarPlace.entries.map { it.key to it.label }) { k ->
-                setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k })
+        val order = barOrder(p, area)
+        Group(title, note = "≡ を掴んで並べ替え、右のボタンで置き場を選びます") {
+            ReorderableColumn(order, { it.id }, { from, to -> moveBarAction(p, area, from, to) }) { d, handle, _ ->
+                val place = places[d.id] ?: d.default
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(d.icon, null, tint = if (place == BarPlace.MENU) Palette.textMuted else Palette.accent, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(d.name, Modifier.weight(1f), color = if (place == BarPlace.MENU) Palette.textMuted else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Segmented(listOf("header" to "上", "footer" to "下", "menu" to "︙"), place.key, Modifier.width(132.dp)) { k -> setBarPlacement(p, area, d.id, BarPlace.entries.first { it.key == k }) }
+                    DragHandleIcon(handle)
+                }
             }
         }
     }

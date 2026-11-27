@@ -48,25 +48,31 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 
-/** 描いた 1 行の、行・頭の行の位置と、頭の行の字の並び(長押しした所が ID・名前の上かを調べる) */
+/** 描いた 1 行の、行・頭の行・本文の位置と字の並び(長押しした所が ID・名前・本文のリンクの上かを調べる) */
 class HeaderHit {
     var row: androidx.compose.ui.layout.LayoutCoordinates? = null
     var coords: androidx.compose.ui.layout.LayoutCoordinates? = null
     var layout: androidx.compose.ui.text.TextLayoutResult? = null
+    /** 本文(リンクの長押し用) */
+    var bodyCoords: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var bodyLayout: androidx.compose.ui.text.TextLayoutResult? = null
 
     /**
      * 行の中の位置 pos が、頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ。
      * 頭の行の位置は、描いた行ごとに覚える。同じレスがスレ表示とポップアップの両方に出ても取り違えないように
      */
-    fun tagAt(pos: androidx.compose.ui.geometry.Offset): String? {
+    fun tagAt(pos: androidx.compose.ui.geometry.Offset): String? =
+        tagIn(pos, coords, layout) { it.startsWith("i:") || it.startsWith("n:") } ?: tagIn(pos, bodyCoords, bodyLayout) { it.startsWith("u:") }
+
+    /** 行の中の位置 pos が、その字の並び(頭か本文)の押せる所の上なら、そのタグ */
+    private fun tagIn(pos: androidx.compose.ui.geometry.Offset, coords: androidx.compose.ui.layout.LayoutCoordinates?, layout: androidx.compose.ui.text.TextLayoutResult?, want: (String) -> Boolean): String? {
         val row = row?.takeIf { it.isAttached } ?: return null
         val c = coords?.takeIf { it.isAttached } ?: return null
         val l = layout ?: return null
         val p = runCatching { c.localPositionOf(row, pos) }.getOrNull() ?: return null
         if (p.x < 0 || p.y < 0 || p.x > c.size.width || p.y > c.size.height) return null
         val i = l.getOffsetForPosition(p)
-        return l.layoutInput.text.getLinkAnnotations(maxOf(0, i - 1), i + 1).mapNotNull { (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag }
-            .firstOrNull { it.startsWith("i:") || it.startsWith("n:") }
+        return l.layoutInput.text.getLinkAnnotations(maxOf(0, i - 1), i + 1).mapNotNull { (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag }.firstOrNull(want)
     }
 }
 
@@ -116,16 +122,18 @@ fun PostItem(
     val pad = (prefs.postPad * s).dp
     val shownBody = (if (imagesExpanded) r.bodyExpanded ?: r.body else r.body).withHighlight(highlight)
     val shownHeader = r.header.withHighlight(highlight)
+    val hit = LocalHeaderHit.current
+    val track = Modifier.onGloballyPositioned { hit?.coords = it }
+    // 本文の位置と字の並び(リンクの長押しに要る)
+    val bodyTrack = Modifier.onGloballyPositioned { hit?.bodyCoords = it }
     val body = @Composable { mod: Modifier ->
-        if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+        if (aa) AaBody(r) else Text(shownBody, mod.then(bodyTrack), color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em, onTextLayout = { hit?.bodyLayout = it })
     }
     val media = @Composable {
         if (images.isNotEmpty() || youtube.isNotEmpty() || videos.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.postThumbSize, videos = videos)
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
     }
     // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)
-    val hit = LocalHeaderHit.current
-    val track = Modifier.onGloballyPositioned { hit?.coords = it }
     // ID の位置(設定): 日時の後ろは頭の中(r.header)。右上は頭の行の右端、右下は本文の下の右端(r.idText)
     val idTopRight = r.idText?.takeIf { prefs.idPosition == "topRight" }
     val idBottomRight = r.idText?.takeIf { prefs.idPosition == "bottomRight" }
@@ -229,7 +237,7 @@ fun PostItem(
                             Modifier.weight(1f, fill = false).widthIn(max = 320.dp).onSizeChanged { bubbleWidth = it.width }.background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = (12 * s).dp, vertical = (8 * s).dp),
                         ) {
                             if (reply != null) ReplyLine(reply, indent = 0.dp, onOwn = own) { onReply(reply.no) }
-                            if (aa) AaBody(r, if (own) textColor else null) else Text(bubbleBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+                            if (aa) AaBody(r, if (own) textColor else null) else Text(bubbleBody, bodyTrack, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em, onTextLayout = { hit?.bodyLayout = it })
                         }
                         if (!right) {
                             Spacer(Modifier.width(6.dp)); side()
@@ -258,7 +266,7 @@ fun PostItem(
                     // track と onTextLayout は、ID・名前の長押しのメニューに要る
                     if (own || toOwn || idTopRight != null) header() else Text(shownHeader, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
-                    if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).coerceAtLeast(1f).em)
+                    if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp).then(bodyTrack), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).coerceAtLeast(1f).em, onTextLayout = { hit?.bodyLayout = it })
                     idLine()
                 }
                 media()
@@ -271,8 +279,8 @@ fun PostItem(
                     header()
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r)
-                    else if (heat != null) Text(shownBody, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                    else Text(shownBody, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
+                    else if (heat != null) Text(shownBody, Modifier.padding(top = 4.dp).then(bodyTrack), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, onTextLayout = { hit?.bodyLayout = it })
+                    else Text(shownBody, Modifier.padding(top = 2.dp).then(bodyTrack), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em, onTextLayout = { hit?.bodyLayout = it })
                     idLine()
                 }
                 media()

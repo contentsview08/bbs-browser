@@ -177,6 +177,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var postMenu by remember { mutableStateOf<Post?>(null) }
     /** 種類「i」「n」と、そのレス */
     var headMenu by remember { mutableStateOf<Pair<Char, Post>?>(null) }
+    /** 本文のリンクを長押しした(URL)。共有・コピー・ブラウザで開く */
+    var linkMenu by remember { mutableStateOf<String?>(null) }
     var gallery by remember { mutableStateOf(false) }
     var nextSheet by remember { mutableStateOf(false) }
     /** 中身を見せている NG のレス */
@@ -549,7 +551,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         if (up == null) {
                             // 離すまでの指の動きは下へ渡さない(リンクも行の長押しも動かさない)
                             Haptics.longPress(view)
-                            headMenu = tag[0] to p
+                            if (tag.startsWith("u:")) linkMenu = tag.substring(2) else headMenu = tag[0] to p
                             do { val e = awaitPointerEvent(PointerEventPass.Initial); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
                         }
                     }
@@ -559,7 +561,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onClick = { openAnchorTree(p.no) },
                     onLongClick = {
                         // ID・名前の上の長押しは上で受けている
-                        if (headMenu == null) { Haptics.longPress(view); postMenu = p }
+                        if (headMenu == null && linkMenu == null) { Haptics.longPress(view); postMenu = p }
                     },
                     // オフなら 1 回のタップを待たせない
                     onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); replyWith(">>${p.no}\n") }) else null,
@@ -860,7 +862,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 } else {
                     HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { menu = true }) {
                         // 設定「ボタンの配置」でヘッダーに置いた操作(既定はレス検索だけ)
-                        for (d in THREAD_BAR_ACTIONS) if (barPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runBarAction(d.id) }
+                        for (d in barOrder(vm.prefs, "thread")) if (barPlaces[d.id] == BarPlace.HEADER) BarIcon(d.icon, d.name) { runBarAction(d.id) }
                         MoreButton { menu = true }
                     }
                 }
@@ -912,7 +914,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null,
                     showRefresh = barPlaces["refresh"] == BarPlace.FOOTER,
                     // 設定「ボタンの配置」でフッターに置いた操作(更新は別に描く)
-                    extra = THREAD_BAR_ACTIONS.filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" }.map { d -> d to { runBarAction(d.id) } },
+                    extra = barOrder(vm.prefs, "thread").filter { barPlaces[it.id] == BarPlace.FOOTER && it.id != "refresh" }.map { d -> d to { runBarAction(d.id) } },
                 ) { refresh() }
             }
 
@@ -990,17 +992,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     postMenu?.let { p ->
         val isAA = aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false
-        // 本文のリンク: 1 つずつ、共有・コピー・ブラウザで開く(長押しから別のアプリに送れるように。動画やソースのリンクなど)
-        val linkItems = io.github.contentsview08.obb.bbs.bodyTokens(p.body).filterIsInstance<io.github.contentsview08.obb.bbs.BodyToken.Url>().map { it.url }.distinct().take(8).map { url ->
-            val shown = url.removePrefix("https://").removePrefix("http://").let { if (it.length > 44) it.take(44) + "…" else it }
-            MenuItem(shown, Icons.Filled.Link, children = listOf(
-                MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, url) },
-                MenuItem("リンクをコピー", Icons.Filled.Link) { copyText(context, url); vm.toast = "リンクをコピーしました" },
-                MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, url, false) },
-            )) {}
-        }
         MenuSheet(
-            listOfNotNull(
+            listOf(
                 listOf(
                     MenuItem("返信", Icons.AutoMirrored.Filled.Reply) { replyWith(">>${p.no}\n") },
                     MenuItem("引用して返信", Icons.Filled.FormatQuote) {
@@ -1042,8 +1035,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // 縮めて収めた AA は字が小さすぎて読めないことがある
                     if (isAA) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn) { aaZoom = p.no } else null,
                 ),
-                // 本文にリンクがあるときだけ
-                linkItems.takeIf { it.isNotEmpty() },
                 // ほかの専ブラ・ブラウザから書いたレスにも自分の印を付けられるように、手で付け外しする
                 (p.no in own).let { isOwn ->
                     listOfNotNull(
@@ -1061,6 +1052,21 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { postMenu = null }
     }
 
+    // 本文のリンクの長押し: そのリンクを共有・コピー・ブラウザで開く(動画やソースのリンクを別のアプリに送れるように)
+    linkMenu?.let { url ->
+        MenuSheet(
+            listOf(
+                listOf(
+                    MenuItem("開く", Icons.AutoMirrored.Filled.OpenInNew) { if (!vm.openUrl(url)) openExternal(context, url, vm.prefs.openLinksInApp) },
+                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, url, false) },
+                    MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, url) },
+                    MenuItem("リンクをコピー", Icons.Filled.Link) { copyText(context, url); vm.toast = "リンクをコピーしました" },
+                ),
+            ),
+            MenuAt.Center,
+            header = { MenuInfo(url.removePrefix("https://").removePrefix("http://"), "リンク") },
+        ) { linkMenu = null }
+    }
     headMenu?.let { (kind, p) ->
         val sameId = if (kind == 'i' && p.id != null) index.posts.filter { it.id == p.id } else emptyList()
         val sameName = if (kind == 'n') index.posts.filter { it.name == p.name } else emptyList()

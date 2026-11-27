@@ -63,6 +63,24 @@ val LIST_BAR_ACTIONS = listOf(
 
 fun barActionsOf(area: String): List<BarActionDef> = if (area == "thread") THREAD_BAR_ACTIONS else LIST_BAR_ACTIONS
 
+/** 操作の並び(設定で動かした順。保存にないもの(あとで増えたもの)は既定の順で後ろに)。帯に並ぶ順もこの順 */
+fun barOrder(prefs: Prefs, area: String): List<BarActionDef> {
+    val defs = barActionsOf(area)
+    val saved = runCatching { JSONObject(prefs.barLayout).optJSONArray("${area}_order") }.getOrNull()
+    val ids = saved?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+    val byId = defs.associateBy { it.id }
+    return ids.mapNotNull { byId[it] } + defs.filter { it.id !in ids }
+}
+
+fun moveBarAction(prefs: Prefs, area: String, from: Int, to: Int) {
+    val ids = barOrder(prefs, area).map { it.id }.toMutableList()
+    if (from !in ids.indices || to !in ids.indices) return
+    ids.add(to, ids.removeAt(from))
+    val all = runCatching { JSONObject(prefs.barLayout) }.getOrDefault(JSONObject())
+    all.put("${area}_order", org.json.JSONArray(ids))
+    prefs.barLayout = all.toString()
+}
+
 /** 操作 id → 置き場。保存してあるものに既定を足す。スレ表示の更新は、前からある「更新ボタンを出す」(showRefreshFab)を既定にする */
 fun barPlacements(prefs: Prefs, area: String): Map<String, BarPlace> {
     val saved = runCatching { JSONObject(prefs.barLayout).optJSONObject(area) }.getOrNull()

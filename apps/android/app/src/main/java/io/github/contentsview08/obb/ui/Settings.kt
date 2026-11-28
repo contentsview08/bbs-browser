@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Dns
@@ -339,6 +340,9 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     // 配色とスキンは同じ族(スキン = 色だけ、または見た目まで含めたまとまり)。選ぶのは上に重ねるパネル(SkinPanel)で
     Group("スキン", note = "同梱の配色と、保存した・取り込んだスキンから選びます。スキンの保存・色の編集もそこで") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "スキンを選ぶ…", value = currentSkinName(p)) { vm.openSkins() }
+    }
+    Group("はじめの設定", note = "初めて開いたときの画面。配色・レスの見た目・ボタンの配置・細かい表示を、順に選び直せます") {
+        NavRow(Icons.Filled.AutoAwesome, Color(0xFF0EA5E9), "はじめの設定をもう一度…") { vm.openSetup() }
     }
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }

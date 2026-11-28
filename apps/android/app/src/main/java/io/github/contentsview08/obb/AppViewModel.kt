@@ -305,6 +305,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         skinOpen = false
     }
 
+    // ── はじめの設定(配色・レスの見た目・ボタンの配置・細かい表示を順に選ぶ)。初めて開いたとき(prefs.setupDone == 0)と、設定の「はじめの設定をもう一度」 ──
+    var setupOpen by mutableStateOf(prefs.setupDone == 0)
+        private set
+
+    fun openSetup() {
+        drawerOpen = false
+        setupOpen = true
+    }
+
+    /** 終えた・飛ばした。次からは出さない */
+    fun finishSetup() {
+        prefs.setupDone = 1
+        setupOpen = false
+    }
+
     // ── スキンの一覧(カタログ。data/SkinCatalog.kt)。スキンのパネルの「もっと探す」 ──
     var skinCatalog by mutableStateOf<List<io.github.contentsview08.obb.data.SkinCatalog.Entry>?>(null)
         private set

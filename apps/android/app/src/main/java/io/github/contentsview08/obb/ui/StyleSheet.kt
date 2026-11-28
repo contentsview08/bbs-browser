@@ -228,7 +228,7 @@ private fun SheetTabs(tabs: List<Pair<String, String>>, current: String, modifie
  * 後ろの画面ですぐ確かめられるので、説明は省いて 1 行ずつに詰める
  */
 @Composable
-private fun PostDisplayTab(p: Prefs) {
+internal fun PostDisplayTab(p: Prefs) {
     SheetSwitch("名無しの名前を省く", p.omitNoname) { p.omitNoname = it }
     SheetSwitch("名前欄を目立たなくする", p.nameSubtle) { p.nameSubtle = it }
     SheetSwitch("ID を短く出す", p.idShort) { p.idShort = it }
@@ -289,7 +289,7 @@ private fun SheetLabel(t: String) =
 /** 配色の丸を並べ、右端まで来たら次の行へ(横にスクロールすると全部が見えない)。丸の中に、その配色の帯・地・差し色を描く(名前だけより、押す前に色が分かる) */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SchemeRow(p: Prefs) {
+internal fun SchemeRow(p: Prefs) {
     val current = Palette.scheme.key
     val schemes = allSchemes()
     androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {

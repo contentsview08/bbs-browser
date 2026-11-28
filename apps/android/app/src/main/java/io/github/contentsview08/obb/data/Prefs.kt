@@ -435,6 +435,28 @@ class Prefs(context: Context) {
     fun addSnippet(text: String) { if (text.isNotBlank()) setFieldHistoryList("snippets", (listOf(text) + snippets.filter { it != text }).take(20)) }
     fun removeSnippet(text: String) = setFieldHistoryList("snippets", snippets.filter { it != text })
     fun clearFieldHistory(k: String) = setFieldHistoryList(k, emptyList())
+    /** 欄ごとのクリップボードの 1 件。kind は name / mail / id / body */
+    class Clip(val kind: String, val text: String)
+    /**
+     * レスの ID・名前・本文・メールをコピーしたときに覚える控え(新しい順、30 件まで。fieldHistory の clips)。
+     * 本文の欄(＋ → クリップボード履歴)にはすべて、名前・メールの欄にはその種類だけを出す
+     */
+    val clips: List<Clip> get() = runCatching {
+        val a = JSONObject(fieldHistory).optJSONArray("clips") ?: return emptyList()
+        List(a.length()) { i -> a.getJSONObject(i).let { Clip(it.optString("k"), it.optString("t")) } }
+    }.getOrDefault(emptyList())
+    private fun setClips(v: List<Clip>) {
+        val o = runCatching { JSONObject(fieldHistory) }.getOrDefault(JSONObject())
+        o.put("clips", JSONArray(v.map { JSONObject().put("k", it.kind).put("t", it.text) }))
+        fieldHistory = o.toString()
+    }
+    fun addClip(kind: String, text: String) { if (text.isNotBlank()) setClips((listOf(Clip(kind, text)) + clips.filter { !(it.kind == kind && it.text == text) }).take(30)) }
+    fun removeClip(c: Clip) = setClips(clips.filter { !(it.kind == c.kind && it.text == c.text) })
+    fun clearClips(kind: String? = null) = setClips(if (kind == null) emptyList() else clips.filter { it.kind != kind })
+    /** 名前・メールの欄の候補: その欄の種類でコピーしたもの + 書き込みに使ったもの */
+    fun fieldChoices(kind: String): List<String> = (clips.filter { it.kind == kind }.map { it.text } + (if (kind == "name") fieldNames else fieldMails)).distinct()
+    /** はじめの設定(配色・レスの見た目・ボタンの配置・細かい表示を順に選ぶ画面)を済ませた印。0 なら次に開いたときに出す */
+    var setupDone by pref("setupDone", 0)
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
     var quickPhrases by wordsPref("quickPhrases", emptyList(), "\n")
     /** 定型文を 1 行ずつ(空の行は除く) */

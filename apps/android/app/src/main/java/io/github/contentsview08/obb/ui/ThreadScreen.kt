@@ -1025,7 +1025,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("ヘッダ含めてコピー", Icons.Filled.ContentCopy) {
                         copyText(context, "${p.no} ${p.name} ${p.date}${p.id?.let { " ID:$it" } ?: ""}\n${p.body}"); vm.toast = "コピーしました"
                     },
-                    MenuItem("本文のみコピー", Icons.Filled.ContentCopy) { copyText(context, p.body); vm.toast = "コピーしました" },
+                    MenuItem("本文のみコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "body", p.body) },
                     MenuItem("共有", Icons.Filled.Share, children = TwoCh.postWebUrl(TwoCh.webUrl(page.summary), p.no).let { url ->
                         listOf(
                             MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, "${page.title}\n$url") },
@@ -1079,11 +1079,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             listOf(
                 if (kind == 'i' && p.id != null) listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p) }) {}) + listOf(
                     MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search) { openPopup(sameId, focus = p.no) },
-                    MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
+                    MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "id", p.id) },
                 ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else nameNgItems(p) }) {}) + listOf(
                     MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search) { openPopup(sameName, focus = p.no) },
-                    MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
-                ),
+                    MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "name", p.name) },
+                // メールがあるレスは、メールもコピーできる(書き込み欄のメールの候補にたまる)
+                ) + (if (p.mail.isNotBlank()) listOf(MenuItem("メールをコピー(${p.mail})", Icons.Filled.ContentCopy) { copyClip(vm, context, "mail", p.mail) }) else emptyList()),
             ),
             MenuAt.Center,
         ) { headMenu = null }

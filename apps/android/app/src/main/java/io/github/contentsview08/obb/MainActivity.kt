@@ -250,6 +250,8 @@ class MainActivity : ComponentActivity() {
                             SettingsPanel(vm)
                             // スキンは設定からも開くので、設定より上に重ねる(スキンから設定を開くときはスキンを閉じる)
                             io.github.contentsview08.obb.ui.SkinPanel(vm)
+                            // はじめの設定(初めて開いたとき・設定の「はじめの設定をもう一度」)。設定より上に重ねる
+                            io.github.contentsview08.obb.ui.SetupPanel(vm)
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -129,6 +130,7 @@ fun ThreadFooter(
     }
     var phraseMenu by remember { mutableStateOf(false) }
     var snippetMenu by remember { mutableStateOf(false) }
+    var clipMenu by remember { mutableStateOf(false) }
     LaunchedEffect(r.blurSeq) { if (r.blurSeq > 0) focusManager.clearFocus() }
     // 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
@@ -163,8 +165,8 @@ fun ThreadFooter(
         if (showField && options) {
             // 欄ごとの履歴(Twinkle の欄ごとのクリップボード): 書き込むたびに覚えた名前・メールを、欄の横の履歴ボタンから選べる
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), vm.prefs.fieldNames, onClear = { vm.prefs.clearFieldHistory("names") })
-                FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), vm.prefs.fieldMails, onClear = { vm.prefs.clearFieldHistory("mails") })
+                FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), vm.prefs, "name")
+                FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), vm.prefs, "mail")
             }
         }
         // 定型文のバー(書いている間)。押すとカーソルの所に入る
@@ -241,6 +243,17 @@ fun ThreadFooter(
                         }
                     }
                 }
+                // クリップボード履歴(＋ の「クリップボード履歴」から)。コピーした ID・名前・本文・メールを、カーソルの所に入れる
+                if (clipMenu) {
+                    androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { clipMenu = false }) {
+                        Column(
+                            Modifier.widthIn(min = 240.dp, max = 340.dp).heightIn(max = 360.dp).shadow(10.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
+                                .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                        ) {
+                            ClipList(vm.prefs) { clipMenu = false; insertPhrase(it); r.focusSeq++ }
+                        }
+                    }
+                }
                 // ＋ のメニュー(欄の上にふわっと出る)
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
@@ -260,6 +273,8 @@ fun ThreadFooter(
                             // 本文の控え(欄ごとの履歴): 書いている本文を取っておく・取っておいた本文をカーソルの所に入れる
                             if (r.body.isNotBlank()) PlusItem(Icons.Filled.BookmarkAdd, "本文を控えに保存") { plusMenu = false; vm.prefs.addSnippet(r.body); vm.toast = "控えに保存しました" }
                             if (vm.prefs.snippets.isNotEmpty()) PlusItem(Icons.Filled.Bookmark, "控えから入れる") { plusMenu = false; snippetMenu = true }
+                            // クリップボード履歴(欄ごとのクリップボード): レスの ID・名前・本文・メールをコピーしたものを入れる
+                            PlusItem(Icons.Filled.ContentPaste, "クリップボード履歴") { plusMenu = false; clipMenu = true }
                             val aaNow = isAA(r)
                             PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }
@@ -414,20 +429,46 @@ private fun PlusItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 }
 
 /** 小さな欄に、履歴(書き込むたびに覚えた値)を選ぶボタンを添えたもの。履歴がなければ欄だけ */
+/**
+ * 名前・メールの欄と、その右のクリップボードのボタン。押すと、その欄の候補(レスからコピーしたもの + 書き込みに使ったもの)がメニューで出る。
+ * 出るのはその欄の種類だけ(名前の欄には名前、メールの欄にはメール)。本文の欄のクリップボード履歴には全部出る
+ */
 @Composable
-private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, history: List<String>, onClear: () -> Unit) {
+private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, prefs: io.github.contentsview08.obb.data.Prefs, kind: String) {
     var open by remember { mutableStateOf(false) }
+    val choices = prefs.fieldChoices(kind)
+    val what = if (kind == "name") "名前" else "メール"
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         SmallField(value, onChange, placeholder, Modifier.weight(1f))
-        if (history.isNotEmpty()) Box {
-            IconButton(onClick = { open = true }, Modifier.size(36.dp)) { Icon(Icons.Filled.History, "履歴", tint = Palette.textMuted, modifier = Modifier.size(20.dp)) }
+        Box {
+            IconButton(onClick = { open = true }, Modifier.size(36.dp)) {
+                Icon(Icons.Filled.ContentPaste, "${what}のクリップボード", tint = if (choices.isEmpty()) Palette.textMuted.copy(alpha = 0.5f) else Palette.textMuted, modifier = Modifier.size(18.dp))
+            }
             androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                for (h in history) androidx.compose.material3.DropdownMenuItem(text = { Text(h, color = Palette.textStrong, fontSize = 14.sp) }, onClick = { onChange(h); open = false })
-                androidx.compose.material3.DropdownMenuItem(text = { Text("履歴を消す", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { onClear(); open = false })
+                if (choices.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("レスの${what}をコピーするか、書き込むと、ここにたまります", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { open = false })
+                for (h in choices) androidx.compose.material3.DropdownMenuItem(text = { Text(h, color = Palette.textStrong, fontSize = 14.sp) }, onClick = { onChange(h); open = false })
+                if (choices.isNotEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("履歴を消す", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { prefs.clearFieldHistory(if (kind == "name") "names" else "mails"); prefs.clearClips(kind); open = false })
             }
         }
     }
 }
+
+/** クリップボード履歴の一覧(コピーした ID・名前・本文・メール。新しい順)。押すとカーソルの所に入る。✕ で 1 件消す */
+@Composable
+private fun ClipList(prefs: io.github.contentsview08.obb.data.Prefs, onPick: (String) -> Unit) {
+    val clips = prefs.clips
+    Text("クリップボード履歴", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+    if (clips.isEmpty()) Text("レスの ID・名前・本文をコピーすると、ここにたまります(名前・メールは、その欄の横のボタンからも)", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
+    for (c in clips) Row(Modifier.fillMaxWidth().clickable { onPick(c.text) }, verticalAlignment = Alignment.CenterVertically) {
+        Text(clipKindName(c.kind), Modifier.padding(start = 12.dp).background(Palette.surface2, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 10.sp)
+        Text(c.text.replace(Regex("\\s+"), " "), Modifier.weight(1f).padding(start = 8.dp, top = 11.dp, bottom = 11.dp), color = Palette.textStrong, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        IconButton(onClick = { prefs.removeClip(c) }, Modifier.size(40.dp)) { Icon(Icons.Filled.Close, "この控えを消す", tint = Palette.textMuted, modifier = Modifier.size(16.dp)) }
+    }
+    if (clips.isNotEmpty()) Text("全部消す", Modifier.fillMaxWidth().clickable { prefs.clearClips() }.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp)
+}
+
+/** クリップボード履歴の種類の短い名前 */
+fun clipKindName(k: String) = when (k) { "id" -> "ID"; "name" -> "名前"; "mail" -> "メール"; "body" -> "本文"; else -> k }
 
 @Composable
 private fun SmallField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier) {
@@ -610,6 +651,7 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
         var options by remember { mutableStateOf(r.name.isNotEmpty() || r.mail.isNotEmpty()) }
         var phraseMenu by remember { mutableStateOf(false) }
         var snippetMenu by remember { mutableStateOf(false) }
+        var clipMenu by remember { mutableStateOf(false) }
         val bodyFocus = remember { FocusRequester() }
         LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { bodyFocus.requestFocus() } }
         val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
@@ -655,8 +697,8 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 if (options) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), prefs.fieldNames, onClear = { prefs.clearFieldHistory("names") })
-                        FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), prefs.fieldMails, onClear = { prefs.clearFieldHistory("mails") })
+                        FieldWithHistory(r.name, { r.name = it }, "名前", Modifier.weight(1f), prefs, "name")
+                        FieldWithHistory(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f), prefs, "mail")
                     }
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
                 }
@@ -695,6 +737,13 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
                         )
                     }
                 }
+                // クリップボード履歴: コピーした ID・名前・本文・メールをカーソルの所に入れる
+                Box {
+                    IconButton(onClick = { clipMenu = true }) { Icon(Icons.Filled.ContentPaste, "クリップボード履歴", tint = Palette.textMuted) }
+                    androidx.compose.material3.DropdownMenu(expanded = clipMenu, onDismissRequest = { clipMenu = false }) {
+                        Column(Modifier.widthIn(min = 240.dp, max = 340.dp)) { ClipList(prefs) { clipMenu = false; insertAtCursor(it) } }
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 Text(if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) "${r.body.length} 文字" else "${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
             }
@@ -702,6 +751,13 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
     }
     if (preview) PostPreview(vm, page) { preview = false }
     PostDialogs(r, onAccept = { vm.acceptConfirm(page) })
+}
+
+/** コピーして、欄ごとのクリップボード(書き込み欄の ＋ → クリップボード履歴。名前・メールはその欄の候補にも)に覚える。kind は id / name / mail / body */
+fun copyClip(vm: AppViewModel, context: Context, kind: String, text: String) {
+    copyText(context, text)
+    vm.prefs.addClip(kind, text)
+    vm.toast = "コピーしました"
 }
 
 fun copyText(context: Context, text: String) {

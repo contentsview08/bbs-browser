@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
@@ -151,6 +154,23 @@ fun HistoryTabsPage(vm: AppViewModel) {
     }
 }
 
+/** チャット欄の見本(ThreadFooter の欄と同じ寸法・色。押せない) */
+@Composable
+fun ReplyFieldLook(p: io.github.contentsview08.obb.data.Prefs) {
+    val control = (p.footerHeight - 8).coerceIn(28, 40)
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).heightIn(min = control.dp).background(Palette.surface, shape).border(1.dp, Palette.border, shape), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(control.dp), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Add, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) }
+            Text("書き込む", Modifier.weight(1f).padding(end = 14.dp), color = Palette.textMuted, fontSize = 15.sp, maxLines = 1)
+        }
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.size(control.dp).alpha(0.4f).background(Palette.accent, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Filled.Send, null, tint = Palette.accentText, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
 /** 部品の見た目。タブは実際のフッターのタブと同じ(アイコン・名前・並べ方の矢印)、ボタンは帯と同じ大きさのアイコン */
 @Composable
 private fun ToolbarChipLook(vm: AppViewModel, item: DockItem, placed: Boolean) {
@@ -163,6 +183,8 @@ private fun ToolbarChipLook(vm: AppViewModel, item: DockItem, placed: Boolean) {
         }
         return
     }
+    // チャット欄は、実際のチャット欄と同じ見た目(＋・丸い欄・送るの丸)。置いたら、そのまま実際の帯の形が分かる
+    if (item.id == "replyField" && placed) { ReplyFieldLook(p); return }
     if (item.fills && placed) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (item.icon != null) { Icon(item.icon, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }

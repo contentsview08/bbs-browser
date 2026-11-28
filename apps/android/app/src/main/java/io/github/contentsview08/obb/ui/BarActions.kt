@@ -170,6 +170,12 @@ fun saveToolbarLayout(prefs: Prefs, area: String, layout: ToolbarLayout) {
     prefs.barLayout = all.toString()
 }
 
+/** 両方の画面の並びをまとめて保存(はじめの設定の「ボタンの配置」の候補) */
+fun saveToolbarLayouts(prefs: Prefs, thread: ToolbarLayout, list: ToolbarLayout) {
+    saveToolbarLayout(prefs, "thread", thread)
+    saveToolbarLayout(prefs, "list", list)
+}
+
 /** 部品を箱に入れる(index の所。ほかの箱にあれば外してから)。空き以外は 1 つだけ */
 fun placeToolbarPart(prefs: Prefs, area: String, id: String, bar: ToolbarBar, index: Int) {
     if (id == "spacer") return

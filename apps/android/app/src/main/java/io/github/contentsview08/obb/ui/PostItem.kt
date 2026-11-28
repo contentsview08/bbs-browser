@@ -165,8 +165,9 @@ fun PostItem(
     // 左右の帯: 人気のレスは設定の側(左・右)に暖色と淡い地。レスの見た目に関わらず同じ
     val heatSide = prefs.heatStyle
     val showHeat = heat != null && (heatSide == "left" || heatSide == "right")
-    // 自分の書き込みの帯は、人気の帯と反対の側にいつも出す(人気が左の帯なら自分は右。人気を帯で示さないときは左)
-    val ownSide = if (heatSide == "left") "right" else "left"
+    // 自分の書き込みの帯の側(設定 ownStyle)。auto なら人気の帯と反対(人気が左の帯なら自分は右。人気を帯で示さないときは左)。
+    // 人気と同じ側のときは自分の帯が勝つ(下の when の順)
+    val ownSide = when (prefs.ownStyle) { "left" -> "left"; "right" -> "right"; else -> if (heatSide == "left") "right" else "left" }
     // 自分への返信は、自分の側に半分の濃さの帯と、うっすら自分の色の地(スクロール中でも目に入るように)
     val leftBar = when {
         own && ownSide == "left" -> Palette.own
@@ -309,6 +310,8 @@ fun PostItem(
         Modifier.fillMaxWidth().then(
             when {
                 toOwn -> Modifier.background(Palette.own.copy(alpha = 0.09f))
+                // 自分の書き込みが人気でも、自分の帯を優先して人気の淡い地は敷かない
+                own -> Modifier
                 showHeat && heat != null -> Modifier.background(heat.copy(alpha = 0.06f))
                 else -> Modifier
             },

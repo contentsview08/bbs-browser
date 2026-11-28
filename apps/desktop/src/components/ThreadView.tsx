@@ -2158,6 +2158,7 @@ export default function ThreadView(props: Props) {
           ? { dark: schemeDark, sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
           : undefined,
         heatStyle: settings.heatStyle,
+        ownStyle: settings.ownStyle,
         doubleTapReply: settings.doubleTapReply,
         doubleClick: settings.postDoubleClick,
         dateStyle: settings.dateStyle,
@@ -2185,7 +2186,7 @@ export default function ThreadView(props: Props) {
     // ポップアップの中身は renderRef で最新の値で描くので、NG の判定や自分のレスなど描くための値はここに入れない
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
     // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
-    [schemeDark, settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
+    [schemeDark, settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.ownStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
   )
 
   /** アンカーツリーを描く(ポップアップの中身) */

@@ -25,7 +25,7 @@ object LookTheme {
     val COMMON_KEYS = setOf(
         "followOsTheme", "scheme", "darkScheme", "lightScheme", "accent",
         "postStyle",
-        "idStyle", "idShort", "idPosition", "dateStyle", "heatStyle", "highlightOp", "nameSubtle", "omitNoname", "watchoiShort", "iconFromWatchoi",
+        "idStyle", "idShort", "idPosition", "dateStyle", "heatStyle", "ownStyle", "highlightOp", "nameSubtle", "omitNoname", "watchoiShort", "iconFromWatchoi",
         "urlShorten", "tidyBlankLines", "showMinimap", "showLinkPreview", "openLinksInApp",
         "threadSort", "unreadFirst", "listShape", "keywordBands", "listTabs", "openPosition", "showNextCandidatesAtEnd", "showNextUnreadAtEnd",
         "blurGross", "postThumbSize", "thumbLoad", "reduceMotion", "ngMode", "groupNg", "pastTabsPosition", "hideBarsOnScroll",

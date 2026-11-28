@@ -50,11 +50,16 @@ import androidx.compose.foundation.verticalScroll
 // - ThumbSample: サムネイルの大きさの枠
 
 /** 見本のレス(どの掲示板にもありそうな形。PC 版・Web と同じ文) */
+/** 見本のレス: 1 普通(主)・2 自分の書き込み・3 自分への返信・4 人気のレス。配色・見た目・帯の設定の確かめ用 */
 private val SAMPLE = listOf(
     Post(1, "名無しさん", "", "2026/11/02(月) 19:01:15.32", "Ab3dE9fG0", "見本のスレです\n文字の大きさ・行間・レスの見た目は、ここで確かめられます"),
-    Post(2, "名無しさん", "sage", "2026/11/02(月) 19:02:40.11", "xY7kLm2Q0", ">>1\n乙です\n長めの本文は、行間を変えると読みやすさが変わります。行の高さ・余白・文字の大きさを見ながら決めてください"),
-    Post(3, "名無しさん", "", "2026/11/02(月) 19:03:05.87", "Ab3dE9fG0", ">>2\nありがとう\nhttps://example.com/"),
+    Post(2, "名無しさん", "sage", "2026/11/02(月) 19:02:40.11", "xY7kLm2Q0", ">>1\n自分の書き込みはこう見えます"),
+    Post(3, "名無しさん", "", "2026/11/02(月) 19:03:05.87", "Ab3dE9fG0", ">>2\n自分への返信はこう見えます"),
+    Post(4, "名無しさん", "", "2026/11/02(月) 19:04:30.10", "Qp8sT2vW0", "人気のレス(返信が 3 件から)はこう見えます\nhttps://example.com/"),
 )
+/** 見本の中で自分の書き込みとみなすレス番号・人気とみなすレス番号 */
+private const val SAMPLE_OWN = 2
+private const val SAMPLE_HOT = 4
 
 /** 設定のスイッチの色(オンのときは差し色) */
 @Composable
@@ -83,7 +88,9 @@ fun SamplePosts(vm: AppViewModel) {
                     ReplyPreview(to, t.id, text.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "", if (so.quote == "full") text else null)
                 }
             }
-            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, reply = reply, heat = Palette.heat(index.heatCount[post.no] ?: 0), autoLoad = false) }
+            // 2 は自分の書き込み、3 は自分への返信(>>2)、4 は人気(返信 4 件ぶんの色)
+            val heat = if (post.no == SAMPLE_HOT) Palette.heat(4) else Palette.heat(index.heatCount[post.no] ?: 0)
+            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, own = post.no == SAMPLE_OWN, toOwn = r.replyTo == SAMPLE_OWN, continued = continued, reply = reply, heat = heat, autoLoad = false) }
         }
     }
 }

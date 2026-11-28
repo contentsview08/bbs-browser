@@ -245,6 +245,8 @@ internal fun PostDisplayTab(p: Prefs) {
     SheetSwitch("スレ主に「主」の印", p.highlightOp) { p.highlightOp = it }
     SheetLabel("人気のレスの示し方")
     ChipRow(HEAT_STYLES, p.heatStyle) { p.heatStyle = it }
+    SheetLabel("自分の書き込みの帯(人気と同じ側なら自分が勝つ)")
+    ChipRow(OWN_STYLES, p.ownStyle) { p.ownStyle = it }
     SheetSwitch("空行を整える", p.tidyBlankLines) { p.tidyBlankLines = it }
     SheetSwitch("URL を短く見せる", p.urlShorten) { p.urlShorten = it }
     SheetSwitch("スレの最後に次スレの候補を出す", p.showNextCandidatesAtEnd) { p.showNextCandidatesAtEnd = it }

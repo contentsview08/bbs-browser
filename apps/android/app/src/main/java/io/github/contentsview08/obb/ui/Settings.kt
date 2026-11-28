@@ -330,9 +330,13 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
 
 @Composable
 private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
+    val p = vm.prefs
+    // 初めて開いたときの画面をもう一度(配色・レスの見た目・細かい表示・ボタンの配置を順に)
+    Group {
+        NavRow(Icons.Filled.AutoAwesome, Color(0xFF0EA5E9), "クイックセットアップ", desc = "配色・レスの見た目・細かい表示・ボタンの配置を、見本を見ながら順に選びます") { vm.openSetup() }
+    }
     SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
     HorizontalDivider(color = Palette.border)
-    val p = vm.prefs
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it }
         if (LocalAdvanced.current) SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
@@ -340,9 +344,6 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     // 配色とスキンは同じ族(スキン = 色だけ、または見た目まで含めたまとまり)。選ぶのは上に重ねるパネル(SkinPanel)で
     Group("スキン", note = "同梱の配色と、保存した・取り込んだスキンから選びます。スキンの保存・色の編集もそこで") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "スキンを選ぶ…", value = currentSkinName(p)) { vm.openSkins() }
-    }
-    Group("はじめの設定", note = "初めて開いたときの画面。配色・レスの見た目・ボタンの配置・細かい表示を、順に選び直せます") {
-        NavRow(Icons.Filled.AutoAwesome, Color(0xFF0EA5E9), "はじめの設定をもう一度…") { vm.openSetup() }
     }
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
@@ -803,6 +804,8 @@ private fun HistoryPage(vm: AppViewModel, open: (String) -> Unit) {
 internal val DATE_STYLES = listOf("md_w_hms" to "月日・曜日・時刻(11/02(月) 19:01:15)", "md_hm" to "月日と時分(11/02 19:01)", "full" to "すべて(年・秒の下の桁まで)")
 internal val ID_POSITIONS = listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")
 internal val HEAT_STYLES = listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色")
+/** 自分の書き込み(と自分への返信)の帯の側 */
+internal val OWN_STYLES = listOf("auto" to "人気と反対", "left" to "左の帯", "right" to "右の帯")
 
 @Composable
 private fun ThreadPage(vm: AppViewModel) {
@@ -840,6 +843,9 @@ private fun PostDisplayGroups(vm: AppViewModel) {
     }
     Group("人気のレス", note = "返信が 3 件からのレス。多いほど赤く") {
         ChoiceRow("示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
+    }
+    Group("自分の書き込み", note = "自分の書き込みと、自分への返信の帯。人気の帯と同じ側にしたときは、自分の帯を優先します") {
+        ChoiceRow("帯の側", p.ownStyle, OWN_STYLES) { p.ownStyle = it }
     }
     Group("リンクと本文") {
         SwitchRow("リンクのカード", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }

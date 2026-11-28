@@ -444,7 +444,8 @@ private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placehol
             IconButton(onClick = { open = true }, Modifier.size(36.dp)) {
                 Icon(Icons.Filled.ContentPaste, "${what}のクリップボード", tint = if (choices.isEmpty()) Palette.textMuted.copy(alpha = 0.5f) else Palette.textMuted, modifier = Modifier.size(18.dp))
             }
-            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // フォーカスを取らない(取るとキーボードが閉じて画面がガタつく)
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
                 if (choices.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("レスの${what}をコピーするか、書き込むと、ここにたまります", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { open = false })
                 for (h in choices) androidx.compose.material3.DropdownMenuItem(text = { Text(h, color = Palette.textStrong, fontSize = 14.sp) }, onClick = { onChange(h); open = false })
                 if (choices.isNotEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("履歴を消す", color = Palette.textMuted, fontSize = 13.sp) }, onClick = { prefs.clearFieldHistory(if (kind == "name") "names" else "mails"); prefs.clearClips(kind); open = false })
@@ -740,7 +741,7 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
                 // クリップボード履歴: コピーした ID・名前・本文・メールをカーソルの所に入れる
                 Box {
                     IconButton(onClick = { clipMenu = true }) { Icon(Icons.Filled.ContentPaste, "クリップボード履歴", tint = Palette.textMuted) }
-                    androidx.compose.material3.DropdownMenu(expanded = clipMenu, onDismissRequest = { clipMenu = false }) {
+                    androidx.compose.material3.DropdownMenu(expanded = clipMenu, onDismissRequest = { clipMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
                         Column(Modifier.widthIn(min = 240.dp, max = 340.dp)) { ClipList(prefs) { clipMenu = false; insertAtCursor(it) } }
                     }
                 }

@@ -185,6 +185,8 @@ export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 /** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホ版の heatStyle と同じ) */
 export type HeatStyle = 'left' | 'right' | 'text'
+/** 自分の書き込み(と自分への返信)の帯の側: auto = 人気の帯と反対(人気を帯で示さないときは左)/ left / right。人気と同じ側なら自分の帯が勝つ(スマホ版の ownStyle と同じ) */
+export type OwnStyle = 'auto' | 'left' | 'right'
 /** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左に) */
 export type IdStyle = 'none' | 'color' | 'icon'
 export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
@@ -542,6 +544,7 @@ export interface AppSettings {
   reduceMotion: boolean
   /** 人気のレスの示し方 */
   heatStyle: HeatStyle
+  ownStyle: OwnStyle
   /** スレ一覧の行の形 */
   listShape: ListShape
   /** レスをダブルタップで返信(スマホ) */
@@ -777,6 +780,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accent: '',
   reduceMotion: false,
   heatStyle: 'left',
+  ownStyle: 'auto',
   listShape: 'normal',
   doubleTapReply: false,
   postDoubleClick: 'none',

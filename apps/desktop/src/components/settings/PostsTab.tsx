@@ -90,6 +90,17 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           onChange={(v) => update('heatStyle', v)}
         />
       </Section>
+      <Section title="自分の書き込み" note="自分の書き込みと、自分への返信の帯。人気の帯と同じ側にしたときは、自分の帯を優先します">
+        <Choice
+          value={s.ownStyle}
+          options={[
+            { key: 'auto' as const, name: '人気と反対' },
+            { key: 'left' as const, name: '左の帯' },
+            { key: 'right' as const, name: '右の帯' },
+          ]}
+          onChange={(v) => update('ownStyle', v)}
+        />
+      </Section>
       <Section title="リンクと本文">
         <Toggle checked={s.showLinkPreview} onChange={(v) => update('showLinkPreview', v)} label="リンクのカード" note="画像でも動画でもないリンクに、ページの題・説明・画像を本文の下に(見えたときに取りに行きます)" />
         <Toggle checked={s.openLinksInApp} onChange={(v) => update('openLinksInApp', v)} label="リンクをアプリの中で開く" note="画像ビューアーのように、今の画面の上に重ねたパネルでページを開きます。オフ: OS のブラウザで開く" />

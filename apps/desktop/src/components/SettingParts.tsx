@@ -83,6 +83,7 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
               ...SAMPLE_HANDLERS,
               idColor: s.idStyle === 'color' ? { dark: isDarkScheme(effectiveScheme(s)), sky: false } : undefined,
               heatStyle: s.heatStyle,
+              ownStyle: s.ownStyle,
               dateStyle: s.dateStyle,
               idShort: s.idShort,
               urls: { shorten: s.urlShorten, omitImages: s.urlShorten, collapseImageRuns: s.urlShorten },

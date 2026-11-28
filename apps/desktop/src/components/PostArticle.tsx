@@ -24,7 +24,7 @@ import LinkPreview from './LinkPreview'
 import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
-import type { HeatStyle, IdPosition, NgMode, PostDoubleClick } from '../ui/settings'
+import type { HeatStyle, IdPosition, NgMode, OwnStyle, PostDoubleClick } from '../ui/settings'
 import { watchoiOf } from '../utils/watchoi'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
@@ -44,6 +44,8 @@ export interface PostHandlers extends BodyHandlers {
   idColor?: { dark: boolean; sky: boolean }
   /** 人気のレス(返信 3 件から)の示し方(設定 heatStyle)。既定は左の帯 */
   heatStyle?: HeatStyle
+  /** 自分の書き込み(と自分への返信)の帯の側(設定 ownStyle)。既定は人気の帯と反対 */
+  ownStyle?: OwnStyle
   /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
   doubleTapReply?: boolean
   /** PC: ダブルクリックの操作(設定 postDoubleClick)。none か未指定なら、1 回の押しですぐツリー */
@@ -422,8 +424,9 @@ function PostArticle(props: Props) {
   const bodyClass = heatStyle === 'text' && heatCount >= 3 ? numHeat : 'text-c-text-body'
   // 人気のレスを帯で示すときの色(左・右の 3px の帯と、淡い地)
   const heatBar = (heatStyle === 'left' || heatStyle === 'right') && heatCount >= 3 ? heatVar(heatCount) : null
-  // 自分の書き込みの帯は、人気の帯と反対の側に(人気が左の帯なら自分は右。スマホのアプリと同じ)
-  const ownRight = heatStyle === 'left'
+  // 自分の書き込みの帯の側(設定 ownStyle)。auto なら人気の帯と反対(人気が左の帯なら自分は右。スマホのアプリと同じ)
+  const ownStyle = handlers.ownStyle ?? 'auto'
+  const ownRight = ownStyle === 'auto' ? heatStyle === 'left' : ownStyle === 'right'
   // サムネイル(画像・動画のファイル・YouTube)は、本文に出てくる順に並べ、ビューアーでも同じ順に見る
   const mediaItems = props.showThumbnails ? mediaIn(post.body) : []
   const media = mediaItems.map((m) => m.url)
@@ -614,6 +617,10 @@ function PostArticle(props: Props) {
   ]
 
   const variant = props.variant ?? 'card'
+  // 自分の帯・自分への返信の帯を出すか。人気の帯と同じ側のときは自分の帯が勝ち、自分の書き込みには人気の淡い地も敷かない
+  const ownBarShown = ((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft
+  const heatBarShown = heatBar && !(ownBarShown && (heatStyle === 'right') === ownRight) ? heatBar : null
+  const heatWash = heatBar && !(props.isOwn && variant !== 'line') ? heatBar : null
 
   // スマホ: 長押しで、反応(そうだね など)と、︙ のメニューと同じ操作の一覧を出す(マウスを乗せて出す操作バーの代わり)
   const sheetItems: SheetItem[] = [
@@ -1288,7 +1295,7 @@ function PostArticle(props: Props) {
           : undefined
       }
       // 人気のレスを帯で示すときは、淡い地も敷く(スマホのアプリと同じ 6%)
-      style={heatBar ? { ...frame, background: `color-mix(in srgb, ${heatBar} 6%, transparent)` } : frame}
+      style={heatWash ? { ...frame, background: `color-mix(in srgb, ${heatWash} 6%, transparent)` } : frame}
       onMouseEnter={() => {
         placeToolbar()
         setHovered(true)
@@ -1296,16 +1303,16 @@ function PostArticle(props: Props) {
       onMouseLeave={() => setHovered(false)}
     >
       {/* 人気のレスの帯(設定で左・右)。淡い地は article の style で敷く */}
-      {heatBar && (
+      {heatBarShown && (
         <span
           className={`absolute ${heatStyle === 'left' ? 'left-0' : 'right-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}
-          style={{ background: heatBar }}
+          style={{ background: heatBarShown }}
           title={`返信 ${anchorCount} 件`}
         />
       )}
       {/* 自分の書き込みと、自分へのアンカーを含むレスの目印。本文の縦線とは別に引く(見た目によって縦線は出ない)。
           LINE 風の自分の書き込みは、右に寄せた緑の吹き出しで分かるので出さない */}
-      {((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft && (
+      {ownBarShown && (
         <span
           className={`absolute ${ownRight ? 'right-0' : 'left-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}
           style={props.isOwn && variant !== 'line' ? { background: 'var(--c-own)' } : { background: 'var(--c-to-own)' }}

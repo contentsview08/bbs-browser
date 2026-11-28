@@ -22,8 +22,13 @@ import { SearchInput } from './ClearButton'
 const SAMPLE: Post[] = [
   { no: 1, name: '名無しさん', mail: '', date: '2026/11/02(月) 19:01:15.32', id: 'Ab3dE9fG0', body: '見本のスレです\n文字の大きさ・行間・レスの見た目は、ここで確かめられます' },
   { no: 2, name: '名無しさん', mail: 'sage', date: '2026/11/02(月) 19:02:40.11', id: 'xY7kLm2Q0', body: '>>1\n乙です\n長めの本文は、行間を変えると読みやすさが変わります。行の高さ・余白・文字の大きさを見ながら決めてください' },
-  { no: 3, name: '名無しさん', mail: '', date: '2026/11/02(月) 19:03:05.87', id: 'Ab3dE9fG0', body: '>>2\nありがとう\nhttps://example.com/' },
+  // 3 は自分の書き込み、4 は自分への返信、5 は人気のレス(スマホ版の見本と同じ 4 種類。compact は 2 だけ)
+  { no: 3, name: '名無しさん', mail: '', date: '2026/11/02(月) 19:03:05.87', id: 'Qp8sT2vW0', body: '>>2\n自分の書き込みはこう見えます' },
+  { no: 4, name: '名無しさん', mail: '', date: '2026/11/02(月) 19:03:40.20', id: 'Ab3dE9fG0', body: '>>3\n自分への返信はこう見えます' },
+  { no: 5, name: '名無しさん', mail: '', date: '2026/11/02(月) 19:04:30.10', id: 'Rt5uV8wX0', body: '人気のレス(返信が 3 件から)はこう見えます\nhttps://example.com/' },
 ]
+const SAMPLE_OWN = 3
+const SAMPLE_HOT = 5
 
 const NOOP = () => {}
 const SAMPLE_HANDLERS: PostHandlers = {
@@ -50,6 +55,8 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
   }, [])
   return (
     <div className="mb-4">
+      {/* title が空文字なら題の行ごと出さない(クイックセットアップの画面の見本) */}
+      {props.title !== '' && (
       <p className="flex items-center text-xs text-c-text-muted mb-1.5">
         <span className="flex-1">{props.title ?? '見本'}</span>
         {props.onHide && (
@@ -58,6 +65,7 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
           </button>
         )}
       </p>
+      )}
       <div
         className="pointer-events-none select-none rounded-[var(--card-radius)] border border-c-border bg-panel-view overflow-hidden flex flex-col"
         style={{ gap: 'var(--list-gap-post)' }}
@@ -67,8 +75,10 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
           <PostArticle
             key={p.no}
             post={p}
-            anchorCount={p.no === 1 ? 1 : p.no === 2 ? 1 : 0}
-          heatCount={p.no === 1 ? 1 : p.no === 2 ? 1 : 0}
+            anchorCount={p.no === SAMPLE_HOT ? 4 : p.no <= 3 ? 1 : 0}
+            heatCount={p.no === SAMPLE_HOT ? 4 : p.no <= 3 ? 1 : 0}
+            isOwn={p.no === SAMPLE_OWN}
+            isReplyToOwn={p.no === SAMPLE_OWN + 1}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
             showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
             variant={variant}

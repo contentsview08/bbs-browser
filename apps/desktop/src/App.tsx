@@ -41,6 +41,7 @@ import {
   UserOps,
 } from '@bbs-browser/logstore'
 import type { SettingsTab } from './components/SettingsDialog'
+import { QuickSetupDialog } from './components/QuickSetup'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
 import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toImageUrl } from './utils/postBody'
@@ -3093,6 +3094,12 @@ export default function App() {
   }, [])
   /** スキンを選ぶ窓(表示スタイルの窓の「ほかのスキンも見る…」) */
   const [skinsOpen, setSkinsOpen] = useState(false)
+  /** クイックセットアップ(設定を読み終えて setupDone が 0 なら、最初の起動で 1 回出す。設定 → 表示 からも開ける) */
+  const [setupOpen, setSetupOpen] = useState(false)
+  useEffect(() => {
+    if (settingsLoaded && !isMobile && settings.setupDone === 0) setSetupOpen(true)
+    // 読み終えたときだけ
+  }, [settingsLoaded])
   /** リンクのパネル(設定「リンクをアプリの中で開く」)で開いている URL */
   const [linkPanel, setLinkPanel] = useState<string>()
   // 一覧から入れたスキンが新しくなっていたら、起動時に入れ替える
@@ -3663,6 +3670,7 @@ export default function App() {
           {...settingsProps()}
         />
       )}
+      {setupOpen && <QuickSetupDialog settings={settings} update={updateSetting} onClose={() => setSetupOpen(false)} />}
       {skinsOpen && (
         <SkinDialog
           settings={settings}

@@ -1,5 +1,6 @@
 import { parseCustom } from '../../ui/customScheme'
 import { SkinDialog, SkinSummaryRow } from '../SkinPicker'
+import { QuickSetupDialog } from '../QuickSetup'
 import { useContext, useEffect, useState } from 'react'
 import {
   DEFAULT_SETTINGS,
@@ -178,9 +179,15 @@ function BackgroundDialog({ settings: s, update, onClose }: Pick<SettingsProps, 
 export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<SettingsProps, 'settings' | 'update'> & { onOpenCustomScheme: () => void }) {
   const [bgOpen, setBgOpen] = useState(false)
   const [skinsOpen, setSkinsOpen] = useState(false)
+  /** クイックセットアップ(初めて開いたときの画面)をもう一度 */
+  const [setupOpen, setSetupOpen] = useState(false)
   // 段の並びはスマホのアプリの「スキンと配色」と同じ(スキン / 差し色 / 文字 / スタイル。PC だけの段はその後ろ。配色を編集は一番下)
   return (
     <>
+      <div className="mb-4">
+        <OpenRow label="クイックセットアップ" note="配色・レスの見た目・細かい表示・ボタンの配置を、見本を見ながら順に選びます" onOpen={() => setSetupOpen(true)} />
+      </div>
+      {setupOpen && <QuickSetupDialog settings={s} update={update} onClose={() => setSetupOpen(false)} />}
       <StickySample settings={s} />
       <Section title="スキン" note="配色・レスの見た目・細かい表示・文字と余白をまとめたものがスキンです。同梱の配色も、入れたスキンも、同じ窓から選びます">
         <SkinSummaryRow settings={s} onOpen={() => setSkinsOpen(true)} />

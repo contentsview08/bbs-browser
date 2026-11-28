@@ -545,6 +545,8 @@ export interface AppSettings {
   /** 人気のレスの示し方 */
   heatStyle: HeatStyle
   ownStyle: OwnStyle
+  /** クイックセットアップ(配色・レスの見た目・細かい表示・ボタンの配置を順に選ぶ画面)を済ませた印。0 なら次に開いたときに出す(PC) */
+  setupDone: number
   /** スレ一覧の行の形 */
   listShape: ListShape
   /** レスをダブルタップで返信(スマホ) */
@@ -781,6 +783,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reduceMotion: false,
   heatStyle: 'left',
   ownStyle: 'auto',
+  setupDone: 0,
   listShape: 'normal',
   doubleTapReply: false,
   postDoubleClick: 'none',

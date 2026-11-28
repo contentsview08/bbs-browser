@@ -101,7 +101,7 @@ private fun MockLines() = Column(Modifier.fillMaxWidth().height(56.dp).padding(6
 fun ToolbarAreaPage(vm: AppViewModel, area: String) {
     val p = vm.prefs
     PageLead(
-        if (area == "list") "スレッド一覧画面のヘッダーとフッターです。フッターにはタブ(並べ方・絞り込み)とボタンが並びます。部品を長押しして掴み、箱に落とすと入ります(押すとメニューでも動かせます)。箱にないボタンは ︙ のメニューにだけ出ます"
+        if (area == "list") "スレッド一覧画面のヘッダーとフッターです。フッターのタブ(並べ方・絞り込み)もボタンと同じように、どこにでも置けます。「左右の境目」より左は左に、右は右に寄ります。部品を長押しして掴み、箱に落とすと入ります(押すとメニューでも動かせます)。箱にないボタンは ︙ のメニューにだけ出ます"
         else "スレッド表示画面のヘッダーとフッターです。部品を長押しして掴み、箱に落とすと入ります(押すとメニューでも動かせます)。箱にないボタンは ︙ のメニューにだけ出ます。「チャット欄」「空き」は残りの幅を埋めるので、その右に置いたものは右端に寄ります",
     )
     val layout = toolbarLayout(p, area)
@@ -110,7 +110,7 @@ fun ToolbarAreaPage(vm: AppViewModel, area: String) {
         ChipDock(
             docks = listOf(
                 DockSpec("header", "ヘッダー", layout.header.mapNotNull(::item), fixedLeading = if (area == "list") "≡  板の名前" else "≡  スレタイ"),
-                DockSpec("footer", "フッター", layout.footer.mapNotNull(::item), emptyHint = "ここに入れる", atBottom = true, flexGroup = { it.id.startsWith("tab:") }),
+                DockSpec("footer", "フッター", layout.footer.mapNotNull(::item), emptyHint = "ここに入れる", atBottom = true),
             ),
             screenMock = if (area == "list") "ここにスレが並びます" else "ここにレスが並びます",
             palette = layout.unplaced(area).map { DockItem(it.id, it.name, it.icon, it.fills) },

@@ -110,26 +110,32 @@ class ToolbarLayout(val header: List<String>, val footer: List<String>) {
  * 境目より左の部品は左に、右の部品は右に寄る(実際の帯)。spacer は 1 つだけで、チャット欄・タブがあればなくす
  */
 private fun withGap(area: String, footer: List<String>): List<String> {
-    val hasMain = if (area == "thread") "replyField" in footer else footer.any { it.startsWith("tab:") }
+    // スレ表示はチャット欄が境目。スレ一覧はいつも spacer(タブもボタンと同じ部品なので境目にはしない)
+    val hasMain = area == "thread" && "replyField" in footer
     val firstSpacer = footer.indexOf("spacer")
     val out = footer.filterIndexed { i, id -> id != "spacer" || (!hasMain && i == firstSpacer) }
-    return if (hasMain || "spacer" in out) out else listOf("spacer") + out
+    if (hasMain || "spacer" in out) return out
+    // 境目がなければ足す。スレ一覧は最後のタブの後ろ(前の版の「タブ → ボタン」の見え方のまま)、ほかは左端
+    val at = if (area == "list") out.indexOfLast { it.startsWith("tab:") } + 1 else 0
+    return out.toMutableList().apply { add(at, "spacer") }
 }
 
-/** 保存してある並び。スレ一覧のタブは Prefs.listTabs(PC 版・スキン・同期と共通)を元に、フッターの中の位置だけをここで持つ */
+/** 保存してある並び。スレ一覧のタブは、出すかどうかとタブどうしの順を Prefs.listTabs(PC 版・スキン・同期と共通)に合わせ、ボタンとの並びはここで持つ */
 fun toolbarLayout(prefs: Prefs, area: String): ToolbarLayout {
-    val l0 = toolbarLayoutRaw(prefs, area)
-    if (area != "list") return ToolbarLayout(l0.header.filter { it != "spacer" }, withGap(area, l0.footer))
-    // タブが空のときは境目(spacer)の位置にタブがあった。タブがあれば、境目の所にタブを置く
-    val l = ToolbarLayout(l0.header, l0.footer.map { if (it == "spacer" && l0.footer.none { x -> x.startsWith("tab:") }) "tab:__gap" else it })
-    // タブは listTabs の並びで、フッターの最初のタブの位置(なければ左端)にまとめて置く
+    val l = toolbarLayoutRaw(prefs, area)
+    if (area != "list") return ToolbarLayout(l.header.filter { it != "spacer" }, withGap(area, l.footer))
     val tabs = prefs.listTabs.split(',').filter { k -> ListTab.entries.any { it.key == k } }.map { "tab:$it" }
-    val at = l.footer.indexOfFirst { it.startsWith("tab:") }.let { if (it < 0) 0 else it }
-    val rest = l.footer.filter { !it.startsWith("tab:") && it != "spacer" }
-    val before = l.footer.take(at).filter { !it.startsWith("tab:") && it != "spacer" }
-    // タブがなければ、タブのあった所(境目)に spacer を置く
-    val mid = if (tabs.isEmpty()) listOf("spacer") else tabs
-    return ToolbarLayout(l.header.filter { !it.startsWith("tab:") && it != "spacer" }, withGap(area, before + mid + rest.drop(before.size)))
+    // 並びの中のタブの枠に、listTabs のタブを順に入れる。余ったタブは最後のタブの後ろ(なければ左端)、足りなければ枠を減らす
+    val out = ArrayList<String>()
+    var ti = 0
+    for (id in l.footer) {
+        if (id.startsWith("tab:")) { if (ti < tabs.size) out += tabs[ti++] } else out += id
+    }
+    if (ti < tabs.size) {
+        val at = out.indexOfLast { it.startsWith("tab:") }.let { if (it < 0) 0 else it + 1 }
+        out.addAll(at, tabs.subList(ti, tabs.size))
+    }
+    return ToolbarLayout(l.header.filter { !it.startsWith("tab:") && it != "spacer" }, withGap(area, out))
 }
 
 private fun toolbarLayoutRaw(prefs: Prefs, area: String): ToolbarLayout {
@@ -171,8 +177,8 @@ fun placeToolbarPart(prefs: Prefs, area: String, id: String, bar: ToolbarBar, in
     l = ToolbarLayout(l.header.filter { it != id }, l.footer.filter { it != id })
     val ids = l.of(bar).toMutableList()
     val gap = ids.indexOf("spacer")
-    // チャット欄・タブは境目そのものになる(境目の所に入る)
-    if (bar == ToolbarBar.FOOTER && gap >= 0 && (id == "replyField" || id.startsWith("tab:"))) ids[gap] = id
+    // チャット欄は境目そのものになる(境目の所に入る)
+    if (bar == ToolbarBar.FOOTER && gap >= 0 && id == "replyField") ids[gap] = id
     else ids.add(index.coerceIn(0, ids.size), id)
     saveToolbarLayout(prefs, area, l.with(bar, ids))
 }
@@ -195,7 +201,7 @@ fun removeToolbarPart(prefs: Prefs, area: String, bar: ToolbarBar, index: Int) {
     // 境目は外せない
     if (id == "spacer") return
     // チャット欄・最後のタブを外したら、その所が境目になる
-    val lastMain = id == "replyField" || (id.startsWith("tab:") && ids.count { it.startsWith("tab:") } == 1)
+    val lastMain = id == "replyField"
     if (bar == ToolbarBar.FOOTER && lastMain) ids[index] = "spacer" else ids.removeAt(index)
     saveToolbarLayout(prefs, area, l.with(bar, ids))
 }

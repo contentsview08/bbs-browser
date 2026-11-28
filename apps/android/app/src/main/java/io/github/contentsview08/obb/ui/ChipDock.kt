@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragIndicator
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -139,6 +141,9 @@ fun ChipDock(
         Haptics.tick(view)
     }
 
+    // 見本を縮めて出しているときの縮み(ドラッグの動きを指に合わせる)
+    val mockScale = remember { floatArrayOf(1f) }
+
     @Composable
     fun Chip(item: DockItem, dock: DockSpec?, index: Int) {
         // 左右の境目は、つかめない・メニューもない(部品の方を左右へ動かす)
@@ -163,7 +168,7 @@ fun ChipDock(
                         },
                         onDragEnd = { dragging?.let { drop(it) }; dragging = null },
                         onDragCancel = { dragging = null },
-                    ) { change, delta -> change.consume(); dragging?.let { it.pos += delta } }
+                    ) { change, delta -> change.consume(); dragging?.let { it.pos += delta * mockScale[0] } }
                 },
         ) {
             ChipFrame(item, placed = dock != null, plain = plainPlaced && dock != null, onClick = { menu = true }) { if (look != null) look(item, dock != null) else DefaultChipLook(item, placed = dock != null) }
@@ -195,7 +200,7 @@ fun ChipDock(
             .onGloballyPositioned { dockBounds[dock.key] = it.boundsInRoot() }
             .clip(shape).background(if (over) Palette.accentWash else Palette.bar)
             .border(BorderStroke(if (over) 2.dp else if (mock) 0.dp else 1.dp, if (over) Palette.accent else Palette.border), shape)
-            .padding(horizontal = if (mock) 2.dp else 6.dp, vertical = 4.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
         // 掴んでいる部品の元の所を飛ばして、並びの中の「何番目の前」に線を引くかを、元の並びの番号に直す
         val skip = if (d != null && d.from == dock.key) d.fromIndex else -1
         fun lineBefore(i: Int): Boolean {
@@ -209,8 +214,19 @@ fun ChipDock(
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
             // 1 行に収める(折り返さない)。部品 1 つあたりの幅が狭ければ、名前を消してアイコンだけにする(実際の帯と同じ)
             // 名前を出したときの幅の目安: タブ 96dp・ボタン 48dp・題名 110dp・幅を埋める部品 120dp。入りきらなければアイコンだけ
-            val need = dock.items.sumOf { if (dock.flexGroup?.invoke(it) == true) 60 else if (it.fills) 120 else 44 } + (if (dock.fixedLeading != null) 110 else 0)
-            val compact = maxWidth.value < need
+            val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+            val tabsIn = dock.items.filter { it.id.startsWith("tab:") }
+            val named = tabsIn.size
+            val buttons = dock.items.count { !it.fills && !it.id.startsWith("tab:") }
+            // 空き(spacer)は残りの幅を取るだけ(実際のフッターと同じ)。落とせるよう少しだけ残す。チャット欄などの幅を埋める部品は 52dp
+            val fillsW = dock.items.filter { it.fills }.sumOf { if (it.id == "spacer") 16 else 52 }
+            val rest = maxWidth.value - buttons * 44 - fillsW - (if (dock.fixedLeading != null) 110 else 0)
+            val compact = if (named > 0) rest / named < 60 else rest < 0
+            // タブの名前を全部出す幅(枠の余白・アイコン・名前)。足りなければその割合で分け、名前を「…」で省く
+            fun want(it: DockItem) = 10 + 17 + 4 + it.name.length * 14 * fontScale + 2
+            val wantAll = tabsIn.sumOf { want(it).toDouble() }.toFloat()
+            val caps = fitWidths(tabsIn.map { 33f }, tabsIn.map { it.name.length * 14 * fontScale }, rest)
+            fun tabCap(it: DockItem) = tabsIn.indexOf(it).let { k -> if (k >= 0) caps[k] else want(it) }
             androidx.compose.runtime.CompositionLocalProvider(LocalChipCompact provides compact) {
                 Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
                     if (dock.fixedLeading != null) Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp).weight(1f), color = Palette.textStrong, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
@@ -238,6 +254,8 @@ fun ChipDock(
                             continue
                         }
                         if (item.fills) Box(Modifier.weight(1f).padding(horizontal = 2.dp), contentAlignment = Alignment.Center) { Chip(item, dock, i) }
+                        // タブは名前の長さに合わせて幅を分け合う(実際のフッターと同じ。狭ければ … で省く)
+                        else if (item.id.startsWith("tab:")) Box(Modifier.widthIn(max = tabCap(item).dp)) { Chip(item, dock, i) }
                         else Chip(item, dock, i)
                         i++
                     }
@@ -251,7 +269,17 @@ fun ChipDock(
         Column(Modifier.fillMaxWidth()) {
             if (screenMock != null) {
                 // 実際の画面の見本: 上の帯(ヘッダー)・中身・下の帯(フッター)を 1 枚の枠に
-                Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp).clip(RoundedCornerShape(18.dp)).border(2.dp, Palette.borderStrong, RoundedCornerShape(18.dp)).background(Palette.base)) {
+                val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).layout { m, c ->
+                    // 実際の画面の幅で測り、枠の幅に縮める
+                    val realW = screenW.roundToPx().coerceAtLeast(1)
+                    val pl = m.measure(androidx.compose.ui.unit.Constraints.fixedWidth(realW))
+                    val sc = minOf(1f, c.maxWidth.toFloat() / realW)
+                    mockScale[0] = sc
+                    layout((realW * sc).roundToInt(), (pl.height * sc).roundToInt()) {
+                        pl.placeWithLayer(0, 0) { scaleX = sc; scaleY = sc; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f) }
+                    }
+                }.clip(RoundedCornerShape(18.dp)).border(2.dp, Palette.borderStrong, RoundedCornerShape(18.dp)).background(Palette.base)) {
                     for (dk in docks.filter { !it.atBottom }) DockBox(dk)
                     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (w in listOf(0.9f, 0.6f, 0.8f)) Box(Modifier.fillMaxWidth(w).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Palette.surface2))
@@ -277,6 +305,26 @@ fun ChipDock(
             ) { ChipFrame(item, placed = true, onClick = {}) { if (look != null) look(item, true) else DefaultChipLook(item, placed = true) } }
         }
     }
+}
+
+/**
+ * 幅を分ける: みんなが欲しい幅を合わせて avail に収まらなければ、長いものから同じ幅まで削る
+ * (短い名前は削らず、長い名前を「…」で省く)。返すのは各部品の幅の上限
+ */
+fun fitWidths(want: List<Float>, avail: Float): List<Float> = fitWidths(want.map { 0f }, want, avail)
+
+/** 決まった分(余白・アイコン・矢印)は削らず、名前の分だけを、長いものから同じ幅まで削る */
+fun fitWidths(fixed: List<Float>, text: List<Float>, avail: Float): List<Float> {
+    val want = fixed.zip(text) { f, t -> f + t }
+    if (want.sum() <= avail) return want
+    var rest = (avail - fixed.sum()).coerceAtLeast(0f)
+    val sorted = text.sorted()
+    for ((i, w) in sorted.withIndex()) {
+        val n = sorted.size - i
+        if (w * n <= rest) rest -= w
+        else { val level = rest / n; return fixed.zip(text) { f, t -> f + minOf(t, level) } }
+    }
+    return want
 }
 
 /** 部品の枠。掴めることが分かるよう、左に ⋮⋮ の印。幅を埋めるものは横長の枠 */
@@ -311,12 +359,14 @@ private fun DefaultChipLook(item: DockItem, placed: Boolean) {
 @Composable
 private fun GapLook() {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Palette.border.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp),
+        Modifier.fillMaxWidth().widthIn(min = 16.dp).heightIn(min = 40.dp).clip(RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.border.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("← 左に付く", color = Palette.textMuted, fontSize = 11.sp)
-        Text("右に付く →", color = Palette.textMuted, fontSize = 11.sp)
+        // 狭くても 1 行で(空きの印)
+        Text("←", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
+        Text("空き", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Clip)
+        Text("→", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
     }
 }
 

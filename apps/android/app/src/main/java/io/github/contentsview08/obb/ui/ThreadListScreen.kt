@@ -487,31 +487,61 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) {
             HorizontalDivider(color = Palette.border)
             Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(スレ順(標準)は選んでいないのと同じなので足さない)
-                val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
-                    .let { ts -> defaultTab(sort).let { d -> if (d == ListTab.ORDER || d in ts) ts else ts + d } }
-                // 設定「ボタンの配置」のフッターの並び: タブより左に置いたボタン → タブ(残りの幅。横に送れる) → タブより右のボタン
-                val footerIds = listToolbar.footer
-                // 境目: 最初のタブ、タブがなければ spacer。そこより左のボタンは左に、右のボタンは右に
-                val firstTab = footerIds.indexOfFirst { it.startsWith("tab:") }.let { if (it < 0) footerIds.indexOf("spacer") else it }
-                val footerBefore = if (firstTab < 0) emptyList() else footerIds.take(firstTab)
-                val footerAfter = footerIds.filter { !it.startsWith("tab:") && it !in footerBefore }
-                for (id in footerBefore) ListFooterButton(id)
-                // タブは 1 行に収める(折り返さない)。1 つあたりの幅が狭ければ、名前を消してアイコンだけにする
-                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
-                // 狭くなったら、まず余白を詰め、次に名前を「…」で省き、1 つ 60dp 未満でアイコンだけ
-                val tabTight = maxWidth / maxOf(1, tabs.size) < 96.dp
-                val tabCompact = maxWidth / maxOf(1, tabs.size) < 60.dp
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // 設定「ボタンの配置」のフッターの並び。タブもボタンも同じ部品として、並びの順に描く。
+                // 「空き」(spacer)より左の部品は左に、右の部品は右に寄せる。タブは名前の長さに合わせて幅を分け合い、ボタンはアイコンの幅
+                val shownIds = listToolbar.footer.let { ids ->
+                    // 設定の並び(勢い順など)のタブを外していても、いまの並びが分かるよう、その並びのタブは出す(最後のタブの後ろ)
+                    val d = defaultTab(sort)
+                    if (d == ListTab.ORDER || ids.contains("tab:${d.key}")) ids
+                    else ids.toMutableList().apply { add(indexOfLast { it.startsWith("tab:") }.let { if (it < 0) indexOf("spacer").coerceAtLeast(0) else it + 1 }, "tab:${d.key}") }
+                }
+                val gapAt = shownIds.indexOf("spacer").let { if (it < 0) shownIds.size else it }
+                val leftIds = shownIds.take(gapAt)
+                val rightIds = shownIds.drop(gapAt + 1)
+                fun tabOf(id: String) = if (id.startsWith("tab:")) ListTab.entries.firstOrNull { it.key == id.removePrefix("tab:") } else null
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
-                for (t in tabs) {
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
+                // ボタンはいつもアイコン(と設定の文字)の幅。残りをタブで分ける。
+                // 狭くなったら、まず余白を詰め、次に名前を「…」で省き(長い名前ほど多く削る)、1 つ 60dp 未満でアイコンだけ
+                val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+                val fit = remember(shownIds, maxWidth, tab, sort, unreadTotal > 0, fontScale, vm.prefs.toolbarIconSize, vm.prefs.toolbarLabel, vm.prefs.footerHeight) {
+                    val icon = toolbarIconDp(vm.prefs); val labelSp = toolbarLabelSp(vm.prefs)
+                    val buttons = shownIds.filter { it != "spacer" && tabOf(it) == null }.sumOf { id ->
+                        if (id == "refresh") barButtonSize(vm.prefs.footerHeight)
+                        else maxOf(icon + 20, if (labelSp > 0) ((toolbarPart("list", id)?.name?.length ?: 0) * labelSp * fontScale).toInt() + 12 else 0)
+                    }
+                    val avail = maxWidth.value - buttons
+                    // 名前を全部出すときの幅 = 決まった分(余白・アイコン・矢印・未読の数) + 名前
+                    fun fixedW(t: ListTab, pad: Int): Float {
+                        val active = tab == t || (tab == null && t == defaultTab(sort))
+                        val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED || t == ListTab.KEYWORD
+                        return pad * 2 + 17 + 4 + 2f + (if (active && !filterTab) 18 else 0) + (if (t == ListTab.UNREAD && unreadTotal > 0) 26 else 0)
+                    }
+                    fun textW(t: ListTab) = t.label.length * 14 * fontScale
+                    fun want(t: ListTab, pad: Int) = fixedW(t, pad) + textW(t)
+                    val ts = shownIds.mapNotNull { tabOf(it) }
+                    val loose = ts.sumOf { want(it, 10).toDouble() }.toFloat()
+                    val tight = ts.sumOf { want(it, 5).toDouble() }.toFloat() // 余白を詰めたときの幅
+                    val caps = when {
+                        loose <= avail -> ts.associateWith { want(it, 10) }
+                        // 足りなければ、短い名前はそのままに、長い名前から「…」で削る
+                        else -> ts.zip(fitWidths(ts.map { fixedW(it, 5) }, ts.map { textW(it) }, avail)).toMap()
+                    }
+                    Triple(caps, tight > 0 && loose > avail, ts.isNotEmpty() && avail / ts.size < 60)
+                }
+                val tabCaps = fit.first
+                val tabTight = fit.second
+                val tabCompact = fit.third
+                @Composable fun androidx.compose.foundation.layout.RowScope.Cell(id: String) {
+                    val t = tabOf(id)
+                    if (t == null) { ListFooterButton(id); return }
                     // タブを選んでいないときは、設定の並びのタブを選んでいる(PC 版と同じ)
                     val active = tab == t || (tab == null && t == defaultTab(sort))
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED || t == ListTab.KEYWORD
                     Box(
                         // 幅は名前の長さに合わせて分ける(短い名前のタブが余らせた幅を、長い名前のタブに回す)
-                        Modifier.weight(t.label.length + 2.5f + (if (active && !filterTab) 1.5f else 0f), fill = false).clickable {
+                        Modifier.widthIn(max = (tabCaps[t] ?: 999f).dp).clickable {
                             when {
                                 filterTab -> page.tab = if (active) null else t.key
                                 // スレ順は いつもの並び ⇄ 逆順(元の並びがスレ順そのものなので、解除はない)
@@ -543,11 +573,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         }
                     }
                 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    for (id in leftIds) Cell(id)
+                    Spacer(Modifier.weight(1f))
+                    for (id in rightIds) Cell(id)
                 }
                 }
-                val footerH = vm.prefs.footerHeight
-                // 設定「ボタンの配置」でタブより右に置いたボタン
-                for (id in footerAfter) ListFooterButton(id)
             }
         }
 

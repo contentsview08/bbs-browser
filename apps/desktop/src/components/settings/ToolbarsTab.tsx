@@ -47,6 +47,7 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
           docks={docks}
           palette={zoneItems('menu').map(item)}
           paletteTitle="︙ の中だけのボタン"
+          iconOnly
           onPlace={(dock, id, index) => move(id, dock as Placement, index)}
           onMove={(dock, from, to) => move(zoneItems(dock as Placement)[from], dock as Placement, to)}
           onRemove={(dock, index) => move(zoneItems(dock as Placement)[index], 'menu', zoneItems('menu').length)}
@@ -56,9 +57,9 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
   }
   // 画面ごとの段。上の目次から飛ぶ(スマホ版の「ボタンの配置 → スレ表示 / スレ一覧 / 履歴」のページにあたる)
   const screens = [
-    { id: 'bars-thread', name: 'スレ表示', icon: 'forum' },
-    { id: 'bars-list', name: 'スレ一覧', icon: 'view_list' },
-    ...(isMobile ? [] : [{ id: 'bars-post', name: 'レスの操作バー', icon: 'chat' }, { id: 'bars-card', name: 'スレの操作バー', icon: 'list_alt' }]),
+    { id: 'bars-thread', name: 'スレッド表示画面', icon: 'forum' },
+    { id: 'bars-list', name: 'スレッド一覧画面', icon: 'view_list' },
+    ...(isMobile ? [] : [{ id: 'bars-post', name: 'レスの操作バー', icon: 'chat' }, { id: 'bars-card', name: 'スレッドの操作バー', icon: 'list_alt' }]),
   ]
   return (
     <div>
@@ -75,21 +76,21 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
           </button>
         ))}
       </nav>
-      <div id="bars-thread">{area('thread', 'スレ表示')}</div>
+      <div id="bars-thread">{area('thread', 'スレッド表示画面')}</div>
       <div id="bars-list">
-        {area('list', 'スレ一覧')}
+        {area('list', 'スレッド一覧画面')}
         <Section title="スレ一覧のタブ" note={isMobile ? 'スレ一覧のフッターに出すタブと、その並び(左から)です' : 'スレ一覧の上に出すタブと、その並び(左から)です。数字キーの 1・2・3… は左から順に当たります'}>
           <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
         </Section>
       </div>
       <div id="bars-post">
         <Section desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。⋯ のメニューにある操作はどれも並べられます。⋯ も外せ、全部外すとバーは出ません(そのレスで使えない操作は出ません)">
-          <OrderEditor all={postToolbarAll(s.quickPhrases)} value={s.postToolbar2} onChange={(v) => update('postToolbar2', v)} restTitle="出していないボタン" dockLabel="レスの右上に出すボタン(左から)" />
+          <OrderEditor all={postToolbarAll(s.quickPhrases)} value={s.postToolbar2} onChange={(v) => update('postToolbar2', v)} restTitle="出していないボタン" dockLabel="レスの右上に出すボタン(左から)" iconOnly />
         </Section>
       </div>
       <div id="bars-card">
-        <Section desktopOnly title="スレの操作バー" note="スレにマウスを乗せたとき、右上に出すボタンです。右クリックのメニューにある操作はどれも並べられます。⋯ も外せ、全部外すとバーは出ません(そのスレで使えない操作は出ません)">
-          <OrderEditor all={THREAD_TOOLBAR_ITEMS} value={s.threadToolbar} onChange={(v) => update('threadToolbar', v)} restTitle="出していないボタン" dockLabel="スレの右上に出すボタン(左から)" />
+        <Section desktopOnly title="スレッドの操作バー" note="スレにマウスを乗せたとき、右上に出すボタンです。右クリックのメニューにある操作はどれも並べられます。⋯ も外せ、全部外すとバーは出ません(そのスレで使えない操作は出ません)">
+          <OrderEditor all={THREAD_TOOLBAR_ITEMS} value={s.threadToolbar} onChange={(v) => update('threadToolbar', v)} restTitle="出していないボタン" dockLabel="スレの右上に出すボタン(左から)" iconOnly />
         </Section>
       </div>
       <button

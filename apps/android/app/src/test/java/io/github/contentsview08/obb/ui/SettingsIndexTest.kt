@@ -23,7 +23,7 @@ class SettingsIndexTest {
 
     @Test fun 未読を上にと履歴のタブの置き場も索引に入る() {
         assertTrue(has("list", "未読を上に"))
-        assertTrue(has("bars_history", "履歴のタブ"))
+        assertTrue(has("bars_history", "タブの置き場"))
     }
 
     @Test fun スキンと配色のページも索引に入る() {

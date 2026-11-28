@@ -217,6 +217,8 @@ export function OrderEditor<K extends string>(props: {
   minShown?: number
   /** 箱の名前 */
   dockLabel?: string
+  /** 箱の中はアイコンだけ(実際の操作バーと同じ幅) */
+  iconOnly?: boolean
 }) {
   const shown = props.value.filter((k) => props.all.some((t) => t.key === k))
   const item = (k: K) => {
@@ -228,6 +230,7 @@ export function OrderEditor<K extends string>(props: {
       docks={[{ key: 'shown', label: props.dockLabel ?? '出すもの(左から順)', items: shown.map(item), minItems: props.minShown }]}
       palette={props.all.filter((t) => !shown.includes(t.key)).map((t) => item(t.key))}
       paletteTitle={props.restTitle ?? '出していないもの'}
+      iconOnly={props.iconOnly}
       onPlace={(_, id, index) => {
         const next = [...shown]
         next.splice(Math.min(index, next.length), 0, id as K)

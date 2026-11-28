@@ -46,6 +46,8 @@ export function ChipDock(props: {
   paletteTitle?: string
   /** 何もないときの「使えるもの」の文 */
   paletteEmpty?: string
+  /** 箱の中の部品はアイコンだけ(実際のボタンと同じ幅で、設定の窓で折り返さない。名前はマウスを乗せると出る) */
+  iconOnly?: boolean
 }) {
   const [drag, setDrag] = useState<Drag>()
   const [menu, setMenu] = useState<{ pos: MenuPos; items: MenuItem[] }>()
@@ -195,17 +197,17 @@ export function ChipDock(props: {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
           setMenu({ pos: menuPosAt(r.left, r.bottom), items: menuOf(item, from) })
         }}
-        title={from ? 'つかんで動かす・押すとメニュー' : 'つかんで上の箱へ・押すとメニュー'}
-        className={`flex-shrink-0 flex items-center gap-1 pl-0.5 pr-2.5 h-9 rounded-lg border bg-c-surface text-sm text-c-text-body select-none ${
-          from ? 'border-c-border' : 'border-dashed border-c-border'
-        } hover:border-c-accent cursor-grab ${hidden ? 'opacity-25' : ''}`}
+        title={`${item.name} ── ${from ? 'つかんで動かす・押すとメニュー' : 'つかんで上の箱へ・押すとメニュー'}`}
+        className={`flex-shrink-0 flex items-center gap-1 h-9 rounded-lg border text-sm text-c-text-body select-none ${
+          from && props.iconOnly ? 'px-1 border-transparent bg-transparent hover:bg-c-surface2' : 'pl-0.5 pr-2.5 bg-c-surface'
+        } ${from ? (props.iconOnly ? '' : 'border-c-border') : 'border-dashed border-c-accent'} hover:border-c-accent cursor-grab ${hidden ? 'opacity-25' : ''}`}
         style={{ touchAction: isMobile ? 'pan-y' : 'none' }}
       >
-        <span className="material-symbols-outlined text-[18px] text-c-text-muted/70" aria-hidden>
+        <span className={`material-symbols-outlined ${from && props.iconOnly ? 'text-[14px] -mr-1' : 'text-[18px]'} ${from ? 'text-c-text-muted/60' : 'text-c-accent'}`} aria-hidden>
           drag_indicator
         </span>
         {item.icon && <span className="material-symbols-outlined text-[20px] text-c-text-muted">{item.icon}</span>}
-        <span className="whitespace-nowrap">{item.name}</span>
+        {!(from && props.iconOnly && item.icon) && <span className="whitespace-nowrap">{item.name}</span>}
         {extra}
       </button>
     )

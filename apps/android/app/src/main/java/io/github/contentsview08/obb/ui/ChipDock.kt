@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,6 +70,10 @@ class DockSpec(
     val minItems: Int = 0,
     /** 部品を右に寄せる(ツールバー: 題名の右に並ぶ)。タブは左から */
     val alignEnd: Boolean = true,
+    /** 残りの幅を取って左から並ぶまとまり(スレ一覧のフッターのタブ)。ほかの部品はその左右に(実際のフッターと同じ) */
+    val flexGroup: ((DockItem) -> Boolean)? = null,
+    /** 画面の見本の中で、下の帯(フッター)に置く */
+    val atBottom: Boolean = false,
 )
 
 private class DockDrag(val id: String, val from: String?, val fromIndex: Int, val size: IntSize) {
@@ -91,6 +96,8 @@ fun ChipDock(
     look: @Composable ((item: DockItem, placed: Boolean) -> Unit)? = null,
     /** 箱の中の部品は枠を付けず、実際の帯と同じ見た目で出す(スレ一覧のタブ) */
     plainPlaced: Boolean = false,
+    /** 箱を、実際の画面の見本(上の帯・中身・下の帯)の形で描く。中身の所に出す字 */
+    screenMock: String? = null,
 ) {
     val view = LocalView.current
     val dockBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -166,12 +173,16 @@ fun ChipDock(
     @Composable
     fun DockBox(dock: DockSpec) {
         val over = dragging?.let { d -> dockBounds[dock.key]?.inflate(16f)?.contains(d.pos) == true && itemOf(d.id)?.let { allowIn(it, dock.key) } == true } == true
-        Text(dock.label, Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
-        val boxMod = Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 60.dp)
+        val mock = screenMock != null
+        if (!mock) Text(dock.label, Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
+        val shape = RoundedCornerShape(if (mock) 0.dp else 8.dp)
+        val boxMod = Modifier.fillMaxWidth().then(if (mock) Modifier else Modifier.padding(horizontal = 12.dp)).heightIn(min = if (mock) 52.dp else 60.dp)
             .onGloballyPositioned { dockBounds[dock.key] = it.boundsInRoot() }
-            .clip(RoundedCornerShape(8.dp)).background(Palette.bar)
-            .border(BorderStroke(if (over) 2.dp else 1.dp, if (over) Palette.accent else Palette.border), RoundedCornerShape(8.dp))
+            .clip(shape).background(if (over) Palette.accentWash else Palette.bar)
+            .border(BorderStroke(if (over) 2.dp else if (mock) 0.dp else 1.dp, if (over) Palette.accent else Palette.border), shape)
             .padding(horizontal = 6.dp, vertical = 4.dp)
+        val group = dock.flexGroup
+        val firstG = if (group == null) -1 else dock.items.indexOfFirst(group)
         if (dock.items.any { it.fills }) Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
             // 幅を埋める部品(チャット欄・空き)があるときは 1 行(実際の帯と同じ)
             if (dock.fixedLeading != null) Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
@@ -179,9 +190,16 @@ fun ChipDock(
                 if (item.fills) Box(Modifier.weight(1f).padding(horizontal = 2.dp), contentAlignment = Alignment.Center) { Chip(item, dock, i) }
                 else Chip(item, dock, i)
             }
+        } else if (group != null && firstG >= 0) Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
+            // タブのまとまりは残りの幅を取って左から。その左右にボタン(実際のスレ一覧のフッターと同じ)
+            for (i in 0 until firstG) Chip(dock.items[i], dock, i)
+            FlowRow(with(this) { Modifier.weight(1f) }, horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.Start), verticalArrangement = Arrangement.Center) {
+                for ((i, item) in dock.items.withIndex()) if (i >= firstG && group(item)) Box(Modifier.align(Alignment.CenterVertically)) { Chip(item, dock, i) }
+            }
+            for ((i, item) in dock.items.withIndex()) if (i > firstG && !group(item)) Chip(item, dock, i)
         } else if (dock.fixedLeading != null) Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
             // 題名などは左に固定し、部品は右に寄せて折り返す(実際のヘッダーと同じ並び)
-            Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+            Text(dock.fixedLeading, Modifier.padding(start = 6.dp, end = 6.dp), color = Palette.textStrong, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             FlowRow(with(this) { Modifier.weight(1f) }, horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.End), verticalArrangement = Arrangement.Center) {
                 for ((i, item) in dock.items.withIndex()) Box(Modifier.align(Alignment.CenterVertically)) { Chip(item, dock, i) }
             }
@@ -198,7 +216,17 @@ fun ChipDock(
 
     Box(Modifier.fillMaxWidth().onGloballyPositioned { rootBounds = it.boundsInRoot() }) {
         Column(Modifier.fillMaxWidth()) {
-            for (dk in docks) DockBox(dk)
+            if (screenMock != null) {
+                // 実際の画面の見本: 上の帯(ヘッダー)・中身・下の帯(フッター)を 1 枚の枠に
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(18.dp)).border(2.dp, Palette.borderStrong, RoundedCornerShape(18.dp)).background(Palette.base)) {
+                    for (dk in docks.filter { !it.atBottom }) DockBox(dk)
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (w in listOf(0.9f, 0.6f, 0.8f)) Box(Modifier.fillMaxWidth(w).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Palette.surface2))
+                        Text(screenMock, color = Palette.textMuted, fontSize = 11.sp)
+                    }
+                    for (dk in docks.filter { it.atBottom }) DockBox(dk)
+                }
+            } else for (dk in docks) DockBox(dk)
             Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.DragIndicator, null, tint = Palette.textMuted, modifier = Modifier.size(16.dp))
                 Text("$paletteTitle ── 長押しして掴み、上の箱へ動かします(押すとメニューでも入れられます)", Modifier.padding(start = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
@@ -224,11 +252,11 @@ private fun ChipFrame(item: DockItem, placed: Boolean, plain: Boolean = false, o
     val shape = RoundedCornerShape(if (item.fills && placed) 10.dp else 8.dp)
     Row(
         Modifier.then(if (item.fills && placed) Modifier.fillMaxWidth().heightIn(min = 40.dp) else Modifier)
-            .clip(shape).then(if (plain) Modifier else Modifier.background(Palette.surface).border(1.dp, Palette.border, shape))
+            .clip(shape).then(if (plain) Modifier else Modifier.background(Palette.surface).border(1.dp, if (placed) Palette.border else Palette.accent.copy(alpha = 0.5f), shape))
             .clickable(onClick = onClick).padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.DragIndicator, "掴む", tint = Palette.textMuted.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+        Icon(Icons.Filled.DragIndicator, "掴む", tint = if (placed) Palette.textMuted.copy(alpha = 0.6f) else Palette.accent, modifier = Modifier.size(16.dp))
         content()
     }
 }

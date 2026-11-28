@@ -106,7 +106,7 @@ import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "スキンと配色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ボタンの配置", "bars_thread" to "スレ表示のボタン", "bars_list" to "スレ一覧のボタンとタブ", "bars_history" to "履歴のタブ", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "bars" to "ボタンの配置", "bars_thread" to "スレッド表示画面", "bars_list" to "スレッド一覧画面", "bars_history" to "履歴画面", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG", "nglist" to "NG の一覧", "kwlist" to "キーワードの一覧",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "配色を編集", "skin" to "スキンを編集", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 

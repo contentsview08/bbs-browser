@@ -156,50 +156,26 @@ export function StickySample({ settings }: { settings: AppSettings }) {
 /** 見本を隠したか(設定画面を開き直しても覚えておく。アプリを起動し直したら出す) */
 let sampleHidden = false
 
-/**
- * 1 つを選ぶ。少なくて短い(3 つまで・どれも 6 文字まで・説明なし)ものは横に並べたボタン、それ以外はドロップダウン
- * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため)
- */
+/** 1 つを選ぶ。いつもドロップダウン(選んでいるものがひと目で分かり、選択肢が増えても行が増えない) */
 export function Choice<T extends string | number>(props: {
   value: T
   options: { key: T; name: string }[]
   onChange: (v: T) => void
 }) {
-  // 「自動(狭いときだけ 1 画面)」のような括弧の中は説明
-  if (props.options.length > 3 || props.options.some((o) => o.name.length > 6 || /\(.*\)\s*$/.test(o.name))) {
-    const i = props.options.findIndex((o) => o.key === props.value)
-    return (
-      <select
-        value={i < 0 ? '' : String(i)}
-        onChange={(e) => props.onChange(props.options[Number(e.target.value)].key)}
-        className={`${INPUT} w-full max-w-md`}
-      >
-        {i < 0 && <option value="">選んでいません</option>}
-        {props.options.map((o, n) => (
-          <option key={String(o.key)} value={String(n)}>
-            {o.name}
-          </option>
-        ))}
-      </select>
-    )
-  }
+  const i = props.options.findIndex((o) => o.key === props.value)
   return (
-    <div className="flex flex-wrap gap-2">
-      {props.options.map((o) => (
-        <button
-          key={String(o.key)}
-          type="button"
-          onClick={() => props.onChange(o.key)}
-          className={`px-3 py-1.5 text-sm border transition-colors rounded-[var(--chip-radius)] ${
-            o.key === props.value
-              ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]'
-              : 'border-c-border text-c-text-body hover:border-c-border-strong'
-          }`}
-        >
+    <select
+      value={i < 0 ? '' : String(i)}
+      onChange={(e) => props.onChange(props.options[Number(e.target.value)].key)}
+      className={`${INPUT} w-full max-w-md`}
+    >
+      {i < 0 && <option value="">選んでいません</option>}
+      {props.options.map((o, n) => (
+        <option key={String(o.key)} value={String(n)}>
           {o.name}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   )
 }
 

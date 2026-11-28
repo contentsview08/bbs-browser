@@ -4,7 +4,7 @@
 // どの段も一番上に、スレッド表示画面の見本(いまの配置のヘッダー・見本のレス・フッター)を出し、選ぶたびにそこが変わる。
 // 設定 → 表示 の一番上「クイックセットアップ」からも開く
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ManagerDialog, SamplePosts, Toggle } from './SettingParts'
 import { Choice } from './settings/common'
 import { schemeSwatch } from './SkinPicker'
@@ -103,7 +103,8 @@ function ScreenSample({ settings: s }: { settings: AppSettings }) {
       <span className="material-symbols-outlined text-[20px] leading-none">{a.icon}</span>
     </span>
   )
-  const footer = [...at('footerStart'), ...at('footer')]
+  const footerL = at('footerStart')
+  const footerR = at('footer')
   return (
     <div className="mb-4 rounded-[var(--card-radius)] border border-c-border-strong overflow-hidden bg-c-base select-none" aria-hidden>
       <div className="flex items-center h-10 px-2 bg-c-bar border-b border-c-border">
@@ -118,21 +119,26 @@ function ScreenSample({ settings: s }: { settings: AppSettings }) {
       <div className="[&>div]:mb-0 [&>div>div]:rounded-none [&>div>div]:border-0">
         <SamplePosts settings={s} title="" />
       </div>
-      {footer.length > 0 && (
-        <div className="flex items-center justify-end h-10 px-2 bg-c-bar border-t border-c-border">{footer.map(icon)}</div>
+      {footerL.length + footerR.length > 0 && (
+        <div className="flex items-center h-10 px-2 bg-c-bar border-t border-c-border">
+          {footerL.map(icon)}
+          <span className="flex-1" />
+          {footerR.map(icon)}
+        </div>
       )}
     </div>
   )
 }
 
-/** 選択肢の札(名前・説明・選んだ印) */
-function ChoiceCard({ name, note, on, onClick }: { name: string; note: string; on: boolean; onClick: () => void }) {
+/** 選択肢の札(名前・説明・選んだ印。leading は左に添える見本など) */
+function ChoiceCard({ name, note, on, onClick, leading }: { name: string; note: string; on: boolean; onClick: () => void; leading?: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on ? 'border-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border hover:border-c-border-strong'}`}
     >
+      {leading}
       <span className="flex-1 min-w-0">
         <span className="block text-sm font-bold text-c-text-strong">{name}</span>
         {note && <span className="block text-xs text-c-text-muted mt-0.5">{note}</span>}
@@ -297,22 +303,19 @@ function LayoutStep({ settings: s, update }: { settings: AppSettings; update: Up
       <Lead>ヘッダー・フッターのボタンの置き方を選んでください。上の見本のヘッダーとフッターが変わります。1 つずつの並びは、あとから「設定 → ボタンの配置」で動かせます</Lead>
       <div className="flex flex-col gap-2">
         {LAYOUT_PRESETS.map((p) => (
-          <button
+          <ChoiceCard
             key={p.key}
-            type="button"
+            name={p.name}
+            note={p.desc}
+            on={cur === p.key}
             onClick={() => apply(p)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${cur === p.key ? 'border-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border hover:border-c-border-strong'}`}
-          >
-            <MiniScreen area="thread" preset={p.thread} />
-            <MiniScreen area="list" preset={p.list} />
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-bold text-c-text-strong">{p.name}</span>
-              <span className="block text-xs text-c-text-muted mt-0.5">{p.desc}</span>
-            </span>
-            <span className={`w-5 h-5 rounded-full border flex items-center justify-center ${cur === p.key ? 'bg-c-accent border-c-accent' : 'bg-c-surface2 border-c-border'}`}>
-              {cur === p.key && <span className="material-symbols-outlined text-[14px] leading-none text-c-accent-text">check</span>}
-            </span>
-          </button>
+            leading={
+              <>
+                <MiniScreen area="thread" preset={p.thread} />
+                <MiniScreen area="list" preset={p.list} />
+              </>
+            }
+          />
         ))}
       </div>
       {!cur && <p className="mt-2 text-xs text-c-text-muted">いまは自分で並べた配置です(どれかを選ぶと置き換わります)</p>}

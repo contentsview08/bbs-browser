@@ -26,3 +26,8 @@ export function countIconKeys(posts: { id?: string; name: string }[], fromWatcho
   }
   return counts
 }
+
+/** 書き込み欄の名前に使う形: ワッチョイとトリップ(◆・★・◇ から後ろ)を外した頭の部分(「名前をコピー」の控え) */
+export function nameForField(name: string): string {
+  return name.replace(WATCHOI, '').split(/[◆★◇]/)[0].trim()
+}

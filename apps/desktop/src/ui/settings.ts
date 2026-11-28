@@ -998,7 +998,8 @@ export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings>
   if (saved.heatStyle === 'none') out.heatStyle = 'left'
   // 自分の帯の側は、前は「人気の帯と反対」で決めていた(試しの版の auto も)。今と同じ側になるよう写す
   // (heatStyle を保存していない = 既定の左 なら、既定の right のままでよい。バックアップの一部だけの読み込みで足さないように)
-  if (saved.ownStyle === 'auto' || (saved.ownStyle === undefined && saved.heatStyle !== undefined)) out.ownStyle = saved.heatStyle === 'right' ? 'left' : 'right'
+  // 前の決め方: 人気が左の帯なら自分は右、それ以外(右の帯・本文の色)なら左
+  if (saved.ownStyle === 'auto' || (saved.ownStyle === undefined && saved.heatStyle !== undefined)) out.ownStyle = saved.heatStyle === 'left' ? 'right' : 'left'
   // レスの操作バー: 前は ⋯ をいつも出していたので、'more' を足して新しい鍵へ
   if (saved.postToolbar2 === undefined && Array.isArray(saved.postToolbar)) {
     out.postToolbar2 = [...saved.postToolbar.filter((x): x is string => typeof x === 'string'), 'more']
@@ -1228,6 +1229,9 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
           next.keywordRulesMigrated = true
           void store.setSetting('keywordRulesMigrated', true)
         }
+        // 自分の帯の側(ownStyle)は migrateOld で前の決め方から写す。保存しておかないと起動のたびに写し直し、あとで人気の側を変えたときに自分の帯まで動くので 1 度書く
+        const savedAny = saved as Record<string, unknown>
+        if (!('ownStyle' in savedAny) || savedAny.ownStyle === 'auto') void store.setSetting('ownStyle', next.ownStyle)
         return { ...next, ...migrateValues(next) }
       })
       setLoaded(true)

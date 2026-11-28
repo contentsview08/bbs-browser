@@ -225,7 +225,6 @@ fun ChipDock(
             val compact = if (named > 0) rest / named < 60 else rest < 0
             // タブの名前を全部出す幅(枠の余白・アイコン・名前)。足りなければその割合で分け、名前を「…」で省く
             fun want(it: DockItem) = 10 + 17 + 4 + it.name.length * 14 * fontScale + 2
-            val wantAll = tabsIn.sumOf { want(it).toDouble() }.toFloat()
             val caps = fitWidths(tabsIn.map { 33f }, tabsIn.map { it.name.length * 14 * fontScale }, rest)
             fun tabCap(it: DockItem) = tabsIn.indexOf(it).let { k -> if (k >= 0) caps[k] else want(it) }
             androidx.compose.runtime.CompositionLocalProvider(LocalChipCompact provides compact) {

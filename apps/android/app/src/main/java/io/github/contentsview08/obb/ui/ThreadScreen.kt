@@ -1082,7 +1082,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "id", p.id) },
                 ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else nameNgItems(p) }) {}) + listOf(
                     MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search) { openPopup(sameName, focus = p.no) },
-                    MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "name", p.name) },
+                    MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyClip(vm, context, "name", p.name, stored = nameForField(p.name)) },
                 // メールがあるレスは、メールもコピーできる(書き込み欄のメールの候補にたまる)
                 ) + (if (p.mail.isNotBlank()) listOf(MenuItem("メールをコピー(${p.mail})", Icons.Filled.ContentCopy) { copyClip(vm, context, "mail", p.mail) }) else emptyList()),
             ),

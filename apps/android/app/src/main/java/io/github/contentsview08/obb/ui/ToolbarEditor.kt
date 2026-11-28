@@ -157,7 +157,7 @@ fun HistoryTabsPage(vm: AppViewModel) {
 /** チャット欄の見本(ThreadFooter の欄と同じ寸法・色。押せない) */
 @Composable
 fun ReplyFieldLook(p: io.github.contentsview08.obb.data.Prefs) {
-    val control = (p.footerHeight - 8).coerceIn(28, 40)
+    val control = replyControlDp(p.footerHeight)
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).heightIn(min = control.dp).background(Palette.surface, shape).border(1.dp, Palette.border, shape), verticalAlignment = Alignment.CenterVertically) {

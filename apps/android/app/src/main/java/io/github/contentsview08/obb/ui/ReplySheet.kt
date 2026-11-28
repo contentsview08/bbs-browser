@@ -51,6 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.filled.Bolt
@@ -183,7 +184,7 @@ fun ThreadFooter(
         }
         // フッターを低くしたら、欄とボタンも合わせて小さくする(本文の 1 行が切れない 28dp まで)
         val footerH = vm.prefs.footerHeight
-        val control = (footerH - 8).coerceIn(28, 40)
+        val control = replyControlDp(footerH)
         Row(Modifier.fillMaxWidth().heightIn(min = footerH.dp).padding(horizontal = 8.dp, vertical = ((footerH - control) / 2).coerceIn(2, 6).dp), verticalAlignment = Alignment.Bottom) {
             // 丸い本文の欄。左の端に ＋(画像・オプション)。欄を出さないときは空けて、ボタンを右に寄せる
             // 設定「ツールバー設定」の並びで部品を描く。幅を埋める部品(チャット欄・空き)がなければ右に寄せる
@@ -244,6 +245,7 @@ fun ThreadFooter(
                     }
                 }
                 // クリップボード履歴(＋ の「クリップボード履歴」から)。コピーした ID・名前・本文・メールを、カーソルの所に入れる
+                BackHandler(clipMenu) { clipMenu = false }
                 if (clipMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { clipMenu = false }) {
                         Column(
@@ -436,7 +438,10 @@ private fun PlusItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 @Composable
 private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, prefs: io.github.contentsview08.obb.data.Prefs, kind: String) {
     var open by remember { mutableStateOf(false) }
-    val choices = prefs.fieldChoices(kind)
+    // メニューはフォーカスを取らない(キーボードを閉じないため)ので、戻るはここで受ける
+    BackHandler(open) { open = false }
+    // 候補は履歴が変わったときだけ作り直す(欄に打つたびの描き直しで JSON を読み直さない)
+    val choices = remember(prefs.fieldHistory, kind) { prefs.fieldChoices(kind) }
     val what = if (kind == "name") "名前" else "メール"
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         SmallField(value, onChange, placeholder, Modifier.weight(1f))
@@ -457,7 +462,7 @@ private fun FieldWithHistory(value: String, onChange: (String) -> Unit, placehol
 /** クリップボード履歴の一覧(コピーした ID・名前・本文・メール。新しい順)。押すとカーソルの所に入る。✕ で 1 件消す */
 @Composable
 private fun ClipList(prefs: io.github.contentsview08.obb.data.Prefs, onPick: (String) -> Unit) {
-    val clips = prefs.clips
+    val clips = remember(prefs.fieldHistory) { prefs.clips }
     Text("クリップボード履歴", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
     if (clips.isEmpty()) Text("レスの ID・名前・本文をコピーすると、ここにたまります(名前・メールは、その欄の横のボタンからも)", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
     for (c in clips) Row(Modifier.fillMaxWidth().clickable { onPick(c.text) }, verticalAlignment = Alignment.CenterVertically) {
@@ -738,7 +743,8 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
                         )
                     }
                 }
-                // クリップボード履歴: コピーした ID・名前・本文・メールをカーソルの所に入れる
+                // クリップボード履歴: コピーした ID・名前・本文・メールをカーソルの所に入れる(メニューはフォーカスを取らないので、戻るはここで受ける)
+                BackHandler(clipMenu) { clipMenu = false }
                 Box {
                     IconButton(onClick = { clipMenu = true }) { Icon(Icons.Filled.ContentPaste, "クリップボード履歴", tint = Palette.textMuted) }
                     androidx.compose.material3.DropdownMenu(expanded = clipMenu, onDismissRequest = { clipMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
@@ -755,11 +761,14 @@ fun ReplyFullSheet(vm: AppViewModel, page: Page.Thread) {
 }
 
 /** コピーして、欄ごとのクリップボード(書き込み欄の ＋ → クリップボード履歴。名前・メールはその欄の候補にも)に覚える。kind は id / name / mail / body */
-fun copyClip(vm: AppViewModel, context: Context, kind: String, text: String) {
+fun copyClip(vm: AppViewModel, context: Context, kind: String, text: String, /** 控えに入れる形(名前はワッチョイ・トリップを外したもの) */ stored: String = text) {
     copyText(context, text)
-    vm.prefs.addClip(kind, text)
+    vm.prefs.addClip(kind, stored)
     vm.toast = "コピーしました"
 }
+
+/** チャット欄の ＋・送るの丸の大きさ(dp)。フッターを低くしたら合わせて小さく(本文の 1 行が切れない 28dp まで)。見本(ReplyFieldLook)も同じ式 */
+fun replyControlDp(footerHeight: Int): Int = (footerHeight - 8).coerceIn(28, 40)
 
 fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

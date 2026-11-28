@@ -405,6 +405,9 @@ private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.
 /** 名前の、トリップ・キャップ(◆・★・◇ から後ろ)を除いた頭の部分 */
 fun nameHead(name: String): String = name.split('◆', '★', '◇')[0].trim()
 
+/** 書き込み欄の名前に使う形: ワッチョイとトリップを外した頭の部分(「名前をコピー」の控え) */
+fun nameForField(name: String): String = nameHead(WATCHOI.replace(name, "")).trim()
+
 /**
  * スレで一番多い名前(名無し)。トリップ・キャップを除いた頭で数え、10 件以上のスレでレスの 3 割以上を占めるときだけ。なければ null
  * (PC・Web の utils/postBody の mostCommonName と同じ決まり)

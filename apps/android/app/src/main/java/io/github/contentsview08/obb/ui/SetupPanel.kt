@@ -128,22 +128,10 @@ fun SetupPanel(vm: AppViewModel) {
                             Lead("ヘッダー・フッターのボタンの置き方を選んでください。上の見本のヘッダーとフッターが変わります。1 つずつの並びは、あとから「設定 → ボタンの配置」で動かせます")
                             val cur = currentPreset(p)
                             Group("置き方") {
-                                for (pr in LAYOUT_PRESETS) {
-                                    Row(
-                                        Modifier.fillMaxWidth().clickable { saveToolbarLayouts(p, pr.thread, pr.list) }.padding(horizontal = 16.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    ) {
-                                        MiniScreen("thread", pr.thread, Modifier.width(72.dp))
-                                        MiniScreen("list", pr.list, Modifier.width(72.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text(pr.name, color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                            Text(pr.desc, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
-                                        }
-                                        Box(Modifier.size(22.dp).background(if (cur == pr.key) Palette.accent else Palette.surface2, CircleShape).border(1.dp, if (cur == pr.key) Palette.accent else Palette.border, CircleShape), contentAlignment = Alignment.Center) {
-                                            if (cur == pr.key) Icon(Icons.Filled.Check, null, tint = Palette.accentText, modifier = Modifier.size(14.dp))
-                                        }
-                                    }
-                                }
+                                for (pr in LAYOUT_PRESETS) ChoiceCard(pr.name, pr.desc, cur == pr.key, leading = {
+                                    MiniScreen("thread", pr.thread, Modifier.width(72.dp))
+                                    MiniScreen("list", pr.list, Modifier.width(72.dp))
+                                }) { saveToolbarLayouts(p, pr.thread, pr.list) }
                                 if (cur == null) Text("いまは自分で並べた配置です(どれかを選ぶと置き換わります)", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp)
                             }
                         }
@@ -217,13 +205,14 @@ private fun ScreenSample(vm: AppViewModel) {
     }
 }
 
-/** 選択肢の札(名前・説明・選んだ印) */
+/** 選択肢の札(名前・説明・選んだ印。leading は左に添える見本など) */
 @Composable
-private fun ChoiceCard(name: String, note: String, on: Boolean, onClick: () -> Unit) {
+private fun ChoiceCard(name: String, note: String, on: Boolean, leading: (@Composable () -> Unit)? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        leading?.invoke()
         Column(Modifier.weight(1f)) {
             Text(name, color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             if (note.isNotEmpty()) Text(note, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 16.sp)

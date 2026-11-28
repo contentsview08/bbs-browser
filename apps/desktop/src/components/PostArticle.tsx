@@ -25,7 +25,7 @@ import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 import type { HeatStyle, IdPosition, NgMode, OwnStyle, PostDoubleClick } from '../ui/settings'
-import { watchoiOf } from '../utils/watchoi'
+import { nameForField, watchoiOf } from '../utils/watchoi'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
@@ -576,7 +576,7 @@ function PostArticle(props: Props) {
         ]
       : [
           { label: '同じ名前のレスを見る', icon: 'search', onClick: () => handlers.onName(post.name, head.el) },
-          { label: '名前をコピー', icon: 'content_copy', onClick: () => { copy(name || post.name); handlers.onClip?.('name', name || post.name) } },
+          { label: '名前をコピー', icon: 'content_copy', onClick: () => { copy(name || post.name); handlers.onClip?.('name', nameForField(name || post.name)) } },
           // メールがあるレスは、メールもコピーできる(書き込み欄のメールの候補にたまる)
           ...(post.mail ? [{ label: `メールをコピー(${post.mail})`, icon: 'content_copy', onClick: () => { copy(post.mail); handlers.onClip?.('mail', post.mail) } }] : []),
           ...ngNameActions,

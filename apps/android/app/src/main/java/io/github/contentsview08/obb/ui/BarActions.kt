@@ -56,7 +56,7 @@ class ToolbarPartDef(val id: String, val name: String, val icon: ImageVector, /*
 /** スレ表示の部品 */
 val THREAD_PARTS = listOf(
     ToolbarPartDef("replyField", "チャット欄", Icons.Filled.ChatBubbleOutline, fills = true),
-    ToolbarPartDef("spacer", "空き", Icons.Filled.SpaceBar, fills = true),
+    ToolbarPartDef("spacer", "左右の境目", Icons.Filled.SpaceBar, fills = true),
     ToolbarPartDef("reply", "書き込む", Icons.Filled.Edit),
     ToolbarPartDef("quickAccess", "クイックアクセス", Icons.Filled.Dashboard),
     ToolbarPartDef("search", "レス検索", Icons.Filled.Search),
@@ -79,7 +79,7 @@ val LIST_TAB_PARTS: List<ToolbarPartDef> get() = ListTab.entries.map { ToolbarPa
 
 /** スレ一覧の部品(タブもフッターの部品の 1 つ) */
 val LIST_PARTS = LIST_TAB_PARTS + listOf(
-    ToolbarPartDef("spacer", "空き", Icons.Filled.SpaceBar, fills = true),
+    ToolbarPartDef("spacer", "左右の境目", Icons.Filled.SpaceBar, fills = true),
     ToolbarPartDef("search", "スレッド検索", Icons.Filled.Search),
     ToolbarPartDef("quickAccess", "クイックアクセス", Icons.Filled.Dashboard),
     ToolbarPartDef("refresh", "更新", Icons.Filled.Refresh),
@@ -101,19 +101,35 @@ class ToolbarLayout(val header: List<String>, val footer: List<String>) {
     fun of(bar: ToolbarBar) = if (bar == ToolbarBar.HEADER) header else footer
     fun with(bar: ToolbarBar, ids: List<String>) = if (bar == ToolbarBar.HEADER) ToolbarLayout(ids, footer) else ToolbarLayout(header, ids)
     /** どの箱にも入っていない部品(︙ にだけ出る)。空きは何度でも入れられるので、いつも出す */
-    fun unplaced(area: String): List<ToolbarPartDef> = toolbarPartsOf(area).filter { it.id == "spacer" || (it.id !in header && it.id !in footer) }
+    /** 境目(spacer)はフッターにいつも 1 つあるので、使える部品には出さない */
+    fun unplaced(area: String): List<ToolbarPartDef> = toolbarPartsOf(area).filter { it.id != "spacer" && it.id !in header && it.id !in footer }
+}
+
+/**
+ * フッターの左右の境目をそろえる。境目はチャット欄(スレ表示)・タブのまとまり(スレ一覧)、どちらもなければ spacer。
+ * 境目より左の部品は左に、右の部品は右に寄る(実際の帯)。spacer は 1 つだけで、チャット欄・タブがあればなくす
+ */
+private fun withGap(area: String, footer: List<String>): List<String> {
+    val hasMain = if (area == "thread") "replyField" in footer else footer.any { it.startsWith("tab:") }
+    val firstSpacer = footer.indexOf("spacer")
+    val out = footer.filterIndexed { i, id -> id != "spacer" || (!hasMain && i == firstSpacer) }
+    return if (hasMain || "spacer" in out) out else listOf("spacer") + out
 }
 
 /** 保存してある並び。スレ一覧のタブは Prefs.listTabs(PC 版・スキン・同期と共通)を元に、フッターの中の位置だけをここで持つ */
 fun toolbarLayout(prefs: Prefs, area: String): ToolbarLayout {
-    val l = toolbarLayoutRaw(prefs, area)
-    if (area != "list") return l
+    val l0 = toolbarLayoutRaw(prefs, area)
+    if (area != "list") return ToolbarLayout(l0.header.filter { it != "spacer" }, withGap(area, l0.footer))
+    // タブが空のときは境目(spacer)の位置にタブがあった。タブがあれば、境目の所にタブを置く
+    val l = ToolbarLayout(l0.header, l0.footer.map { if (it == "spacer" && l0.footer.none { x -> x.startsWith("tab:") }) "tab:__gap" else it })
     // タブは listTabs の並びで、フッターの最初のタブの位置(なければ左端)にまとめて置く
     val tabs = prefs.listTabs.split(',').filter { k -> ListTab.entries.any { it.key == k } }.map { "tab:$it" }
     val at = l.footer.indexOfFirst { it.startsWith("tab:") }.let { if (it < 0) 0 else it }
-    val rest = l.footer.filter { !it.startsWith("tab:") }
-    val before = l.footer.take(at).filter { !it.startsWith("tab:") }
-    return ToolbarLayout(l.header.filter { !it.startsWith("tab:") }, before + tabs + rest.drop(before.size))
+    val rest = l.footer.filter { !it.startsWith("tab:") && it != "spacer" }
+    val before = l.footer.take(at).filter { !it.startsWith("tab:") && it != "spacer" }
+    // タブがなければ、タブのあった所(境目)に spacer を置く
+    val mid = if (tabs.isEmpty()) listOf("spacer") else tabs
+    return ToolbarLayout(l.header.filter { !it.startsWith("tab:") && it != "spacer" }, withGap(area, before + mid + rest.drop(before.size)))
 }
 
 private fun toolbarLayoutRaw(prefs: Prefs, area: String): ToolbarLayout {
@@ -150,10 +166,14 @@ fun saveToolbarLayout(prefs: Prefs, area: String, layout: ToolbarLayout) {
 
 /** 部品を箱に入れる(index の所。ほかの箱にあれば外してから)。空き以外は 1 つだけ */
 fun placeToolbarPart(prefs: Prefs, area: String, id: String, bar: ToolbarBar, index: Int) {
+    if (id == "spacer") return
     var l = toolbarLayout(prefs, area)
-    if (id != "spacer") l = ToolbarLayout(l.header.filter { it != id }, l.footer.filter { it != id })
+    l = ToolbarLayout(l.header.filter { it != id }, l.footer.filter { it != id })
     val ids = l.of(bar).toMutableList()
-    ids.add(index.coerceIn(0, ids.size), id)
+    val gap = ids.indexOf("spacer")
+    // チャット欄・タブは境目そのものになる(境目の所に入る)
+    if (bar == ToolbarBar.FOOTER && gap >= 0 && (id == "replyField" || id.startsWith("tab:"))) ids[gap] = id
+    else ids.add(index.coerceIn(0, ids.size), id)
     saveToolbarLayout(prefs, area, l.with(bar, ids))
 }
 
@@ -171,7 +191,12 @@ fun removeToolbarPart(prefs: Prefs, area: String, bar: ToolbarBar, index: Int) {
     val l = toolbarLayout(prefs, area)
     val ids = l.of(bar).toMutableList()
     if (index !in ids.indices) return
-    ids.removeAt(index)
+    val id = ids[index]
+    // 境目は外せない
+    if (id == "spacer") return
+    // チャット欄・最後のタブを外したら、その所が境目になる
+    val lastMain = id == "replyField" || (id.startsWith("tab:") && ids.count { it.startsWith("tab:") } == 1)
+    if (bar == ToolbarBar.FOOTER && lastMain) ids[index] = "spacer" else ids.removeAt(index)
     saveToolbarLayout(prefs, area, l.with(bar, ids))
 }
 
@@ -185,9 +210,9 @@ fun toolbarLabelSp(prefs: Prefs): Int = when (prefs.toolbarLabel) { "s" -> 10; "
  * 押せる範囲はアイコンの周りを広く取る(44dp 以上)
  */
 @Composable
-fun ToolbarButton(def: ToolbarPartDef, prefs: Prefs, modifier: Modifier = Modifier, tint: Color = Palette.textMuted, enabled: Boolean = true, onClick: () -> Unit) {
+fun ToolbarButton(def: ToolbarPartDef, prefs: Prefs, modifier: Modifier = Modifier, tint: Color = Palette.textMuted, enabled: Boolean = true, /** 帯が混んでいるときは false(名前を消してアイコンだけ) */ showLabel: Boolean = true, onClick: () -> Unit) {
     val icon = toolbarIconDp(prefs)
-    val label = toolbarLabelSp(prefs)
+    val label = if (showLabel) toolbarLabelSp(prefs) else 0
     Column(
         modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick)
             .widthIn(min = (icon + 20).dp).heightIn(min = (icon + 20).dp).padding(horizontal = 6.dp, vertical = 4.dp),

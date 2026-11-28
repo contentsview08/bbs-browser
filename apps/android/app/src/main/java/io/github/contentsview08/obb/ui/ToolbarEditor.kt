@@ -143,7 +143,7 @@ fun HistoryTabsPage(vm: AppViewModel) {
             onRemove = { _, index -> if (on.size > 1) p.pastTabs = on.filterIndexed { i, _ -> i != index }.joinToString(",") },
             paletteTitle = "使えるタブ",
             plainPlaced = true,
-            look = { it, _ -> Text(it.name, Modifier.padding(horizontal = 8.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 14.sp) },
+            look = { it, _ -> Text(it.name, Modifier.padding(horizontal = 8.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 14.sp, maxLines = 1) },
         )
     }
     Group {
@@ -158,8 +158,8 @@ private fun ToolbarChipLook(vm: AppViewModel, item: DockItem, placed: Boolean) {
     if (item.id.startsWith("tab:")) {
         Row(Modifier.heightIn(min = 40.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (item.icon != null) Icon(item.icon, null, tint = Palette.textMuted, modifier = Modifier.size(17.dp))
-            Text(item.name, color = Palette.textMuted, fontSize = 14.sp)
-            if (item.id !in setOf("tab:unread", "tab:visited", "tab:keyword")) Icon(Icons.Filled.ArrowDownward, null, tint = Palette.textMuted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+            if (!(placed && LocalChipCompact.current)) Text(item.name, color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
+            if (!(placed && LocalChipCompact.current) && item.id !in setOf("tab:unread", "tab:visited", "tab:keyword")) Icon(Icons.Filled.ArrowDownward, null, tint = Palette.textMuted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
         }
         return
     }
@@ -172,6 +172,6 @@ private fun ToolbarChipLook(vm: AppViewModel, item: DockItem, placed: Boolean) {
     }
     Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         if (item.icon != null) Icon(item.icon, item.name, tint = if (item.id == "reply") Palette.accent else Palette.textMuted, modifier = Modifier.size(toolbarIconDp(p).dp))
-        if (!placed || toolbarLabelSp(p) > 0) Text(item.name, color = Palette.textMuted, fontSize = maxOf(10, toolbarLabelSp(p)).sp, maxLines = 1)
+        if (!placed || (toolbarLabelSp(p) > 0 && !LocalChipCompact.current)) Text(item.name, color = Palette.textMuted, fontSize = maxOf(10, toolbarLabelSp(p)).sp, maxLines = 1)
     }
 }

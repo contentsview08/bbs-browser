@@ -317,7 +317,7 @@ fun ThreadFooter(
                 }
             }
                 else -> toolbarPart("thread", part)?.let { d ->
-                    ToolbarButton(d, vm.prefs, Modifier.padding(start = 2.dp), tint = if (d.id == "reply") Palette.accent else Palette.textMuted) { run(d.id) }
+                    ToolbarButton(d, vm.prefs, Modifier.padding(start = 2.dp), tint = if (d.id == "reply") Palette.accent else Palette.textMuted, showLabel = !showField && parts.size <= 5) { run(d.id) }
                 }
             }
         }

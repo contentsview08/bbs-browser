@@ -464,7 +464,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     onTitle = { menu = true },
                 ) {
                     // 設定「ボタンの配置」でヘッダーに置いた操作(既定はスレッド検索だけ)
-                    for (id in listToolbar.header) toolbarPart("list", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs) { runListBarAction(d.id) } }
+                    for (id in listToolbar.header) toolbarPart("list", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs, showLabel = listToolbar.header.size <= 3) { runListBarAction(d.id) } }
                     MoreButton { menu = true }
                 }
             }
@@ -492,11 +492,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     .let { ts -> defaultTab(sort).let { d -> if (d == ListTab.ORDER || d in ts) ts else ts + d } }
                 // 設定「ボタンの配置」のフッターの並び: タブより左に置いたボタン → タブ(残りの幅。横に送れる) → タブより右のボタン
                 val footerIds = listToolbar.footer
-                val firstTab = footerIds.indexOfFirst { it.startsWith("tab:") }
+                // 境目: 最初のタブ、タブがなければ spacer。そこより左のボタンは左に、右のボタンは右に
+                val firstTab = footerIds.indexOfFirst { it.startsWith("tab:") }.let { if (it < 0) footerIds.indexOf("spacer") else it }
                 val footerBefore = if (firstTab < 0) emptyList() else footerIds.take(firstTab)
                 val footerAfter = footerIds.filter { !it.startsWith("tab:") && it !in footerBefore }
                 for (id in footerBefore) ListFooterButton(id)
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                // タブは 1 行に収める(折り返さない)。1 つあたりの幅が狭ければ、名前を消してアイコンだけにする
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
+                val tabCompact = maxWidth / maxOf(1, tabs.size) < 96.dp
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
                 for (t in tabs) {
@@ -504,7 +508,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     val active = tab == t || (tab == null && t == defaultTab(sort))
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED || t == ListTab.KEYWORD
                     Box(
-                        Modifier.clickable {
+                        Modifier.weight(1f, fill = false).clickable {
                             when {
                                 filterTab -> page.tab = if (active) null else t.key
                                 // スレ順は いつもの並び ⇄ 逆順(元の並びがスレ順そのものなので、解除はない)
@@ -514,17 +518,17 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                                 else -> { page.tab = null; page.reversed = false }
                             }
                             scope.launch { listState.scrollToItem(0) }
-                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 10.dp),
+                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = if (tabCompact) 8.dp else 10.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             val c = if (active) Palette.accent else Palette.textMuted
-                            Icon(t.icon, null, tint = c, modifier = Modifier.size(17.dp))
-                            Text(t.label, color = c, fontSize = 14.sp)
+                            Icon(t.icon, if (tabCompact) t.label else null, tint = c, modifier = Modifier.size(if (tabCompact) 20.dp else 17.dp))
+                            if (!tabCompact) Text(t.label, color = c, fontSize = 14.sp, maxLines = 1)
                             if (t == ListTab.UNREAD && unreadTotal > 0) {
                                 Badge(badgeCount(unreadTotal), Palette.unread, Palette.unreadText)
                             }
-                            if (!filterTab) Icon(
+                            if (!filterTab && !(tabCompact && !active)) Icon(
                                 if (active && page.reversed) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward, null,
                                 tint = if (active) c else Color.Transparent, modifier = Modifier.size(14.dp),
                             )
@@ -535,6 +539,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                             Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
                         }
                     }
+                }
                 }
                 }
                 val footerH = vm.prefs.footerHeight

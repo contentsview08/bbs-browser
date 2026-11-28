@@ -868,7 +868,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 } else {
                     HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { menu = true }) {
                         // 設定「ボタンの配置」でヘッダーに置いた操作(既定はレス検索だけ)
-                        for (id in toolbar.header) toolbarPart("thread", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs, tint = if (d.id == "reply") Palette.accent else Palette.textMuted) { runBarAction(d.id) } }
+                        for (id in toolbar.header) toolbarPart("thread", id)?.let { d -> if (!d.fills) ToolbarButton(d, vm.prefs, tint = if (d.id == "reply") Palette.accent else Palette.textMuted, showLabel = toolbar.header.size <= 3) { runBarAction(d.id) } }
                         MoreButton { menu = true }
                     }
                 }

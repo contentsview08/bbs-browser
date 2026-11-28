@@ -168,7 +168,8 @@ fun ChipDock(
                         },
                         onDragEnd = { dragging?.let { drop(it) }; dragging = null },
                         onDragCancel = { dragging = null },
-                    ) { change, delta -> change.consume(); dragging?.let { it.pos += delta * mockScale[0] } }
+                    // 縮めた見本の中の部品は、指の動き(画面の px)が縮みの分だけ小さく届くので戻す。使える部品(見本の外)はそのまま
+                    ) { change, delta -> change.consume(); dragging?.let { it.pos += delta * (if (dock != null && screenMock != null) mockScale[0] else 1f) } }
                 },
         ) {
             ChipFrame(item, placed = dock != null, plain = plainPlaced && dock != null, onClick = { menu = true }) { if (look != null) look(item, dock != null) else DefaultChipLook(item, placed = dock != null) }

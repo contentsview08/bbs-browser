@@ -844,7 +844,7 @@ private fun PostDisplayGroups(vm: AppViewModel) {
     Group("人気のレス", note = "返信が 3 件からのレス。多いほど赤く") {
         ChoiceRow("示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
     }
-    Group("自分の書き込み", note = "自分の書き込みと、自分への返信の帯。人気の帯と同じ側にしたときは、自分の帯を優先します") {
+    Group("自分の書き込み", note = "自分の書き込みと、自分への返信の帯の側") {
         ChoiceRow("帯の側", p.ownStyle, OWN_STYLES) { p.ownStyle = it }
     }
     Group("リンクと本文") {

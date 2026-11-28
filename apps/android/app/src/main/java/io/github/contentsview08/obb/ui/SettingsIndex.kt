@@ -46,7 +46,7 @@ val SETTINGS_INDEX = listOf(
     Triple("thread", "日時の出し方", ""),
     Triple("thread", "人気のレス", "返信が 3 件からのレス。多いほど赤く"),
     Triple("thread", "示し方", ""),
-    Triple("thread", "自分の書き込み", "自分の書き込みと、自分への返信の帯。人気の帯と同じ側にしたときは、自分の帯を優先します"),
+    Triple("thread", "自分の書き込み", "自分の書き込みと、自分への返信の帯の側"),
     Triple("thread", "帯の側", ""),
     Triple("thread", "リンクと本文", ""),
     Triple("thread", "リンクのカード", "ページの題と画像を、本文の下に小さく"),

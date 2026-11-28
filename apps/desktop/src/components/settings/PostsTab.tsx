@@ -90,7 +90,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           onChange={(v) => update('heatStyle', v)}
         />
       </Section>
-      <Section title="自分の書き込み" note="自分の書き込みと、自分への返信の帯。人気の帯と同じ側にしたときは、自分の帯を優先します">
+      <Section title="自分の書き込み" note="自分の書き込みと、自分への返信の帯の側">
         <Choice
           value={s.ownStyle}
           options={[

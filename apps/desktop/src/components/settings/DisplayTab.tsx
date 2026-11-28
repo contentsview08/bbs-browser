@@ -212,7 +212,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         />
       )}
       <Section title="差し色">
-        <p className="text-xs text-c-text-muted mb-2">ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります(スマホのアプリ・web と同じ 8 色)</p>
+        <p className="text-xs text-c-text-muted mb-2">ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります</p>
         <div className="flex flex-wrap gap-3">
           {[{ key: '', name: 'テーマの色', color: '' }, ...ACCENTS.map((a) => ({ key: a.key, name: a.name, color: isDarkScheme(effectiveScheme(s)) ? a.dark : a.light }))].map((a) => {
             const on = s.accent === a.key

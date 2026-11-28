@@ -230,7 +230,7 @@ function DetailStep({ settings: s, update }: { settings: AppSettings; update: Up
         ]}
         onChange={(v) => update('heatStyle', v)}
       />
-      {label('自分の書き込みの帯(人気と同じ側なら自分が勝つ)')}
+      {label('自分の書き込みの帯')}
       <Choice
         value={s.ownStyle}
         options={[

@@ -48,6 +48,11 @@ export function ChipDock(props: {
   paletteEmpty?: string
   /** 箱の中の部品はアイコンだけ(実際のボタンと同じ幅で、設定の窓で折り返さない。名前はマウスを乗せると出る) */
   iconOnly?: boolean
+  /**
+   * 2 つの箱を 1 本の帯にまとめる(ヘッダー・フッター)。左の箱・真ん中(スレタイ・空き)・右の箱を 1 行に並べ、
+   * 真ん中より左に落とせば左の箱、右なら右の箱に入る(実際の帯と同じ形)
+   */
+  bars?: { key: string; label: string; left: string; right: string; middle: string }[]
 }) {
   const [drag, setDrag] = useState<Drag>()
   const [menu, setMenu] = useState<{ pos: MenuPos; items: MenuItem[] }>()
@@ -57,7 +62,33 @@ export function ChipDock(props: {
   const dropTarget = (d: Drag): { dock: DockSpec; index: number } | undefined => {
     const root = rootRef.current
     if (!root) return undefined
+    const countLeftOf = (dock: DockSpec, box: HTMLElement) => {
+      let index = 0
+      box.querySelectorAll<HTMLElement>('[data-dock-index]').forEach((el) => {
+        const i = Number(el.dataset.dockIndex)
+        if (d.from?.dock === dock.key && i === d.from.index) return
+        const c = el.getBoundingClientRect()
+        if (d.x > c.left + c.width / 2) index++
+      })
+      return index
+    }
+    // 帯: 真ん中より左なら左の箱、右なら右の箱
+    for (const bar of props.bars ?? []) {
+      const el = root.querySelector<HTMLElement>(`[data-bar="${bar.key}"]`)
+      const gap = root.querySelector<HTMLElement>(`[data-gap="${bar.key}"]`)
+      if (!el || !gap) continue
+      const r = el.getBoundingClientRect()
+      if (d.x < r.left - 12 || d.x > r.right + 12 || d.y < r.top - 12 || d.y > r.bottom + 12) continue
+      const g = gap.getBoundingClientRect()
+      const side = d.x < g.left + g.width / 2 ? bar.left : bar.right
+      const dock = props.docks.find((x) => x.key === side)
+      const box = root.querySelector<HTMLElement>(`[data-dock="${side}"]`)
+      if (!dock || !box) continue
+      return { dock, index: countLeftOf(dock, box) }
+    }
+    const inBar = new Set((props.bars ?? []).flatMap((b) => [b.left, b.right]))
     for (const dock of props.docks) {
+      if (inBar.has(dock.key)) continue
       const box = root.querySelector<HTMLElement>(`[data-dock="${dock.key}"]`)
       if (!box) continue
       const r = box.getBoundingClientRect()
@@ -213,9 +244,60 @@ export function ChipDock(props: {
     )
   }
 
+  /** 箱の中の部品の並び。掴んでいる間は、離したら入る所に差し色の縦の線 */
+  const dockItems = (dock: DockSpec) => {
+    const over = target?.dock.key === dock.key
+    const n = dock.items.length - (drag?.from?.dock === dock.key ? 1 : 0)
+    let k = 0
+    return (
+      <>
+        {dock.items.map((item, i) => {
+          const skipped = drag?.from?.dock === dock.key && drag.from.index === i
+          const line = over && !skipped && target?.index === k
+          if (!skipped) k++
+          return (
+            <span key={`${dock.key}:${i}`} className="flex items-center flex-shrink-0">
+              {line && <span className="w-0.5 h-7 bg-c-accent rounded mr-1" />}
+              {chip(item, { dock: dock.key, index: i })}
+            </span>
+          )
+        })}
+        {over && target && target.index >= n && <span className="w-0.5 h-7 bg-c-accent rounded flex-shrink-0" />}
+      </>
+    )
+  }
+  const barDocks = new Set((props.bars ?? []).flatMap((b) => [b.left, b.right]))
+
   return (
     <div ref={rootRef} className="flex flex-col gap-2">
-      {props.docks.map((dock) => {
+      {(props.bars ?? []).map((bar) => {
+        const left = props.docks.find((x) => x.key === bar.left)!
+        const right = props.docks.find((x) => x.key === bar.right)!
+        const over = target && (target.dock.key === bar.left || target.dock.key === bar.right)
+        return (
+          <div key={bar.key}>
+            <p className="text-xs text-c-text-muted mb-1">{bar.label}</p>
+            {/* 実際の帯と同じ 1 行: 左の部品・真ん中・右の部品(折り返さない) */}
+            <div
+              data-bar={bar.key}
+              className={`flex flex-nowrap items-center gap-1 min-h-[3rem] px-2 py-1.5 rounded-lg bg-c-bar border transition-colors ${over ? 'border-c-accent border-2' : 'border-c-border'}`}
+            >
+              <div data-dock={bar.left} className="flex flex-nowrap items-center gap-0.5 min-h-[2.25rem] min-w-[1.5rem]">
+                {dockItems(left)}
+              </div>
+              <div data-gap={bar.key} className="flex-1 min-w-[5rem] flex items-center justify-center gap-2 text-xs text-c-text-muted whitespace-nowrap">
+                <span className="opacity-60">← 左に付く</span>
+                <span className="text-c-text-body">{bar.middle}</span>
+                <span className="opacity-60">右に付く →</span>
+              </div>
+              <div data-dock={bar.right} className="flex flex-nowrap items-center gap-0.5 min-h-[2.25rem] min-w-[1.5rem]">
+                {dockItems(right)}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+      {props.docks.filter((d) => !barDocks.has(d.key)).map((dock) => {
         const over = target?.dock.key === dock.key
         return (
           <div key={dock.key}>
@@ -228,13 +310,7 @@ export function ChipDock(props: {
             >
               {dock.leading && <span className="text-xs text-c-text-muted px-1 mr-auto">{dock.leading}</span>}
               {dock.items.length === 0 && <span className="text-xs text-c-text-muted px-1">ここに入れる</span>}
-              {dock.items.map((item, i) => (
-                <span key={`${dock.key}:${i}`} className="flex items-center">
-                  {over && target?.index === i && <span className="w-0.5 h-7 bg-c-accent rounded mr-1" />}
-                  {chip(item, { dock: dock.key, index: i })}
-                </span>
-              ))}
-              {over && target && target.index >= dock.items.length - (drag?.from?.dock === dock.key ? 1 : 0) && <span className="w-0.5 h-7 bg-c-accent rounded" />}
+              {dockItems(dock)}
               {dock.trailing && <span className="text-xs text-c-text-muted px-1 ml-auto">{dock.trailing}</span>}
             </div>
           </div>

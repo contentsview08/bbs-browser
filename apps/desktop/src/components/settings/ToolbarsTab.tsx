@@ -36,17 +36,20 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
       key: p,
       label: PLACEMENTS.find((x) => x.key === p)!.name,
       items: zoneItems(p).map(item),
-      ...(p === 'headerStart' ? { trailing: between } : p === 'header' ? { leading: between } : {}),
     }))
     return (
       <Section
         title={title}
-        note="ボタンをつかんで箱に入れると、帯のその位置に出ます(左から順)。箱にないボタンは ︙ の中だけに出ます(︙ にはいつも全部出ます)。押すとメニューでも動かせます"
+        note="ボタンをつかんで帯に入れると、その位置に出ます。真ん中(スレタイ・空き)より左に落とせば左に、右なら右に付きます。箱にないボタンは ︙ の中だけに出ます(︙ にはいつも全部出ます)。押すとメニューでも動かせます"
       >
         <ChipDock
           docks={docks}
           palette={zoneItems('menu').map(item)}
           paletteTitle="︙ の中だけのボタン"
+          bars={[
+            { key: 'headerBar', label: 'ヘッダー', left: 'headerStart', right: 'header', middle: between },
+            { key: 'footerBar', label: 'フッター', left: 'footerStart', right: 'footer', middle: '空き' },
+          ]}
           iconOnly
           onPlace={(dock, id, index) => move(id, dock as Placement, index)}
           onMove={(dock, from, to) => move(zoneItems(dock as Placement)[from], dock as Placement, to)}

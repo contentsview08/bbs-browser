@@ -36,7 +36,7 @@ import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarConte
 import { inBar, mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
-import { StyleDialog } from './StyleMenu'
+import { StyleDialog, type StyleTab } from './StyleMenu'
 import { BaseFontSlider, PostFontSliders } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
@@ -766,7 +766,8 @@ export default function ThreadView(props: Props) {
   /** スマホ: スレタイを押して出す、スレの操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
   /** ︙ の「表示スタイル」の画面 */
-  const [styleOpen, setStyleOpen] = useState(false)
+  /** 表示スタイルの窓。文字列なら、そのタブで開く(帯の「文字の大きさ・余白」は 文字と余白) */
+  const [styleOpen, setStyleOpen] = useState<boolean | StyleTab>(false)
   /** スマホ: スレタイを 2 行に収める(入りきらなければ字を小さく)。スレタイ・幅が変わったら測り直す */
   const titleFitRef = useRef<HTMLSpanElement>(null)
   useLayoutEffect(() => {
@@ -1498,7 +1499,7 @@ export default function ThreadView(props: Props) {
             id: 'style',
             label: '表示スタイル',
             icon: 'palette',
-            active: styleOpen,
+            active: !!styleOpen,
             onClick: () => setStyleOpen(true),
           },
           {
@@ -1506,7 +1507,7 @@ export default function ThreadView(props: Props) {
             id: 'fontSize',
             label: '文字の大きさ・余白',
             icon: 'format_size',
-            onClick: () => setStyleOpen(true),
+            onClick: () => setStyleOpen('size'),
           },
         ]
       : []),
@@ -2882,6 +2883,7 @@ export default function ThreadView(props: Props) {
       )}
       {styleOpen && props.onUpdateSetting && (
         <StyleDialog
+          initialTab={typeof styleOpen === 'string' ? styleOpen : undefined}
           settings={settings}
           update={props.onUpdateSetting}
           from="thread"

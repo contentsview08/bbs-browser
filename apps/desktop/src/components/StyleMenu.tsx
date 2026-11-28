@@ -190,7 +190,7 @@ export function StyleOptionItems({ settings, update }: { settings: AppSettings; 
 }
 
 /** 画面の上のタブ(配色・スタイル・文字と余白・細かい表示)。最後に開いたタブはこの端末に覚える(同期しない) */
-type StyleTab = 'color' | 'style' | 'size' | 'post'
+export type StyleTab = 'color' | 'style' | 'size' | 'post'
 const TAB_KEY = 'bbs:style-dialog-tab'
 function loadTab(): StyleTab {
   try {
@@ -261,7 +261,15 @@ export function PostDisplayItems({ settings: s, update }: { settings: AppSetting
  * from: どこから開いたか。スレ一覧からは、スレ表示だけのタブ(細かい表示)を出さない。
  * PC の窓は、初めはその反対の側に出し、置き場所はそれぞれ覚える
  */
-export function StyleDialog(props: { settings: AppSettings; update: UpdateSetting; sliders: ReactNode; from: 'list' | 'thread'; onClose: () => void }) {
+export function StyleDialog(props: {
+  settings: AppSettings
+  update: UpdateSetting
+  sliders: ReactNode
+  from: 'list' | 'thread'
+  /** 開くタブ。入口が決まっているとき(帯の「文字の大きさ・余白」→ 文字と余白)。なければ最後に開いたタブ */
+  initialTab?: StyleTab
+  onClose: () => void
+}) {
   const { settings, update } = props
   const boxRef = useRef<HTMLDivElement>(null)
   // スマホは後ろを覆うシートなので、ほかの窓と同じくフォーカスを中に留める(Android の戻るも data-modal を見て閉じる)。
@@ -277,7 +285,7 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
     { key: 'size', name: '文字と余白' },
     ...(thread ? [{ key: 'post' as const, name: '細かい表示' }] : []),
   ]
-  const [tab, setTab] = useState<StyleTab>(loadTab)
+  const [tab, setTab] = useState<StyleTab>(() => props.initialTab ?? loadTab())
   const shown = tabs.some((t) => t.key === tab) ? tab : 'color'
   const tabBar = (
     <div role="tablist" className="flex-shrink-0 flex border-b border-c-border">

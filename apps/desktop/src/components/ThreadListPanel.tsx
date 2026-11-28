@@ -12,7 +12,7 @@ import RefreshButton from './RefreshButton'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
 import { inBar, mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
-import { StyleDialog } from './StyleMenu'
+import { StyleDialog, type StyleTab } from './StyleMenu'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum, sortByOrder } from '../utils/thread'
@@ -695,7 +695,8 @@ export default function ThreadListPanel(props: Props) {
   /** スマホ: 板名を押して出す、板の操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
   /** ︙ の「表示スタイル」の画面 */
-  const [styleOpen, setStyleOpen] = useState(false)
+  /** 表示スタイルの窓。文字列なら、そのタブで開く(帯の「文字の大きさ・余白」は 文字と余白) */
+  const [styleOpen, setStyleOpen] = useState<boolean | StyleTab>(false)
   const copyText = (text: string, done: string) =>
     void navigator.clipboard.writeText(text).then(
       () => showNote(done),
@@ -826,8 +827,8 @@ export default function ThreadListPanel(props: Props) {
     ...(props.style
       ? [
           // 帯に置いたときのボタン。中身は表示スタイルの画面と同じ(︙ には並べない。foldMenuActions)
-          { id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setStyleOpen(true) },
-          { id: 'style', label: '表示スタイル', icon: 'palette', active: styleOpen, onClick: () => setStyleOpen(true) },
+          { id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setStyleOpen('size') },
+          { id: 'style', label: '表示スタイル', icon: 'palette', active: !!styleOpen, onClick: () => setStyleOpen(true) },
         ]
       : []),
     ...(props.onRefresh
@@ -1399,7 +1400,7 @@ export default function ThreadListPanel(props: Props) {
         </div>
       )}
       {styleOpen && props.style && (
-        <StyleDialog settings={props.style.settings} update={props.style.update} from="list" sliders={props.fontSize} onClose={() => setStyleOpen(false)} />
+        <StyleDialog initialTab={typeof styleOpen === 'string' ? styleOpen : undefined} settings={props.style.settings} update={props.style.update} from="list" sliders={props.fontSize} onClose={() => setStyleOpen(false)} />
       )}
       {titleSheet && (
         <ActionSheet

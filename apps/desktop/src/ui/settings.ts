@@ -545,7 +545,7 @@ export interface AppSettings {
   /** 人気のレスの示し方 */
   heatStyle: HeatStyle
   ownStyle: OwnStyle
-  /** クイックセットアップ(配色・レスの見た目・細かい表示・ボタンの配置を順に選ぶ画面)を済ませた印。0 なら次に開いたときに出す(PC) */
+  /** クイックセットアップ(配色・レスの見た目・細かい表示・ボタンの配置を順に選ぶ画面)を済ませた印。PC は起動時に出さないので、いまは完了・スキップで 1 にするだけ(スマホ版と同じ鍵) */
   setupDone: number
   /** スレ一覧の行の形 */
   listShape: ListShape

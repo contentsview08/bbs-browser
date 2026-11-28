@@ -3094,16 +3094,8 @@ export default function App() {
   }, [])
   /** スキンを選ぶ窓(表示スタイルの窓の「ほかのスキンも見る…」) */
   const [skinsOpen, setSkinsOpen] = useState(false)
-  /** クイックセットアップ(設定を読み終えて setupDone が 0 なら、最初の起動で 1 回出す。設定 → 表示 からも開ける) */
+  /** クイックセットアップ。PC は起動時には出さない(本人の方針。設定 → 表示 の一番上から開く)。ここの状態は、その窓を App の上に出すため */
   const [setupOpen, setSetupOpen] = useState(false)
-  useEffect(() => {
-    // 出した時点で「済み」にする(途中で閉じても、2 回目からは出さない)
-    if (settingsLoaded && !isMobile && settings.setupDone === 0) {
-      setSetupOpen(true)
-      updateSetting('setupDone', 1)
-    }
-    // 読み終えたときだけ
-  }, [settingsLoaded])
   /** リンクのパネル(設定「リンクをアプリの中で開く」)で開いている URL */
   const [linkPanel, setLinkPanel] = useState<string>()
   // 一覧から入れたスキンが新しくなっていたら、起動時に入れ替える

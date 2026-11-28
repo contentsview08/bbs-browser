@@ -1,8 +1,8 @@
 import { ListEditor } from '../SettingParts'
-import { type SettingsProps, Section, OrderEditor } from './common'
+import { type SettingsProps, Section } from './common'
 
-/** 操作バーに並べられるもの(定型文はこのほかに 1 つずつ) */
-const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
+/** レスの操作バーに並べられるもの(定型文はこのほかに 1 つずつ。設定「ボタンの配置」で使う) */
+export const POST_TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
   { key: 'reply', name: '返信', icon: 'reply' },
   { key: 'copy', name: '本文のみコピー', icon: 'content_paste' },
   { key: 'copyHeader', name: 'ヘッダ含めてコピー', icon: 'content_copy' },
@@ -17,11 +17,10 @@ const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
   { key: 'more', name: 'その他(⋯ のメニュー)', icon: 'more_horiz' },
 ]
 
+/** レスの操作バーに並べられるもの全部(定型文を足したもの) */
+export const postToolbarAll = (phrases: string[]) => [...POST_TOOLBAR_ITEMS, ...phrases.map((p) => ({ key: `phrase:${p}`, name: `定型文「${p}」`, icon: 'bolt' }))]
+
 export function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
-  const all = [
-    ...TOOLBAR_ITEMS,
-    ...s.quickPhrases.map((p) => ({ key: `phrase:${p}`, name: `定型文「${p}」`, icon: 'bolt' })),
-  ]
   return (
     <>
       <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
@@ -39,9 +38,6 @@ export function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         />
       </Section>
 
-      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。⋯ のメニューにある操作はどれも並べられ、上から順に左から並びます。⋯ も外せ、全部外すとバーは出ません(そのレスで使えない操作は出ません)">
-        <OrderEditor all={all} value={s.postToolbar2} onChange={(v) => update('postToolbar2', v)} restTitle="出していないボタン" />
-      </Section>
 
     </>
   )

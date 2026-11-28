@@ -12,7 +12,7 @@ import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
-import { pushRecent, EMPTY_FIELD_HISTORY, SNIPPETS_MAX, type FieldHistory, type ReplyLayout } from '../ui/settings'
+import { pushRecent, EMPTY_FIELD_HISTORY, SNIPPETS_MAX, clipKindName, type FieldHistory, type ReplyLayout } from '../ui/settings'
 import { FloatingMenu, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 
 export interface ReplyFormHandle {
@@ -260,24 +260,44 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   // ── 欄ごとの履歴(Twinkle の欄ごとのクリップボード)。名前・メールは欄の横の履歴ボタンから選ぶ。本文の控えは右クリックのメニューから保存・入れる ──
   const hist = props.fieldHistory
   const [histMenu, setHistMenu] = useState<{ pos: MenuPos; kind: 'names' | 'mails' }>()
+  const clips = hist?.clips ?? []
+  /** 名前・メールの欄の候補: その欄の種類でコピーしたもの + 書き込みに使ったもの(その欄の種類だけ。本文のクリップボード履歴には全部出る) */
+  const choices = (kind: 'names' | 'mails') => {
+    const k = kind === 'names' ? 'name' : 'mail'
+    return [...new Set([...clips.filter((c) => c.k === k).map((c) => c.t), ...(hist?.[kind] ?? [])])]
+  }
   const histBtn = (kind: 'names' | 'mails') => {
-    if (!(hist?.[kind].length)) return null
+    if (!hist || choices(kind).length === 0) return null
     return (
       <button
         type="button"
-        title={kind === 'names' ? '名前の履歴' : 'メールの履歴'}
+        title={kind === 'names' ? '名前のクリップボード' : 'メールのクリップボード'}
         onMouseDown={(e) => e.preventDefault()}
         onClick={(e) => setHistMenu({ pos: menuPosAt(e.clientX, e.clientY), kind })}
         className="flex-shrink-0 w-7 h-7 rounded flex items-center justify-center text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3"
       >
-        <span className="material-symbols-outlined text-lg leading-none">history</span>
+        <span className="material-symbols-outlined text-lg leading-none">content_paste</span>
       </button>
     )
   }
   const histItems = (kind: 'names' | 'mails'): MenuItem[] => [
-    ...(hist?.[kind] ?? []).map((v) => ({ label: v, icon: 'history', onClick: () => (kind === 'names' ? setName(v) : setMail(v)) })),
-    { label: '履歴を消す', icon: 'delete', onClick: () => props.onFieldHistoryChange?.({ ...(hist ?? EMPTY_FIELD_HISTORY), [kind]: [] }) },
+    ...choices(kind).map((v) => ({ label: v, icon: 'content_paste', onClick: () => (kind === 'names' ? setName(v) : setMail(v)) })),
+    {
+      label: '履歴を消す',
+      icon: 'delete',
+      onClick: () => props.onFieldHistoryChange?.({ ...(hist ?? EMPTY_FIELD_HISTORY), [kind]: [], clips: clips.filter((c) => c.k !== (kind === 'names' ? 'name' : 'mail')) }),
+    },
   ]
+  // クリップボード履歴(コピーした ID・名前・本文・メール。新しい順)。押すとカーソルの所に入る。チャット形式は ＋ から、PC の形は欄の上のボタンと右クリックから
+  const [clipMenu, setClipMenu] = useState<MenuPos>()
+  const clipItems: MenuItem[] =
+    clips.length === 0
+      ? [{ label: 'レスの ID・名前・本文をコピーすると、ここにたまります', icon: 'info', onClick: () => {} }]
+      : [
+          ...clips.map((c) => ({ label: `${clipKindName(c.k)}: ${c.t.replace(/\s+/g, ' ').slice(0, 40)}`, icon: 'content_paste', onClick: () => insert(c.t) })),
+          { label: 'クリップボード履歴を消す', icon: 'delete', onClick: () => props.onFieldHistoryChange?.({ ...(hist ?? EMPTY_FIELD_HISTORY), clips: [] }) },
+        ]
+  const hasClipboard = !!(hist && props.onFieldHistoryChange)
   const snippetItems: MenuItem[] =
     hist && props.onFieldHistoryChange
       ? [
@@ -296,7 +316,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             : []),
         ]
       : []
-  const contextItems = [...snippetItems, ...(props.menuItems ?? [])]
+  const contextItems = [...snippetItems, ...(hasClipboard ? [{ label: 'クリップボード履歴', icon: 'content_paste', children: clipItems }] : []), ...(props.menuItems ?? [])]
 
   /** 定型文のバー。押すとカーソルの所に入れる(選んでいた字は置き換える) */
   const phraseBar = !!props.phraseBar?.length && (
@@ -436,6 +456,19 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
                   <span className="material-symbols-outlined text-xl text-c-text-muted">tune</span>
                   {lineOptions ? 'オプションを閉じる' : 'オプション(名前・メール)'}
                 </button>
+                {hasClipboard && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      setPlusMenu(false)
+                      setClipMenu(menuPosAt(e.clientX, e.clientY))
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                  >
+                    <span className="material-symbols-outlined text-xl text-c-text-muted">content_paste</span>
+                    クリップボード履歴
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -510,6 +543,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     >
       {menu && contextItems.length > 0 && <FloatingMenu pos={menu} items={contextItems} onClose={() => setMenu(undefined)} />}
       {histMenu && <FloatingMenu pos={histMenu.pos} items={histItems(histMenu.kind)} onClose={() => setHistMenu(undefined)} />}
+      {clipMenu && <FloatingMenu pos={clipMenu} items={clipItems} onClose={() => setClipMenu(undefined)} />}
       {media.confirmView}
       {media.error && (
         <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
@@ -568,6 +602,17 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           >
             <span className="material-symbols-outlined text-lg leading-none">grid_on</span>
           </button>
+          {hasClipboard && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => setClipMenu(menuPosAt(e.clientX, e.clientY))}
+              className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2"
+              title="クリップボード履歴(コピーした ID・名前・本文)"
+            >
+              <span className="material-symbols-outlined text-lg leading-none">content_paste</span>
+            </button>
+          )}
           {media.buttons}
           {props.onCollapse && (
             <button

@@ -57,6 +57,8 @@ export interface PostHandlers extends BodyHandlers {
   iconFromWatchoi?: boolean
   /** 名前欄(ワッチョイ込み)を日付・ID と同じ薄い色・大きさにする。false なら名前の色で目立たせる */
   nameSubtle?: boolean
+  /** ID・名前・本文・メールをコピーした(欄ごとのクリップボードに覚える。書き込み欄のクリップボード履歴に出る) */
+  onClip?: (kind: 'id' | 'name' | 'mail' | 'body', text: string) => void
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -524,7 +526,7 @@ function PostArticle(props: Props) {
       ? [{ id: 'tree', label: 'アンカーツリーを表示', icon: 'account_tree', hover: 'hover:!text-mark-hot', onClick: () => handlers.onBody(post.no, articleRef.current!) }]
       : []),
     { id: 'copyHeader', label: 'ヘッダ含めてコピー', icon: 'content_copy', hover: 'hover:!text-mark-link', onClick: () => copy(`${header}\n${post.body}`) },
-    { id: 'copy', label: '本文のみコピー', icon: 'content_paste', hover: 'hover:!text-mark-link', onClick: () => copy(post.body) },
+    { id: 'copy', label: '本文のみコピー', icon: 'content_paste', hover: 'hover:!text-mark-link', onClick: () => { copy(post.body); handlers.onClip?.('body', post.body) } },
     ...(handlers.shareOf ? [{ id: 'share', label: '共有', icon: 'share', children: handlers.shareOf(post) }] : []),
     {
       id: 'aa',
@@ -567,12 +569,14 @@ function PostArticle(props: Props) {
     head.kind === 'id'
       ? [
           { label: `この ID のレスを見る(${idCount})`, icon: 'search', onClick: () => handlers.onId(post.id!, head.el) },
-          { label: 'ID をコピー', icon: 'content_copy', onClick: () => copy(post.id ?? '') },
+          { label: 'ID をコピー', icon: 'content_copy', onClick: () => { copy(post.id ?? ''); handlers.onClip?.('id', post.id ?? '') } },
           ...ngIdActions,
         ]
       : [
           { label: '同じ名前のレスを見る', icon: 'search', onClick: () => handlers.onName(post.name, head.el) },
-          { label: '名前をコピー', icon: 'content_copy', onClick: () => copy(name || post.name) },
+          { label: '名前をコピー', icon: 'content_copy', onClick: () => { copy(name || post.name); handlers.onClip?.('name', name || post.name) } },
+          // メールがあるレスは、メールもコピーできる(書き込み欄のメールの候補にたまる)
+          ...(post.mail ? [{ label: `メールをコピー(${post.mail})`, icon: 'content_copy', onClick: () => { copy(post.mail); handlers.onClip?.('mail', post.mail) } }] : []),
           ...ngNameActions,
         ]
 

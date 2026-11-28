@@ -600,12 +600,27 @@ export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[
 ]
 
 /** 書き込み欄の欄ごとの履歴。names・mails は直近 10 件、snippets(本文の控え)は 20 件まで */
+/** 欄ごとのクリップボードの 1 件。k は id / name / mail / body、t は文字 */
+export interface FieldClip {
+  k: 'id' | 'name' | 'mail' | 'body'
+  t: string
+}
 export interface FieldHistory {
   names: string[]
   mails: string[]
   snippets: string[]
+  /** レスの ID・名前・本文・メールをコピーしたもの(新しい順、CLIPS_MAX まで)。本文の欄には全部、名前・メールの欄にはその種類だけを出す。前の版の保存にはない */
+  clips?: FieldClip[]
 }
-export const EMPTY_FIELD_HISTORY: FieldHistory = { names: [], mails: [], snippets: [] }
+export const EMPTY_FIELD_HISTORY: FieldHistory = { names: [], mails: [], snippets: [], clips: [] }
+export const CLIPS_MAX = 30
+/** コピーしたものを欄ごとのクリップボードの先頭に(同じ種類・同じ文字は 1 つに。空は入れない) */
+export function addClip(h: FieldHistory, k: FieldClip['k'], t: string): FieldHistory {
+  if (!t.trim()) return h
+  return { ...h, clips: [{ k, t }, ...(h.clips ?? []).filter((c) => !(c.k === k && c.t === t))].slice(0, CLIPS_MAX) }
+}
+/** 種類の短い名前(クリップボード履歴の札) */
+export const clipKindName = (k: FieldClip['k']) => ({ id: 'ID', name: '名前', mail: 'メール', body: '本文' })[k]
 export const FIELD_HISTORY_MAX = 10
 export const SNIPPETS_MAX = 20
 /** 履歴の先頭に入れる(同じものは 1 つに。空は入れない) */

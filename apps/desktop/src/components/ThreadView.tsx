@@ -76,7 +76,7 @@ import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useOsDark } from '../hooks/useOsDark'
-import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting, type FieldHistory } from '../ui/settings'
+import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting, type FieldHistory, addClip } from '../ui/settings'
 import { ClearButton, CLEAR_PAD } from './ClearButton'
 
 export type { ScrollPosition } from '../utils/threadScroll'
@@ -2048,6 +2048,9 @@ export default function ThreadView(props: Props) {
   const schemeNow = effectiveScheme(settings)
   const custom = schemeNow === 'custom' ? parseCustom(settings.customScheme) : null
   const schemeDark = custom ? isCustomDark(custom) : isDarkScheme(schemeNow)
+  // 欄ごとのクリップボード(コピーした ID・名前・本文)。古い設定で上書きしないよう、いまの設定を ref から読む
+  const fieldHistoryRef = useRef(settings.fieldHistory)
+  fieldHistoryRef.current = settings.fieldHistory
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
       const d = () => dataRef.current
@@ -2089,6 +2092,7 @@ export default function ThreadView(props: Props) {
           hover.current.timer = setTimeout(() => open(title, posts, el, true), HOVER_DELAY_MS)
         },
         onAnchorLeave: () => clearTimeout(hover.current.timer),
+        onClip: (k, t) => props.onUpdateSetting?.('fieldHistory', addClip(fieldHistoryRef.current, k, t)),
         onReplies: (no, el) => {
           const list = (d().replies.get(no) ?? []).map((n) => d().byNo.get(n)!).filter(Boolean)
           open(`>>${refOf(no)} への返信 (${list.length})`, list, el, false)

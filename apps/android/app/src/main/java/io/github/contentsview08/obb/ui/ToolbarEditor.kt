@@ -156,10 +156,10 @@ fun HistoryTabsPage(vm: AppViewModel) {
 private fun ToolbarChipLook(vm: AppViewModel, item: DockItem, placed: Boolean) {
     val p = vm.prefs
     if (item.id.startsWith("tab:")) {
-        Row(Modifier.heightIn(min = 40.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.heightIn(min = 40.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             if (item.icon != null) Icon(item.icon, null, tint = Palette.textMuted, modifier = Modifier.size(17.dp))
-            if (!(placed && LocalChipCompact.current)) Text(item.name, color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
-            if (!(placed && LocalChipCompact.current) && item.id !in setOf("tab:unread", "tab:visited", "tab:keyword")) Icon(Icons.Filled.ArrowDownward, null, tint = Palette.textMuted.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+            // 実際のフッターと同じく、狭ければ名前を「…」で省く(並べ方の矢印は選んでいるタブにだけ出るので、ここでは出さない)
+            if (!(placed && LocalChipCompact.current)) Text(item.name, Modifier.weight(1f, fill = false), color = Palette.textMuted, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, softWrap = false)
         }
         return
     }

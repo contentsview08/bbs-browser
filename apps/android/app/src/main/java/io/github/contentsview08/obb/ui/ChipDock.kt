@@ -195,7 +195,7 @@ fun ChipDock(
             .onGloballyPositioned { dockBounds[dock.key] = it.boundsInRoot() }
             .clip(shape).background(if (over) Palette.accentWash else Palette.bar)
             .border(BorderStroke(if (over) 2.dp else if (mock) 0.dp else 1.dp, if (over) Palette.accent else Palette.border), shape)
-            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .padding(horizontal = if (mock) 2.dp else 6.dp, vertical = 4.dp)
         // 掴んでいる部品の元の所を飛ばして、並びの中の「何番目の前」に線を引くかを、元の並びの番号に直す
         val skip = if (d != null && d.from == dock.key) d.fromIndex else -1
         fun lineBefore(i: Int): Boolean {
@@ -209,7 +209,7 @@ fun ChipDock(
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
             // 1 行に収める(折り返さない)。部品 1 つあたりの幅が狭ければ、名前を消してアイコンだけにする(実際の帯と同じ)
             // 名前を出したときの幅の目安: タブ 96dp・ボタン 48dp・題名 110dp・幅を埋める部品 120dp。入りきらなければアイコンだけ
-            val need = dock.items.sumOf { if (dock.flexGroup?.invoke(it) == true) 96 else if (it.fills) 120 else 48 } + (if (dock.fixedLeading != null) 110 else 0)
+            val need = dock.items.sumOf { if (dock.flexGroup?.invoke(it) == true) 60 else if (it.fills) 120 else 44 } + (if (dock.fixedLeading != null) 110 else 0)
             val compact = maxWidth.value < need
             androidx.compose.runtime.CompositionLocalProvider(LocalChipCompact provides compact) {
                 Row(boxMod, verticalAlignment = Alignment.CenterVertically) {
@@ -229,7 +229,8 @@ fun ChipDock(
                                 while (j < dock.items.size && group(dock.items[j])) {
                                     if (j != i && lineBefore(j)) DropLine()
                                     val jj = j
-                                    Box(Modifier.weight(1f, fill = false)) { Chip(dock.items[jj], dock, jj) }
+                                    // 幅は名前の長さに合わせて分ける(実際のフッターと同じ)
+                                    Box(Modifier.weight(dock.items[jj].name.length + 3.5f, fill = false)) { Chip(dock.items[jj], dock, jj) }
                                     j++
                                 }
                                 i = j
@@ -250,7 +251,7 @@ fun ChipDock(
         Column(Modifier.fillMaxWidth()) {
             if (screenMock != null) {
                 // 実際の画面の見本: 上の帯(ヘッダー)・中身・下の帯(フッター)を 1 枚の枠に
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(18.dp)).border(2.dp, Palette.borderStrong, RoundedCornerShape(18.dp)).background(Palette.base)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp).clip(RoundedCornerShape(18.dp)).border(2.dp, Palette.borderStrong, RoundedCornerShape(18.dp)).background(Palette.base)) {
                     for (dk in docks.filter { !it.atBottom }) DockBox(dk)
                     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (w in listOf(0.9f, 0.6f, 0.8f)) Box(Modifier.fillMaxWidth(w).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Palette.surface2))
@@ -288,7 +289,8 @@ private fun ChipFrame(item: DockItem, placed: Boolean, plain: Boolean = false, o
             .clickable(onClick = onClick).padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!(placed && LocalChipCompact.current)) Icon(Icons.Filled.DragIndicator, "掴む", tint = if (placed) Palette.textMuted.copy(alpha = 0.6f) else Palette.accent, modifier = Modifier.size(16.dp))
+        // 帯の中(実際の見た目で出すとき)は ⋮⋮ を出さない(実際の帯と同じ幅に)。使える部品の方には出す
+        if (!(placed && (plain || LocalChipCompact.current))) Icon(Icons.Filled.DragIndicator, "掴む", tint = if (placed) Palette.textMuted.copy(alpha = 0.6f) else Palette.accent, modifier = Modifier.size(16.dp))
         content()
     }
 }

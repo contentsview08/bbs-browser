@@ -11,6 +11,8 @@ export interface DockItem {
   id: string
   name: string
   icon?: string
+  /** 箱の中でも名前を出す(実際も名前の出るもの。スレ一覧のタブ) */
+  showName?: boolean
 }
 
 export interface DockSpec {
@@ -53,6 +55,13 @@ export function ChipDock(props: {
    * 真ん中より左に落とせば左の箱、右なら右の箱に入る(実際の帯と同じ形)
    */
   bars?: { key: string; label: string; left: string; right: string; middle: string }[]
+  /** item をその箱に入れてよいか(スレ一覧のタブはタブの箱にだけ、など) */
+  allowIn?: (item: DockItem, dock: string) => boolean
+  /**
+   * 箱を実際の見た目の見本の中に描く(スマホ版の screenMock と同じ考え方)。
+   * screen: 上の帯(1 つ目の帯)・帯でない箱(タブ)・中身・下の帯(2 つ目の帯)を 1 枚の画面の枠に。card: レス・スレの札の右上に箱
+   */
+  mock?: { kind: 'screen' | 'card'; content: string }
 }) {
   const [drag, setDrag] = useState<Drag>()
   const [menu, setMenu] = useState<{ pos: MenuPos; items: MenuItem[] }>()
@@ -83,12 +92,12 @@ export function ChipDock(props: {
       const side = d.x < g.left + g.width / 2 ? bar.left : bar.right
       const dock = props.docks.find((x) => x.key === side)
       const box = root.querySelector<HTMLElement>(`[data-dock="${side}"]`)
-      if (!dock || !box) continue
+      if (!dock || !box || (props.allowIn && !props.allowIn(d.item, dock.key))) continue
       return { dock, index: countLeftOf(dock, box) }
     }
     const inBar = new Set((props.bars ?? []).flatMap((b) => [b.left, b.right]))
     for (const dock of props.docks) {
-      if (inBar.has(dock.key)) continue
+      if (inBar.has(dock.key) || (props.allowIn && !props.allowIn(d.item, dock.key))) continue
       const box = root.querySelector<HTMLElement>(`[data-dock="${dock.key}"]`)
       if (!box) continue
       const r = box.getBoundingClientRect()
@@ -175,7 +184,7 @@ export function ChipDock(props: {
   /** 押したときのメニュー */
   const menuOf = (item: DockItem, from: Drag['from']): MenuItem[] => {
     if (!from) {
-      return props.docks.map((dock) => ({
+      return props.docks.filter((dock) => !props.allowIn || props.allowIn(item, dock.key)).map((dock) => ({
         label: props.docks.length === 1 ? '入れる' : `${dock.label}に入れる`,
         icon: 'add_circle',
         onClick: () => props.onPlace(dock.key, item.id, dock.items.length),
@@ -187,7 +196,7 @@ export function ChipDock(props: {
       ...(from.index > 0 ? [{ label: '左へ', icon: 'chevron_left', onClick: () => props.onMove(dock.key, from.index, from.index - 1) }] : []),
       ...(from.index < dock.items.length - 1 ? [{ label: '右へ', icon: 'chevron_right', onClick: () => props.onMove(dock.key, from.index, from.index + 1) }] : []),
       ...props.docks
-        .filter((d) => d.key !== dock.key && removable)
+        .filter((d) => d.key !== dock.key && removable && (!props.allowIn || props.allowIn(item, d.key)))
         .map((d) => ({
           label: `${d.label}へ`,
           icon: 'move_down',
@@ -230,7 +239,7 @@ export function ChipDock(props: {
         }}
         title={`${item.name} ── ${from ? 'つかんで動かす・押すとメニュー' : 'つかんで上の箱へ・押すとメニュー'}`}
         className={`flex-shrink-0 flex items-center gap-1 h-9 rounded-lg border text-sm text-c-text-body select-none ${
-          from && props.iconOnly ? 'px-1 border-transparent bg-transparent hover:bg-c-surface2' : 'pl-0.5 pr-2.5 bg-c-surface'
+          from && props.iconOnly ? `${item.showName ? 'px-2' : 'px-1'} border-transparent bg-transparent hover:bg-c-surface2` : 'pl-0.5 pr-2.5 bg-c-surface'
         } ${from ? (props.iconOnly ? '' : 'border-c-border') : 'border-dashed border-c-accent'} hover:border-c-accent cursor-grab ${hidden ? 'opacity-25' : ''}`}
         style={{ touchAction: isMobile ? 'pan-y' : 'none' }}
       >
@@ -238,7 +247,7 @@ export function ChipDock(props: {
           drag_indicator
         </span>
         {item.icon && <span className="material-symbols-outlined text-[20px] text-c-text-muted">{item.icon}</span>}
-        {!(from && props.iconOnly && item.icon) && <span className="whitespace-nowrap">{item.name}</span>}
+        {!(from && props.iconOnly && item.icon && !item.showName) && <span className="whitespace-nowrap">{item.name}</span>}
         {extra}
       </button>
     )
@@ -268,9 +277,78 @@ export function ChipDock(props: {
   }
   const barDocks = new Set((props.bars ?? []).flatMap((b) => [b.left, b.right]))
 
+  const flat = !!props.mock
+  const renderBar = (bar: NonNullable<typeof props.bars>[number]) => {
+    const left = props.docks.find((x) => x.key === bar.left)!
+    const right = props.docks.find((x) => x.key === bar.right)!
+    const over = target && (target.dock.key === bar.left || target.dock.key === bar.right)
+    return (
+      <div key={bar.key}>
+        {!flat && <p className="text-xs text-c-text-muted mb-1">{bar.label}</p>}
+        <div
+          data-bar={bar.key}
+          className={`flex flex-nowrap items-center gap-1 min-h-[3rem] px-2 py-1.5 bg-c-bar transition-colors ${flat ? 'border-y' : 'rounded-lg border'} ${over ? 'border-c-accent border-2 bg-[var(--c-accent-wash)]' : 'border-c-border'}`}
+        >
+          <div data-dock={bar.left} className="flex flex-nowrap items-center gap-0.5 min-h-[2.25rem] min-w-[1.5rem]">
+            {dockItems(left)}
+          </div>
+          <div data-gap={bar.key} className="flex-1 min-w-[5rem] flex items-center justify-center gap-2 text-xs text-c-text-muted whitespace-nowrap">
+            <span className="opacity-60">← 左に付く</span>
+            <span className="text-c-text-strong font-bold">{bar.middle}</span>
+            <span className="opacity-60">右に付く →</span>
+          </div>
+          <div data-dock={bar.right} className="flex flex-nowrap items-center gap-0.5 min-h-[2.25rem] min-w-[1.5rem]">
+            {dockItems(right)}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const renderDock = (dock: DockSpec, alignEnd = false) => {
+    const over = target?.dock.key === dock.key
+    return (
+      <div key={dock.key}>
+        {!flat && <p className="text-xs text-c-text-muted mb-1">{dock.label}</p>}
+        <div
+          data-dock={dock.key}
+          className={`flex flex-nowrap items-center gap-1 min-h-[3rem] px-2 py-1.5 bg-c-bar transition-colors ${alignEnd ? 'justify-end' : ''} ${flat ? 'border-b' : 'rounded-lg border'} ${over ? 'border-c-accent border-2 bg-[var(--c-accent-wash)]' : 'border-c-border'}`}
+        >
+          {dock.leading && <span className="text-xs text-c-text-muted px-1 mr-auto">{dock.leading}</span>}
+          {dock.items.length === 0 && <span className="text-xs text-c-text-muted px-1">ここに入れる</span>}
+          {dockItems(dock)}
+          {dock.trailing && <span className="text-xs text-c-text-muted px-1 ml-auto">{dock.trailing}</span>}
+        </div>
+      </div>
+    )
+  }
+  const mockLines = (
+    <div className="flex flex-col gap-2 px-4 py-4">
+      {[0.9, 0.6, 0.8].map((w) => (
+        <span key={w} className="block h-2.5 rounded-full bg-c-surface2" style={{ width: `${w * 100}%` }} />
+      ))}
+      <span className="text-xs text-c-text-muted">{props.mock?.content}</span>
+    </div>
+  )
+
   return (
     <div ref={rootRef} className="flex flex-col gap-2">
-      {(props.bars ?? []).map((bar) => {
+      {props.mock?.kind === 'screen' && (
+        // 実際の画面の見本: 上の帯・タブ・中身・下の帯
+        <div className="rounded-2xl border-2 border-c-border-strong overflow-hidden bg-c-base mb-2">
+          {props.bars?.[0] && renderBar(props.bars[0])}
+          {props.docks.filter((d) => !barDocks.has(d.key)).map((d) => renderDock(d))}
+          {mockLines}
+          {props.bars?.[1] && renderBar(props.bars[1])}
+        </div>
+      )}
+      {props.mock?.kind === 'card' && (
+        // レス・スレの札の見本: 右上に操作バー
+        <div className="relative rounded-xl border-2 border-c-border-strong bg-c-surface pt-10 mb-2">
+          <div className="absolute top-2 right-2 rounded-lg shadow-md overflow-hidden border border-c-border">{props.docks.map((d) => renderDock(d, true))}</div>
+          {mockLines}
+        </div>
+      )}
+      {!props.mock && (props.bars ?? []).map((bar) => {
         const left = props.docks.find((x) => x.key === bar.left)!
         const right = props.docks.find((x) => x.key === bar.right)!
         const over = target && (target.dock.key === bar.left || target.dock.key === bar.right)
@@ -297,7 +375,7 @@ export function ChipDock(props: {
           </div>
         )
       })}
-      {props.docks.filter((d) => !barDocks.has(d.key)).map((dock) => {
+      {!props.mock && props.docks.filter((d) => !barDocks.has(d.key)).map((dock) => {
         const over = target?.dock.key === dock.key
         return (
           <div key={dock.key}>

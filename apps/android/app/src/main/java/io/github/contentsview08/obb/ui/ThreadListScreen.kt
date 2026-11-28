@@ -499,7 +499,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 for (id in footerBefore) ListFooterButton(id)
                 // タブは 1 行に収める(折り返さない)。1 つあたりの幅が狭ければ、名前を消してアイコンだけにする
                 androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
-                val tabCompact = maxWidth / maxOf(1, tabs.size) < 96.dp
+                // 狭くなったら、まず余白を詰め、次に名前を「…」で省き、1 つ 60dp 未満でアイコンだけ
+                val tabTight = maxWidth / maxOf(1, tabs.size) < 96.dp
+                val tabCompact = maxWidth / maxOf(1, tabs.size) < 60.dp
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
@@ -508,7 +510,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     val active = tab == t || (tab == null && t == defaultTab(sort))
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED || t == ListTab.KEYWORD
                     Box(
-                        Modifier.weight(1f, fill = false).clickable {
+                        // 幅は名前の長さに合わせて分ける(短い名前のタブが余らせた幅を、長い名前のタブに回す)
+                        Modifier.weight(t.label.length + 2.5f + (if (active && !filterTab) 1.5f else 0f), fill = false).clickable {
                             when {
                                 filterTab -> page.tab = if (active) null else t.key
                                 // スレ順は いつもの並び ⇄ 逆順(元の並びがスレ順そのものなので、解除はない)
@@ -518,17 +521,17 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                                 else -> { page.tab = null; page.reversed = false }
                             }
                             scope.launch { listState.scrollToItem(0) }
-                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = if (tabCompact) 8.dp else 10.dp),
+                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = if (tabTight) 5.dp else 10.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (tabTight) 2.dp else 4.dp)) {
                             val c = if (active) Palette.accent else Palette.textMuted
                             Icon(t.icon, if (tabCompact) t.label else null, tint = c, modifier = Modifier.size(if (tabCompact) 20.dp else 17.dp))
-                            if (!tabCompact) Text(t.label, color = c, fontSize = 14.sp, maxLines = 1)
+                            if (!tabCompact) Text(t.label, Modifier.weight(1f, fill = false), color = c, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             if (t == ListTab.UNREAD && unreadTotal > 0) {
                                 Badge(badgeCount(unreadTotal), Palette.unread, Palette.unreadText)
                             }
-                            if (!filterTab && !(tabCompact && !active)) Icon(
+                            if (!filterTab && active) Icon(
                                 if (active && page.reversed) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward, null,
                                 tint = if (active) c else Color.Transparent, modifier = Modifier.size(14.dp),
                             )

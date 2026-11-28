@@ -219,6 +219,8 @@ export function OrderEditor<K extends string>(props: {
   dockLabel?: string
   /** 箱の中はアイコンだけ(実際の操作バーと同じ幅) */
   iconOnly?: boolean
+  /** 実際の見た目の見本の中に描く(ChipDock の mock) */
+  mock?: { kind: 'screen' | 'card'; content: string }
 }) {
   const shown = props.value.filter((k) => props.all.some((t) => t.key === k))
   const item = (k: K) => {
@@ -231,6 +233,7 @@ export function OrderEditor<K extends string>(props: {
       palette={props.all.filter((t) => !shown.includes(t.key)).map((t) => item(t.key))}
       paletteTitle={props.restTitle ?? '出していないもの'}
       iconOnly={props.iconOnly}
+      mock={props.mock}
       onPlace={(_, id, index) => {
         const next = [...shown]
         next.splice(Math.min(index, next.length), 0, id as K)

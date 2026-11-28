@@ -3097,7 +3097,11 @@ export default function App() {
   /** クイックセットアップ(設定を読み終えて setupDone が 0 なら、最初の起動で 1 回出す。設定 → 表示 からも開ける) */
   const [setupOpen, setSetupOpen] = useState(false)
   useEffect(() => {
-    if (settingsLoaded && !isMobile && settings.setupDone === 0) setSetupOpen(true)
+    // 出した時点で「済み」にする(途中で閉じても、2 回目からは出さない)
+    if (settingsLoaded && !isMobile && settings.setupDone === 0) {
+      setSetupOpen(true)
+      updateSetting('setupDone', 1)
+    }
     // 読み終えたときだけ
   }, [settingsLoaded])
   /** リンクのパネル(設定「リンクをアプリの中で開く」)で開いている URL */

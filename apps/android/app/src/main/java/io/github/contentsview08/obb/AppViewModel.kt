@@ -306,8 +306,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ── はじめの設定(配色・レスの見た目・ボタンの配置・細かい表示を順に選ぶ)。初めて開いたとき(prefs.setupDone == 0)と、設定の「はじめの設定をもう一度」 ──
-    var setupOpen by mutableStateOf(prefs.setupDone == 0)
+    var setupOpen by mutableStateOf(false)
         private set
+    init {
+        // 出した時点で「済み」にする(途中でアプリを落としても、2 回目からは出さない)
+        if (prefs.setupDone == 0) { setupOpen = true; prefs.setupDone = 1 }
+    }
 
     fun openSetup() {
         drawerOpen = false

@@ -44,7 +44,7 @@ export interface PostHandlers extends BodyHandlers {
   idColor?: { dark: boolean; sky: boolean }
   /** 人気のレス(返信 3 件から)の示し方(設定 heatStyle)。既定は左の帯 */
   heatStyle?: HeatStyle
-  /** 自分の書き込み(と自分への返信)の帯の側(設定 ownStyle)。既定は人気の帯と反対 */
+  /** 自分の書き込み(と自分への返信)の帯の側(設定 ownStyle: left / right)。既定は右 */
   ownStyle?: OwnStyle
   /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
   doubleTapReply?: boolean
@@ -424,9 +424,8 @@ function PostArticle(props: Props) {
   const bodyClass = heatStyle === 'text' && heatCount >= 3 ? numHeat : 'text-c-text-body'
   // 人気のレスを帯で示すときの色(左・右の 3px の帯と、淡い地)
   const heatBar = (heatStyle === 'left' || heatStyle === 'right') && heatCount >= 3 ? heatVar(heatCount) : null
-  // 自分の書き込みの帯の側(設定 ownStyle)。auto なら人気の帯と反対(人気が左の帯なら自分は右。スマホのアプリと同じ)
-  const ownStyle = handlers.ownStyle ?? 'auto'
-  const ownRight = ownStyle === 'auto' ? heatStyle === 'left' : ownStyle === 'right'
+  // 自分の書き込みの帯の側(設定 ownStyle: left / right。スマホのアプリと同じ)
+  const ownRight = (handlers.ownStyle ?? 'right') === 'right'
   // サムネイル(画像・動画のファイル・YouTube)は、本文に出てくる順に並べ、ビューアーでも同じ順に見る
   const mediaItems = props.showThumbnails ? mediaIn(post.body) : []
   const media = mediaItems.map((m) => m.url)

@@ -94,7 +94,6 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <Choice
           value={s.ownStyle}
           options={[
-            { key: 'auto' as const, name: '人気と反対' },
             { key: 'left' as const, name: '左の帯' },
             { key: 'right' as const, name: '右の帯' },
           ]}

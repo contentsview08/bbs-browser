@@ -386,8 +386,12 @@ class Prefs(context: Context) {
     var showMinimap by pref("showMinimap", true)
     /** 人気のレスの示し方: left(左の帯)/ right(右の帯)/ text(本文の色) */
     var heatStyle by pref("heatStyle", "left")
-    /** 自分の書き込み(と自分への返信)の帯の側: auto = 人気の帯と反対(人気を帯で示さないときは左)/ left / right。人気の帯と同じ側なら自分の帯が勝つ */
-    var ownStyle by pref("ownStyle", "auto")
+    /** 自分の書き込み(と自分への返信)の帯の側: left / right。人気の帯と同じ側なら自分の帯が勝つ */
+    var ownStyle by pref("ownStyle", "right")
+    init {
+        // 前は「人気の帯と反対」で決めていた(試しの版の auto も)。初めてこの版を開いたときに、今と同じ側になるよう 1 度だけ写す
+        if (!sp.contains("ownStyle") || sp.getString("ownStyle", "") == "auto") ownStyle = if (sp.getString("heatStyle", "left") == "right") "left" else "right"
+    }
     /** URL を短く見せる(https:// を外し、長いものは省く。画像の URL は「画像」の札にし、続いたものはまとめる) */
     var urlShorten by pref("urlShorten", true)
     /** スレが終わったとき(dat 落ち・上限到達)、一番下に次スレの候補を出す。︙ の「次スレを探す」はオフでも使える */

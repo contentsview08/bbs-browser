@@ -805,7 +805,7 @@ internal val DATE_STYLES = listOf("md_w_hms" to "月日・曜日・時刻(11/02(
 internal val ID_POSITIONS = listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")
 internal val HEAT_STYLES = listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色")
 /** 自分の書き込み(と自分への返信)の帯の側 */
-internal val OWN_STYLES = listOf("auto" to "人気と反対", "left" to "左の帯", "right" to "右の帯")
+internal val OWN_STYLES = listOf("left" to "左の帯", "right" to "右の帯")
 
 @Composable
 private fun ThreadPage(vm: AppViewModel) {

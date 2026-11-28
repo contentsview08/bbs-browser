@@ -185,8 +185,8 @@ export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 /** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホ版の heatStyle と同じ) */
 export type HeatStyle = 'left' | 'right' | 'text'
-/** 自分の書き込み(と自分への返信)の帯の側: auto = 人気の帯と反対(人気を帯で示さないときは左)/ left / right。人気と同じ側なら自分の帯が勝つ(スマホ版の ownStyle と同じ) */
-export type OwnStyle = 'auto' | 'left' | 'right'
+/** 自分の書き込み(と自分への返信)の帯の側: left / right。人気と同じ側なら自分の帯が勝つ(スマホ版の ownStyle と同じ) */
+export type OwnStyle = 'left' | 'right'
 /** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左に) */
 export type IdStyle = 'none' | 'color' | 'icon'
 export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
@@ -782,7 +782,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accent: '',
   reduceMotion: false,
   heatStyle: 'left',
-  ownStyle: 'auto',
+  ownStyle: 'right',
   setupDone: 0,
   listShape: 'normal',
   doubleTapReply: false,
@@ -996,6 +996,9 @@ export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings>
   }
   // 人気のレス「示さない」は左の帯に読み替える
   if (saved.heatStyle === 'none') out.heatStyle = 'left'
+  // 自分の帯の側は、前は「人気の帯と反対」で決めていた(試しの版の auto も)。今と同じ側になるよう写す
+  // (heatStyle を保存していない = 既定の左 なら、既定の right のままでよい。バックアップの一部だけの読み込みで足さないように)
+  if (saved.ownStyle === 'auto' || (saved.ownStyle === undefined && saved.heatStyle !== undefined)) out.ownStyle = saved.heatStyle === 'right' ? 'left' : 'right'
   // レスの操作バー: 前は ⋯ をいつも出していたので、'more' を足して新しい鍵へ
   if (saved.postToolbar2 === undefined && Array.isArray(saved.postToolbar)) {
     out.postToolbar2 = [...saved.postToolbar.filter((x): x is string => typeof x === 'string'), 'more']
